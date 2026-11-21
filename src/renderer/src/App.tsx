@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Settings } from 'lucide-react'
 import type { Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { TodoSidebar } from './components/TodoSidebar'
 import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
@@ -118,15 +119,7 @@ export default function App() {
         </Button>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
           <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onChat={s.openChat} onNew={s.newChat} />
-          <div className="space-y-1">
-            <h2 className="text-xs font-medium uppercase text-muted-foreground">Todos</h2>
-            {todos.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
-            {todos.map((t, i) => (
-              <p key={i} className={'[overflow-wrap:anywhere] ' + (t.status === 'completed' ? 'text-muted-foreground line-through' : t.status === 'in_progress' ? 'font-medium' : '')}>
-                {t.content}
-              </p>
-            ))}
-          </div>
+          <TodoSidebar todos={todos} />
         </div>
         {v.usage && (
           <p className="text-xs text-muted-foreground">

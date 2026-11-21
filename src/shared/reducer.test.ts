@@ -68,3 +68,10 @@ describe('reduce', () => {
     ])
   })
 })
+
+describe('messagesToEvents todos', () => {
+  it('replays a TodoWrite call as a todos event and skips malformed entries', () => {
+    const events = messagesToEvents([{ role: 'assistant', content: [{ type: 'tool_use', id: 't', name: 'TodoWrite', input: { todos: [{ content: 'a', status: 'pending' }, { nope: 1 }] } }] }])
+    expect(events).toContainEqual({ type: 'todos', todos: [{ content: 'a', status: 'pending' }] })
+  })
+})

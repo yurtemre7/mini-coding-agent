@@ -1,11 +1,35 @@
 import { z } from 'zod'
-import type { Decision, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import type { AgentEvent, Decision, PermissionMode, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import type { FileState } from './filestate'
 import type { ToolDef } from './provider/types'
 
 export type JsonSchema = Record<string, unknown>
 
+/** Plan-mode control, implemented by Permissions. */
+export interface PlanControl {
+  readonly mode: PermissionMode
+  /** Leaves plan mode and returns to the mode that was active before it. */
+  exitPlan(): PermissionMode
+}
+
+export const SUBAGENT_TYPES = ['Explore', 'general-purpose'] as const
+export type SubagentType = (typeof SUBAGENT_TYPES)[number]
+export interface SubagentRequest {
+  type: SubagentType
+  prompt: string
+  callId: string // the Task tool-use id: becomes the parentId of everything the subagent shows
+}
+
 export interface ToolContext {
+  /** Id of the tool call being run. */
+  callId: string
+  /** Emits an event to the frontend (todo list updates). */
+  emit(event: AgentEvent): void
+  plan?: PlanControl
+  /** Runs a subagent to completion and returns its final text. Absent inside a subagent (depth 1). */
+  runSubagent?(request: SubagentRequest): Promise<string>
+  /** One-shot call to the fast model with no tools. Absent when no model is available. */
+  summarize?(instruction: string, content: string): Promise<string>
   cwd: string // current working directory (Bash `cd` persists)
   root: string // workspace root
   files: FileState

@@ -46,6 +46,30 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
   )
 }
 
+function PlanBody({ plan, onDecision }: { plan: string; onDecision: (d: Decision) => void }) {
+  const [feedback, setFeedback] = useState('')
+  const text = feedback.trim()
+  return (
+    <>
+      <AlertDialogHeader>
+        <AlertDialogTitle className="flex items-center gap-2">
+          <ShieldQuestion className="h-4 w-4" aria-hidden />
+          Approve this plan?
+        </AlertDialogTitle>
+        <AlertDialogDescription>Approving leaves plan mode so the agent can make changes.</AlertDialogDescription>
+      </AlertDialogHeader>
+      <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-words">{plan}</pre>
+      <Textarea placeholder="Optional: what should change in the plan (sent with Reject)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+      <AlertDialogFooter>
+        <Button variant="outline" onClick={() => onDecision({ allow: false, ...(text && { feedback: text }) })}>
+          Reject
+        </Button>
+        <Button onClick={() => onDecision({ allow: true })}>Approve</Button>
+      </AlertDialogFooter>
+    </>
+  )
+}
+
 /** Permission, trust and plan prompts. Not dismissable: every prompt needs an explicit answer. */
 export function PromptDialog({ request, onDecision }: { request: PromptRequest | null; onDecision: (d: Decision) => void }) {
   return (
@@ -72,23 +96,7 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
             </AlertDialogFooter>
           </>
         )}
-        {request?.kind === 'plan' && (
-          <>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="flex items-center gap-2">
-                <ShieldQuestion className="h-4 w-4" aria-hidden />
-                Approve this plan?
-              </AlertDialogTitle>
-            </AlertDialogHeader>
-            <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-words">{request.plan}</pre>
-            <AlertDialogFooter>
-              <Button variant="outline" onClick={() => onDecision({ allow: false })}>
-                Reject
-              </Button>
-              <Button onClick={() => onDecision({ allow: true })}>Approve</Button>
-            </AlertDialogFooter>
-          </>
-        )}
+        {request?.kind === 'plan' && <PlanBody key={request.plan} plan={request.plan} onDecision={onDecision} />}
       </AlertDialogContent>
     </AlertDialog>
   )

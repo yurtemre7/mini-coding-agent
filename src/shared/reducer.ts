@@ -1,3 +1,4 @@
+import { field, isTodo } from './guards'
 import { isReminder, type EventBatch, type Item, type ViewEvent, type ViewState } from './types'
 
 type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode'>
@@ -56,7 +57,11 @@ export function messagesToEvents(messages: Msg[]): ViewEvent[] {
     m.content.flatMap((b): ViewEvent[] => {
       if (b.type === 'text') return m.role === 'user' && isReminder(b.text) ? [] : [m.role === 'user' ? { type: 'user_message', text: b.text } : { type: 'text_delta', text: b.text }]
       if (b.type === 'image') return []
-      if (b.type === 'tool_use') return [{ type: 'tool_start', id: b.id, name: b.name, input: b.input }]
+      if (b.type === 'tool_use') {
+        const start: ViewEvent = { type: 'tool_start', id: b.id, name: b.name, input: b.input }
+        const todos = b.name === 'TodoWrite' ? field(b.input, 'todos') : undefined
+        return Array.isArray(todos) ? [start, { type: 'todos', todos: todos.filter(isTodo) }] : [start] // the last TodoWrite of a saved chat is its current list
+      }
       return [{ type: 'tool_end', id: b.tool_use_id, result: b.content, isError: !!b.is_error }]
     })
   )

@@ -4,6 +4,7 @@ import { AgentSession, type Frontend } from '../core/agent'
 import { parseInput, runCommand } from '../core/commands'
 import { createPermissions, type Permissions } from '../core/permissions'
 import type { ModelProvider } from '../core/provider/types'
+import { fastModelFor } from '../core/provider/models'
 import { builtinTools } from '../core/registry'
 import { startSession } from '../core/session'
 import { isTrusted, trustWorkspace } from '../core/trust'
@@ -46,6 +47,8 @@ export function parseChoice(answer: string): Pick<Decision, 'allow' | 'scope'> |
   return undefined
 }
 
+const ICON = { pending: '☐', in_progress: '◐', completed: '☑' } as const
+
 export function terminalFrontend(t: Term): Frontend {
   let midLine = false
   let inText = false
@@ -60,10 +63,15 @@ export function terminalFrontend(t: Term): Frontend {
   }
   return {
     emit(e) {
-      if (e.type === 'text_delta') {
+      const pad = 'parentId' in e && e.parentId ? '  ' : '' // subagent output is indented under its Task call
+      if (e.type === 'todos') {
+        nl()
+        inText = false
+        t.write(e.todos.map((x) => `  ${ICON[x.status]} ${x.content}\n`).join(''))
+      } else if (e.type === 'text_delta') {
         if (!inText) {
           nl()
-          t.write('⏺ ')
+          t.write(`${pad}⏺ `)
           inText = true
         }
         t.write(e.text)
@@ -71,7 +79,7 @@ export function terminalFrontend(t: Term): Frontend {
       } else if (e.type === 'tool_start') {
         nl()
         inText = false
-        t.write(`⏺ ${e.name}(${summarize(e.input)})\n`)
+        t.write(`${pad}⏺ ${e.name}(${summarize(e.input)})\n`)
       } else if (e.type === 'tool_end') {
         const lines = e.result.split('\n')
         const shown = lines.slice(0, 4).map((l) => oneLine(l, 160))
@@ -90,7 +98,9 @@ export function terminalFrontend(t: Term): Frontend {
       try {
         if (req.kind === 'plan') {
           t.write(`${req.plan}\n`)
-          return { allow: await yesNo('Approve this plan?') }
+          if (await yesNo('Approve this plan?')) return { allow: true }
+          const feedback = (await t.readLine('What should change in the plan? (Enter to skip) ')).trim()
+          return { allow: false, ...(feedback && { feedback }) }
         }
         if (req.kind === 'trust') {
           const list = (title: string, xs?: string[]) => (xs?.length ? `${title}\n${xs.map((r) => `  ${r}`).join('\n')}\n` : '')
@@ -173,7 +183,7 @@ export async function runInteractive(o: {
     }
   }
   const perms: Permissions = built.perms
-  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide, hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
+  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide, plan: perms, fastModel: fastModelFor(o.provider.id), hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
 
   const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
   session.load(saved.messages, saved.transcript)

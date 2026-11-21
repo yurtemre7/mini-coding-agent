@@ -11,6 +11,14 @@ export class FileState {
   private rewinding = false
   private stack: Map<string, Buffer | null>[] = [] // one entry per turn: path -> original bytes (null = did not exist)
 
+  /** A subagent's view: its own read bookkeeping (it must read before it edits), but the same Bash cwd and the same rewind checkpoints. */
+  fork(): FileState {
+    const f = new FileState()
+    f.cwd = this.cwd
+    f.stack = this.stack
+    return f
+  }
+
   markRead(path: string, content: string, mtimeMs: number): void {
     this.reads.set(path, { mtimeMs, hash: hash(content) })
   }

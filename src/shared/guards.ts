@@ -1,3 +1,5 @@
+import type { Todo } from './types'
+
 /** Helpers for reading unknown JSON (settings files, tool inputs, provider payloads) without `any`. */
 
 export const asRecord = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined)
@@ -18,4 +20,9 @@ export function toolSubject(input: unknown): string {
     if (x !== undefined && x !== null) return String(x)
   }
   return typeof input === 'string' ? input : ''
+}
+
+export const isTodo = (v: unknown): v is Todo => {
+  const status = field(v, 'status')
+  return typeof field(v, 'content') === 'string' && (status === 'pending' || status === 'in_progress' || status === 'completed')
 }

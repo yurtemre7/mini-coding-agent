@@ -3,7 +3,7 @@ import { AgentSession, type Frontend } from '../core/agent'
 import { parseInput, runCommand } from '../core/commands'
 import { getKey, keySource, setKey } from '../core/credentials'
 import { createPermissions, type Permissions } from '../core/permissions'
-import { DEFAULT_MODELS } from '../core/provider/models'
+import { DEFAULT_MODELS, FAST_MODEL } from '../core/provider/models'
 import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
@@ -148,11 +148,15 @@ export class Controller {
     return p
   }
   private async *stream(req: Parameters<ModelProvider['stream']>[0]) {
-    yield* (await this.current()).stream({ ...req, model: this.model, effort: this.effort })
+    const model = req.model === FAST_MODEL ? DEFAULT_MODELS[this.provider].fast : this.model
+    yield* (await this.current()).stream({ ...req, model, effort: this.effort })
   }
 
   private frontend: Frontend = {
-    emit: (e) => this.apply(e),
+    emit: (e) => {
+      this.apply(e)
+      if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
+    },
     ask: (request) =>
       new Promise<Decision>((resolve) => {
         const id = randomUUID()
@@ -199,7 +203,7 @@ export class Controller {
     }
     this.perms = built.perms
     this.workspace = dir
-    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
+    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide, plan: built.perms, fastModel: FAST_MODEL, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
     this.session.store = new Transcript(dir, this.meta, { home: this.d.home })
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })

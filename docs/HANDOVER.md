@@ -1,6 +1,6 @@
 # MCA Implementation Handover
 
-Status as of 2026-11-21. Plan: [`docs/PLAN.md`](PLAN.md). Branch: `feat/mca-v1` (24 commits on top of `main`, not pushed, no PR).
+Status as of 2026-11-21. Plan: [`docs/PLAN.md`](PLAN.md). Work branch: `yurtemre7/zen-lovelace-kk85pz` (Milestone 5 is merged into `main`; Milestone 6, light/dark theme and lint are on the branch).
 
 ## Summary
 
@@ -36,8 +36,8 @@ CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode
 | 2 File tools, search, Bash | Done | `3b9042a`..`f815dd8` | 2 fix rounds |
 | 3 Permissions, trust, REPL | Done | `9f03f38`..`8bb75ce` | 3 fix rounds (security) |
 | 4 Desktop vertical slice | Done | `f837382`..`e397d36` | 1 fix round |
-| 5 Hooks, project context | Not started | | |
-| 6 Planning, subagents, WebFetch | Not started | | |
+| 5 Hooks, project context | Done (merged to `main`) | | Self-checked |
+| 6 Planning, subagents, WebFetch | Done (on branch): TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
 | 7 Sessions, compaction, MCP | Sessions only (`fa52cdf`, `c044b19`) | | Self-checked, no separate review |
 | 8 Skills, commands, polish, packaging | Not started | | |
 
@@ -68,7 +68,9 @@ src/preload/  contextBridge `window.mca` with runtime channel allowlists
 src/renderer/ App, ChatTranscript, PromptInput, ModelCombobox, PermissionDialog, SettingsDialog, ChatsSidebar
 ```
 
-Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`. Not yet: `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`, `Skill`, MCP tools.
+Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`. Not yet: `Skill`, MCP tools.
+
+Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but the parent's rewind checkpoints and permissions; `Explore` gets only static read-only tools. `WebFetch` follows same-host redirects only (a cross-host redirect is returned to the model), caps at 5 MB / 100k chars, and summarizes with the provider's fast model (`FAST_MODEL` sentinel resolved by the desktop provider proxy). Headless `-p` in plan mode prints the plan and stops. Also added since M4: light/dark/system theme (`mca.theme`), ESLint flat config (`npm run lint`, also in CI).
 
 ### Files on disk
 
@@ -120,8 +122,8 @@ Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`. Not yet
 ## Next steps
 
 1. Smoke-test with real keys: `mca -p` on both providers, then the desktop flow Read → Grep → Edit (approve) → Bash → Rewind.
-2. Milestone 5: `hooks.ts`, `context.ts` (stable system prompt, instruction files, `@import`, git snapshot), trust prompt when a workspace has hooks.
-3. Milestone 6: `TodoWrite` + sidebar, `ExitPlanMode` + plan sheet (the dialog branch exists, untested), `Task` subagents with `parentId` nesting, `WebFetch`.
+2. Try the M6 demo by hand: in plan mode ask for a refactor; expect parallel Explore subagents, a plan dialog, and todos updating after approval.
+3. `main` CI stays red until the macOS symlink fix (`5faf4e5`) and later commits are merged into it.
 4. Milestone 7 remainder: `compact.ts` (auto at 80%, `/compact`, overflow retry), `mcp.ts`.
 5. Milestone 8: skills, custom commands, slash autocomplete, README, packaged-app verification.
 6. Open a PR from `feat/mca-v1` once the smoke test passes.

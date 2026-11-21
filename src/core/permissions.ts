@@ -6,7 +6,7 @@ import { PERMISSION_MODES, type Decision, type PermissionMode, type PermissionRe
 import { isInsideWorkspace, isProtectedPath, realpathNearest, resolvePath } from './paths'
 import { Hooks } from './hooks'
 import { loadSettings, type Rules } from './settings'
-import type { Tool, ToolContext } from './tool'
+import type { PlanControl, Tool, ToolContext } from './tool'
 
 export const MODES = PERMISSION_MODES
 export const parseMode = (s: string): PermissionMode | undefined => MODES.find((m) => m === s)
@@ -230,6 +230,13 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
     return `Bash(${cmd})`
   }
   if (tool.name === 'Edit' || tool.name === 'Write') return `Edit(${esc(realpathNearest(root))}/**)`
+  if (tool.name === 'WebFetch') {
+    try {
+      return `WebFetch(domain:${new URL(stringField(input, 'url') ?? '').hostname})`
+    } catch {
+      return undefined
+    }
+  }
   return tool.name
 }
 
@@ -242,17 +249,36 @@ export interface PermissionOptions {
   canAsk: boolean // false in headless mode: a needed prompt becomes a denial naming the flags
 }
 
-export class Permissions {
-  mode: PermissionMode
+/** Tools that only organise the agent's own work. Their effects are checked where they happen (a subagent's tools are checked one by one). */
+const INTERNAL_TOOLS = new Set(['Task', 'TodoWrite', 'ExitPlanMode'])
+
+export class Permissions implements PlanControl {
+  private current: PermissionMode
+  private beforePlan: PermissionMode = 'default'
   readonly rules: Rules
   readonly session: string[] = []
   private canAsk: boolean
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor(o: PermissionOptions) {
-    this.mode = o.mode
+    this.current = o.mode
     this.canAsk = o.canAsk
     this.rules = { allow: o.rules?.allow ?? [], deny: o.rules?.deny ?? [], ask: [...SENSITIVE_READS, ...(o.rules?.ask ?? [])] }
+  }
+
+  get mode(): PermissionMode {
+    return this.current
+  }
+
+  /** Entering plan mode remembers the mode it came from, so approving a plan can restore it. */
+  set mode(m: PermissionMode) {
+    if (m === 'plan' && this.current !== 'plan') this.beforePlan = this.current
+    this.current = m
+  }
+
+  exitPlan(): PermissionMode {
+    this.current = this.beforePlan
+    return this.current
   }
 
   /** Bash read-only calls may only touch the workspace and nothing an `ask` rule protects (`cat ~/.ssh/id_rsa` must prompt). */
@@ -287,7 +313,8 @@ export class Permissions {
     let hard = false // asked by step 3: no allow rule or flag can pre-approve it
 
     if (matches(this.rules.deny, tool, input, ctx, 'any')) return `${tool.name} is blocked by a deny rule in your settings.` // 1
-    if (this.mode === 'plan' && !readOnly) return 'plan mode: present a plan with ExitPlanMode before making changes.' // 2
+    if (this.mode === 'plan' && !readOnly && tool.name !== 'WebFetch') return 'plan mode: present a plan with ExitPlanMode before making changes.' // 2 (WebFetch only reads: it still asks per domain)
+    if (INTERNAL_TOOLS.has(tool.name)) return undefined
     if (matches(this.rules.ask, tool, input, ctx, 'any')) reason = 'this path is marked as sensitive' // 3
     else if (isWrite && path && this.mode !== 'bypassPermissions' && isProtectedPath(path)) reason = 'this file can change permissions or run code'
     if (reason) hard = true // only explicit/built-in ask rules and protected paths in non-bypass modes reach here

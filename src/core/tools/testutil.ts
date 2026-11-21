@@ -8,6 +8,8 @@ export function testCtx(root: string, files = new FileState()): ToolContext {
     root,
     files,
     setCwd: (d) => void (ctx.cwd = d),
+    callId: 'test-call',
+    emit: () => {},
     signal: new AbortController().signal,
     ask: async () => ({ allow: false })
   }

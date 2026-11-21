@@ -14,7 +14,7 @@ import type { ToolContext } from './tool'
 
 const root = mkdtempSync(join(tmpdir(), 'mca-perm-'))
 const tmp = () => mkdtempSync(join(tmpdir(), 'mca-perm-'))
-const ctxFor = (ask: ToolContext['ask'] = async () => ({ allow: false })): ToolContext => ({ cwd: root, root, files: new FileState(), setCwd() {}, signal: new AbortController().signal, ask })
+const ctxFor = (ask: ToolContext['ask'] = async () => ({ allow: false })): ToolContext => ({ cwd: root, root, files: new FileState(), setCwd() {}, callId: 'c', emit() {}, signal: new AbortController().signal, ask })
 type Outcome = 'allow' | 'deny' | 'prompt'
 
 /** Runs decide() with a recording ask(); 'prompt' means the user was asked (and said no). */

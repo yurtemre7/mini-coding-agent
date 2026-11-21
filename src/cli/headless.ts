@@ -3,6 +3,7 @@ import { AgentSession, type Frontend } from '../core/agent'
 import { createPermissions } from '../core/permissions'
 import { startSession } from '../core/session'
 import { buildReminder } from '../core/context'
+import { fastModelFor } from '../core/provider/models'
 import { builtinTools } from '../core/registry'
 import type { ModelProvider } from '../core/provider/types'
 
@@ -23,7 +24,11 @@ export function plainFrontend(io: Io): Frontend {
       else if (e.type === 'tool_end') io.err(`  ⎿ ${e.isError ? 'error: ' : ''}${e.result.split('\n')[0].slice(0, 200)}\n`)
       else if (e.type === 'notice') io.err(`${e.level}: ${e.message}\n`)
     },
-    async ask(): Promise<Decision> {
+    async ask(req): Promise<Decision> {
+      if (req.kind === 'plan') {
+        io.out(`${req.plan}\n`) // the plan is the output of a plan-mode run
+        return { allow: false, feedback: 'Headless mode cannot approve a plan. Stop here; the plan has been shown to the user.' }
+      }
       return { allow: false, feedback: 'Not available in headless mode.' }
     }
   }
@@ -45,6 +50,8 @@ export async function runHeadless(o: { prompt: string; provider: ModelProvider; 
     cwd: o.cwd,
     frontend: plainFrontend(o.io),
     decide: perms.decide,
+    plan: perms,
+    fastModel: fastModelFor(o.provider.id),
     hooks,
     reminder: () => buildReminder(o.cwd, { home: o.home })
   })
