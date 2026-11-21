@@ -71,6 +71,8 @@ Milestone 7 notes: `compact.ts` summarizes the whole history into one `<system-r
 
 Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`, `Skill`. MCP tools are added per workspace. Subagents never get `Task`, `TodoWrite`, `ExitPlanMode` or `Skill`.
 
+Workbench P1.1/P1.2 notes: `core/checkpoints.ts` (CheckpointStore: content-addressed blobs + per-turn manifests), `core/changes.ts` (summaries and unified diffs via jsdiff; binary and >2 MB files are flagged, not diffed), a `changes` event before `turn_end`, `/diff [all]`, IPC `changes:diff`/`changes:revert` and the desktop DiffPanel (Turn/All, per-file confirmed revert, disabled while busy).
+
 Milestone 8 notes: skills live in `{~/,<project>/}{.claude,.mca}/skills/<name>/SKILL.md` (later wins); the reminder lists name + description (200 chars) and the `Skill` tool returns the body. Custom commands are `{...}/commands/<name>.md` (`$ARGUMENTS`, `$1`–`$9`); built-in names always win; a custom command becomes a normal prompt. The desktop prompt routes any `/…` text without attachments to `session:command`, and `commands:list` feeds the autocomplete.
 
 Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but the parent's rewind checkpoints and permissions; `Explore` gets only static read-only tools. `WebFetch` follows same-host redirects only (a cross-host redirect is returned to the model), caps at 5 MB / 100k chars, and summarizes with the provider's fast model (`FAST_MODEL` sentinel resolved by the desktop provider proxy). Headless `-p` in plan mode prints the plan and stops. Also added since M4: light/dark/system theme (`mca.theme`), ESLint flat config (`npm run lint`, also in CI).
@@ -116,7 +118,7 @@ The tag must equal the `package.json` version, or the workflow stops. It runs li
 
 - Deny rule `Bash(git push:*)` does not match `git -c x=y push` (options between the words).
 - `git diff HEAD~1`, `ls *.ts`, `grep -rn` and similar now prompt (false positives of the strict read-only check).
-- Rewind checkpoints live in memory: lost on restart, unbounded in size, and a resumed chat cannot rewind file changes from an earlier run. Changes made through `Bash` are never covered.
+- Rewind checkpoints are persisted per chat (`<id>.checkpoints/`, 200 MB cap, oldest turns evicted), so a resumed chat can rewind files (the conversation is not rewound). Persist failures are swallowed silently. Changes made through `Bash` are never covered (backlog: git-snapshot diffs).
 - `Edit` decodes files as UTF-8; a non-UTF-8 text file is rewritten with replacement characters.
 - `readState` is keyed by resolved path, not realpath (read via symlink, then edit via the real path reports "not read").
 - `Glob` understates the omitted-file count on very large trees.
@@ -153,7 +155,7 @@ Ordered by value. Pull from the top; each item should end as a PR.
 3. Confirm model ids and which models accept `output_config.effort`.
 
 **Product**
-- Persist rewind checkpoints (survive restart, bounded size); highlight the active chat in the sidebar.
+- Highlight the active chat in the sidebar.
 - MCP: restart crashed servers, expose MCP tools to `Explore`, HTTP/SSE transport.
 - Code signing and notarization (needs an Apple Developer ID), then auto-update.
 - Windows/Linux builds (the core is portable; Keychain falls back to `~/.mca/credentials.json`).
