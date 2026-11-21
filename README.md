@@ -15,6 +15,16 @@ npm install
 npm run dev
 ```
 
+## API Keys
+
+Keys are looked up in this order: environment variables (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`), the macOS Keychain (saved from the desktop Settings), `~/.mca/credentials.json`, then a `.env` file in the directory `mca` or the app is launched from. For local development:
+
+```bash
+cp .env.example .env
+```
+
+`.env` is git-ignored. It is read last, so a `.env` shipped in a cloned repo never overrides a key you configured yourself.
+
 ## Scripts
 
 - `npm run dev` — Start Electron + Vite in development mode

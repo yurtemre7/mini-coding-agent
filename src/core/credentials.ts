@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
+import { parseEnv, promisify } from 'node:util'
 
 import type { ProviderId } from '../shared/types'
 export type { ProviderId }
@@ -45,9 +45,20 @@ async function readFileStore(): Promise<Partial<Record<ProviderId, string>>> {
   }
 }
 
-/** env -> Keychain -> ~/.mca/credentials.json */
-export async function getKey(p: ProviderId, keychain = defaultKeychain()): Promise<string | null> {
-  return process.env[ENV_VARS[p]] || (await keychain?.get(p)) || (await readFileStore())[p] || null
+// Only the key variables are read and nothing is put into process.env, so child processes never inherit the file.
+async function readDotEnv(dir: string): Promise<Record<string, string>> {
+  try {
+    return parseEnv(await readFile(join(dir, '.env'), 'utf8')) as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+/** env -> Keychain -> ~/.mca/credentials.json -> .env in the launch directory (last, so a cloned repo's .env never overrides your own key) */
+export async function getKey(p: ProviderId, keychain = defaultKeychain(), dir = process.cwd()): Promise<string | null> {
+  return (
+    process.env[ENV_VARS[p]] || (await keychain?.get(p)) || (await readFileStore())[p] || (await readDotEnv(dir))[ENV_VARS[p]] || null
+  )
 }
 
 export async function setKey(p: ProviderId, key: string, keychain = defaultKeychain()): Promise<void> {

@@ -1,4 +1,4 @@
-import { mkdtempSync, statSync } from 'node:fs'
+import { mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +12,7 @@ const fakeKeychain = (store: Record<string, string> = {}): Keychain => ({
 beforeEach(() => {
   vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'mca-home-')))
   vi.stubEnv('ANTHROPIC_API_KEY', '')
+  vi.stubEnv('OPENROUTER_API_KEY', '')
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -24,7 +25,14 @@ describe('credentials', () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'from-env')
     expect(await getKey('anthropic', kc)).toBe('from-env')
   })
-  it('returns null when nothing is set', async () => expect(await getKey('openrouter', fakeKeychain())).toBeNull())
+  it('falls back to .env in the launch directory, below every other source', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mca-dotenv-'))
+    writeFileSync(join(dir, '.env'), '# keys\nOPENROUTER_API_KEY="from-dotenv"\nOTHER=x\n')
+    expect(await getKey('openrouter', fakeKeychain(), dir)).toBe('from-dotenv')
+    expect(process.env.OTHER).toBeUndefined()
+    expect(await getKey('openrouter', fakeKeychain({ openrouter: 'from-keychain' }), dir)).toBe('from-keychain')
+  })
+  it('returns null when nothing is set', async () => expect(await getKey('openrouter', fakeKeychain(), mkdtempSync(join(tmpdir(), 'mca-empty-')))).toBeNull())
   it('writes the file store with mode 0600', async () => {
     await setKey('openrouter', 'k', { get: async () => null, set: async () => Promise.reject(new Error('no keychain')) })
     expect(statSync(join(process.env.HOME!, '.mca', 'credentials.json')).mode & 0o777).toBe(0o600)
