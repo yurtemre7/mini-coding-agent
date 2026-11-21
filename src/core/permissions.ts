@@ -43,6 +43,7 @@ export interface ParsedCommand {
 
 /** Quote-aware split on `&&`, `||`, `;`, `|`, `&` and newlines. */
 export function parseCommand(cmd: string): ParsedCommand {
+  cmd = cmd.replace(/\\\n/g, '') // line continuation joins words (r\<newline>m is rm)
   const r: ParsedCommand = { segments: [], subst: false, redirect: false, background: false }
   let cur = ''
   let quote: '' | "'" | '"' = ''
@@ -129,7 +130,7 @@ function pathOf(tool: Tool, input: any, ctx: ToolContext): string | undefined {
 
 function globMatches(spec: string, abs: string, root: string, realOnly: boolean): boolean {
   const pat = expandHome(spec)
-  const opts = { dot: true }
+  const opts = { dot: true, nocase: !realOnly && process.platform === 'darwin' } // deny/ask fold case on macOS (cat .ENV); allow stays exact
   const rootReal = realpathNearest(root)
   // deny/ask: lexical or real path matches (stricter). allow: only the real path, so a symlink inside the workspace cannot borrow an allowed glob
   return (realOnly ? [realpathNearest(abs)] : [abs, realpathNearest(abs)]).some((p) => {
@@ -178,7 +179,7 @@ function bashSpecMatches(spec: string, text: string): boolean {
 }
 
 /** Words of a command with quotes and backslashes removed, split on whitespace and shell punctuation. */
-const words = (s: string): string[] => s.replace(/['"\\]/g, '').split(/[\s;&|()<>{}$`=,]+/).filter(Boolean)
+const words = (s: string): string[] => s.replace(/\\\n/g, '').replace(/['"\\]/g, '').split(/[\s;&|()<>{}$`=,]+/).filter(Boolean)
 
 /**
  * Bash. deny/ask ('any'): structural token matching over the WHOLE command, never trusting the shell syntax: quotes/backslashes removed, simple braces
