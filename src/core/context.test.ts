@@ -76,3 +76,16 @@ describe('buildReminder', () => {
     expect(await buildReminder(dir(), { home: dir() })).not.toContain('Git branch')
   })
 })
+
+describe('discoverInstructions with a symlinked cwd', () => {
+  it('still walks from the git root down (macOS temp dirs are symlinks)', async () => {
+    const root = dir()
+    execFileSync('git', ['init', '-q'], { cwd: root })
+    write(join(root, 'AGENTS.md'), 'root')
+    write(join(root, 'pkg', 'AGENTS.md'), 'pkg')
+    const link = join(dir(), 'link')
+    symlinkSync(root, link)
+    const files = await discoverInstructions(join(link, 'pkg'), { home: dir() })
+    expect(files.map((f) => f.content)).toEqual(['root', 'pkg'])
+  })
+})

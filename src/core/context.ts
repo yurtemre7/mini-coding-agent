@@ -77,8 +77,10 @@ export interface InstructionFile {
 export async function discoverInstructions(cwd: string, o: { home?: string } = {}): Promise<InstructionFile[]> {
   const home = o.home ?? homedir()
   const candidates = [join(home, '.mca', 'AGENTS.md'), join(home, '.claude', 'CLAUDE.md')]
-  const root = (await gitRoot(cwd)) ?? cwd
-  const rel = relative(root, cwd)
+  // git reports the real path; a symlinked cwd (macOS /var -> /private/var) must be resolved the same way or relative() climbs out of the repo
+  const realCwd = await realpath(cwd).catch(() => cwd)
+  const root = (await gitRoot(realCwd)) ?? realCwd
+  const rel = relative(root, realCwd)
   const dirs = [root]
   if (rel && !rel.startsWith('..')) {
     let d = root
