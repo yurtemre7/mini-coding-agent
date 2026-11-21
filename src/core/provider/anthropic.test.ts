@@ -150,4 +150,14 @@ describe('AnthropicProvider effort', () => {
     expect((create.mock.calls[0] as any)[0].output_config).toEqual({ effort: 'xhigh' })
     expect('output_config' in (create.mock.calls[1] as any)[0]).toBe(false)
   })
+  it('resends without effort when the model rejects it, and remembers that per model', async () => {
+    const rejected = async () => {
+      throw Object.assign(new Error('output_config.effort: not supported for this model'), { status: 400, headers: new Headers() })
+    }
+    const { create, client: c } = client(rejected, async () => gen(happy), async () => gen(happy))
+    const p = new AnthropicProvider('k', { client: c, sleep })
+    expect((await collect(p.stream(req({ effort: 'medium' })))).at(-1)).toEqual({ type: 'stop', reason: 'tool_use' })
+    await collect(p.stream(req({ effort: 'medium' })))
+    expect(create.mock.calls.map((call: any) => 'output_config' in call[0])).toEqual([true, false, false])
+  })
 })

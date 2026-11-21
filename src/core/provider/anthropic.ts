@@ -65,8 +65,18 @@ export class AnthropicProvider implements ModelProvider {
     }
   }
 
-  stream(req: StreamRequest): AsyncIterable<StreamEvent> {
-    return withRetry(() => this.once(req), req.signal, this.opts.sleep)
+  private noEffort = new Set<string>() // models that rejected output_config.effort
+
+  async *stream(req: StreamRequest): AsyncIterable<StreamEvent> {
+    const effort = this.noEffort.has(req.model) ? undefined : req.effort
+    try {
+      yield* withRetry(() => this.once({ ...req, effort }), req.signal, this.opts.sleep)
+    } catch (e) {
+      // a model without effort support answers 400 before any event; resend once without it
+      if (!effort || !(e instanceof ProviderError) || e.status !== 400 || !/effort/i.test(e.message)) throw e
+      this.noEffort.add(req.model)
+      yield* withRetry(() => this.once({ ...req, effort: undefined }), req.signal, this.opts.sleep)
+    }
   }
 
   private async *once(req: StreamRequest): AsyncGenerator<StreamEvent> {
