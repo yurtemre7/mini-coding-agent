@@ -10,6 +10,7 @@ import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
+import { describeStatus, McpManager } from '../core/mcp'
 import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
@@ -190,8 +191,8 @@ export class Controller {
     this.assertIdle('switch workspace')
     const make = (trusted: boolean) => createPermissions({ cwd: dir, mode: this.perms?.mode, trusted, canAsk: true, home: this.d.home })
     let built = await make(await isTrusted(dir, this.d.home))
-    if (built.ignoredAllow.length || built.ignoredHooks.length) {
-      if ((await this.frontend.ask({ kind: 'trust', workspace: dir, rules: built.ignoredAllow, hooks: built.ignoredHooks })).allow) {
+    if (built.ignoredAllow.length || built.ignoredHooks.length || built.ignoredMcp.length) {
+      if ((await this.frontend.ask({ kind: 'trust', workspace: dir, rules: built.ignoredAllow, hooks: built.ignoredHooks, mcp: built.ignoredMcp })).allow) {
         try {
           await trustWorkspace(dir, this.d.home)
           built = await make(true)
@@ -203,12 +204,23 @@ export class Controller {
     }
     this.perms = built.perms
     this.workspace = dir
-    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide, plan: built.perms, fastModel: FAST_MODEL, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
+    await this.startMcp(built.mcp, dir)
+    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: this.tools(), cwd: dir, frontend: this.frontend, decide: built.perms.decide, plan: built.perms, fastModel: FAST_MODEL, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
     this.session.store = new Transcript(dir, this.meta, { home: this.d.home })
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
     this.announce()
     for (const w of built.warnings) this.notice('warn', w)
+  }
+
+  private mcp?: McpManager
+  private tools = () => [...builtinTools, ...(this.mcp?.tools ?? [])]
+
+  /** (Re)starts the workspace's MCP servers; the previous ones are stopped first. A failing server is reported and skipped. */
+  private async startMcp(config: Parameters<typeof McpManager.start>[0], dir: string): Promise<void> {
+    await this.mcp?.close()
+    this.mcp = await McpManager.start(config, { cwd: dir })
+    for (const s of this.mcp.status) if (s.state !== 'connected') this.notice('warn', `MCP server "${s.name}": ${s.message}`)
   }
 
   private meta = () => ({ provider: this.provider, model: this.model })
@@ -252,7 +264,7 @@ export class Controller {
   }
 
   private announce(): void {
-    this.apply({ type: 'session', workspace: this.workspace, mode: this.perms?.mode ?? 'default' })
+    this.apply({ type: 'session', workspace: this.workspace, mode: this.perms?.mode ?? 'default', mcp: describeStatus(this.mcp?.status ?? []) })
   }
 
   /** Starts a turn and returns at once; progress arrives as events. */
@@ -276,7 +288,7 @@ export class Controller {
   }
 
   /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
-  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust']
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'mcp']
 
   async command(line: string): Promise<void> {
     const s = this.session
@@ -287,7 +299,7 @@ export class Controller {
     if (p.name === 'trust') return this.trust()
     const out: string[] = []
     const before = s.history.length
-    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {} })
+    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp })
     if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
     if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
     this.announce() // mode may have changed
@@ -299,7 +311,7 @@ export class Controller {
     const dir = this.workspace!
     this.assertIdle('change trust')
     const fresh = await createPermissions({ cwd: dir, trusted: false, canAsk: true, home: this.d.home })
-    if (!(await this.frontend.ask({ kind: 'trust', workspace: dir, rules: fresh.ignoredAllow, hooks: fresh.ignoredHooks })).allow) return this.notice('info', 'Workspace not trusted.')
+    if (!(await this.frontend.ask({ kind: 'trust', workspace: dir, rules: fresh.ignoredAllow, hooks: fresh.ignoredHooks, mcp: fresh.ignoredMcp })).allow) return this.notice('info', 'Workspace not trusted.')
     try {
       await trustWorkspace(dir, this.d.home)
     } catch (e) {
@@ -308,11 +320,15 @@ export class Controller {
     const trusted = await createPermissions({ cwd: dir, trusted: true, canAsk: true, home: this.d.home })
     for (const r of trusted.perms.rules.allow) if (!this.perms!.rules.allow.includes(r)) this.perms!.rules.allow.push(r)
     this.session?.setHooks(trusted.hooks)
-    this.notice('info', `Trusted ${dir}. Its project allow rules and hooks are now active.`)
+    await this.startMcp(trusted.mcp, dir)
+    this.session?.setTools(this.tools())
+    this.announce()
+    this.notice('info', `Trusted ${dir}. Its project allow rules, hooks and MCP servers are now active.`)
   }
 
   /** Window closed or app quitting: abort the turn (denies pending asks, kills children). */
   dispose(): void {
     this.abort()
+    void this.mcp?.close()
   }
 }

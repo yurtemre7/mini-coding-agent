@@ -1,9 +1,9 @@
 import { field, isTodo } from './guards'
 import { isReminder, type EventBatch, type Item, type ViewEvent, type ViewState } from './types'
 
-type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode'>
+type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode' | 'mcp'>
 
-export const emptyView = (): Reduced => ({ items: [], todos: [], busy: false, workspace: null, mode: 'default' })
+export const emptyView = (): Reduced => ({ items: [], todos: [], busy: false, workspace: null, mode: 'default', mcp: [] })
 
 /** Pure: turns the event stream into what the transcript shows. Main and the renderer both run exactly this. */
 export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
@@ -38,7 +38,7 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
     case 'clear':
       return { ...s, items: [], todos: [], usage: undefined, busy: false }
     case 'session':
-      return { ...s, workspace: e.workspace, mode: e.mode }
+      return { ...s, workspace: e.workspace, mode: e.mode, mcp: e.mcp ?? s.mcp }
   }
 }
 

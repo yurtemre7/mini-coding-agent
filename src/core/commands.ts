@@ -2,7 +2,7 @@ import { relative } from 'node:path'
 import type { AgentSession } from './agent'
 import { MODES, parseMode, type Permissions } from './permissions'
 
-export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'exit'] as const
+export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'mcp', 'exit'] as const
 
 export type Parsed = { kind: 'prompt'; text: string } | { kind: 'command'; name: string; args: string } | { kind: 'unknown'; name: string }
 
@@ -23,12 +23,15 @@ export interface CommandEnv {
   print(msg: string): void
   exit(): void
   trustWorkspace(): Promise<void>
+  /** Status line per MCP server. */
+  mcpStatus?(): string[]
 }
 
 export const HELP = `Commands:
   /help            Show this help
   /clear           Clear the conversation and checkpoints (the saved chat stays; a new one starts)
   /mode [name]     Show or set the permission mode (${MODES.join(' | ')})
+  /mcp             List MCP servers (from .mcp.json or the mcpServers setting; trusted workspaces only) and their status
   /rewind          Undo the last turn: restore its files and drop it from the conversation (repeat to go further back)
   /trust           Trust this workspace so its project allow rules apply
   /compact [focus] Summarize the conversation to free context (also happens automatically at 80% of the window)
@@ -57,6 +60,10 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
         print(`Compaction failed: ${(e as Error).message}`)
       }
       return
+    case 'mcp': {
+      const lines = env.mcpStatus?.() ?? []
+      return print(lines.length ? `MCP servers:\n${lines.map((l) => `  ${l}`).join('\n')}` : 'No MCP servers configured. Add them to .mcp.json or `mcpServers` in a settings file (trusted workspaces only).')
+    }
     case 'mode': {
       if (!args) return print(`Permission mode: ${perms.mode} (available: ${MODES.join(', ')})`)
       const m = parseMode(args.trim())

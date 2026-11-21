@@ -101,7 +101,7 @@ export function ProviderForm({ settings, models = { models: [] }, disabled, onUp
   )
 }
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean } & SettingsActions) {
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[] } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -110,6 +110,15 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
           <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Choose a provider, model and effort, and save its API key.'}</DialogDescription>
         </DialogHeader>
         <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
+        <section className="space-y-1" aria-label="MCP servers">
+          <h3 className="text-sm font-medium">MCP servers</h3>
+          {mcp.length === 0 && <p className="text-xs text-muted-foreground">None configured. Add them to .mcp.json in a trusted workspace.</p>}
+          {mcp.map((line) => (
+            <p key={line} className="text-xs [overflow-wrap:anywhere]">
+              {line}
+            </p>
+          ))}
+        </section>
       </DialogContent>
     </Dialog>
   )

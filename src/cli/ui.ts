@@ -9,6 +9,7 @@ import { builtinTools } from '../core/registry'
 import { startSession } from '../core/session'
 import { isTrusted, trustWorkspace } from '../core/trust'
 import { buildReminder } from '../core/context'
+import { describeStatus, McpManager } from '../core/mcp'
 import { toolSubject } from '../shared/guards'
 import { SYSTEM_PROMPT } from './headless'
 
@@ -104,7 +105,7 @@ export function terminalFrontend(t: Term): Frontend {
         }
         if (req.kind === 'trust') {
           const list = (title: string, xs?: string[]) => (xs?.length ? `${title}\n${xs.map((r) => `  ${r}`).join('\n')}\n` : '')
-          t.write(`${req.workspace}\n${list("This workspace's settings define allow rules that run without asking:", req.rules)}${list("This workspace's settings define hooks that run shell commands:", req.hooks)}`)
+          t.write(`${req.workspace}\n${list("This workspace's settings define allow rules that run without asking:", req.rules)}${list("This workspace's settings define hooks that run shell commands:", req.hooks)}${list('This workspace defines MCP servers that would be started:', req.mcp)}`)
           return { allow: await yesNo('Trust this workspace?') }
         }
         t.write(formatPermission(req) + '\n')
@@ -171,9 +172,9 @@ export async function runInteractive(o: {
   let trusted = !!o.trust || (await isTrusted(o.cwd, o.home))
   let built = await make(trusted)
   for (const w of built.warnings) term.write(`warn: ${w}\n`)
-  if (!trusted && (built.ignoredAllow.length || built.ignoredHooks.length)) {
+  if (!trusted && (built.ignoredAllow.length || built.ignoredHooks.length || built.ignoredMcp.length)) {
     // ask once; only a yes is recorded
-    if ((await fe.ask({ kind: 'trust', workspace: o.cwd, rules: built.ignoredAllow, hooks: built.ignoredHooks })).allow) {
+    if ((await fe.ask({ kind: 'trust', workspace: o.cwd, rules: built.ignoredAllow, hooks: built.ignoredHooks, mcp: built.ignoredMcp })).allow) {
       try {
         await trustWorkspace(o.cwd, o.home)
         built = await make((trusted = true))
@@ -183,7 +184,9 @@ export async function runInteractive(o: {
     }
   }
   const perms: Permissions = built.perms
-  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide, plan: perms, fastModel: fastModelFor(o.provider.id), hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
+  let mcp = await McpManager.start(built.mcp, { cwd: o.cwd })
+  for (const s of mcp.status) if (s.state !== 'connected') term.write(`warn: MCP server "${s.name}": ${s.message}\n`)
+  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: [...builtinTools, ...mcp.tools], cwd: o.cwd, frontend: fe, decide: perms.decide, plan: perms, fastModel: fastModelFor(o.provider.id), hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
 
   const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
   session.load(saved.messages, saved.transcript)
@@ -217,7 +220,11 @@ export async function runInteractive(o: {
       const fresh = await make(true)
       for (const r of fresh.perms.rules.allow) if (!perms.rules.allow.includes(r)) perms.rules.allow.push(r)
       session.setHooks(fresh.hooks)
-    }
+      await mcp.close()
+      mcp = await McpManager.start(fresh.mcp, { cwd: o.cwd })
+      session.setTools([...builtinTools, ...mcp.tools])
+    },
+    mcpStatus: () => describeStatus(mcp.status)
   }
   term.write(`mca (${o.model}) - mode: ${perms.mode}. Type /help for commands.\n`)
   if (saved.note) term.write(`${saved.note}\n`)
@@ -241,5 +248,6 @@ export async function runInteractive(o: {
     // input closed (Ctrl+D, Ctrl+C twice, or EOF)
   } finally {
     rl.close()
+    await mcp.close() // stops every MCP child process
   }
 }

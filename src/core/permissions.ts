@@ -5,6 +5,7 @@ import { field, stringField } from '../shared/guards'
 import { PERMISSION_MODES, type Decision, type PermissionMode, type PermissionRequest, type PlanRequest, type TrustRequest } from '../shared/types'
 import { isInsideWorkspace, isProtectedPath, realpathNearest, resolvePath } from './paths'
 import { Hooks } from './hooks'
+import type { McpConfig } from './mcp'
 import { loadSettings, type Rules } from './settings'
 import type { PlanControl, Tool, ToolContext } from './tool'
 
@@ -350,12 +351,12 @@ export class Permissions implements PlanControl {
 }
 
 /** Loads settings (trust-gated), merges CLI rules, and builds the Permissions for a session. */
-export async function createPermissions(o: { cwd: string; mode?: PermissionMode; allowedTools?: string[]; trusted: boolean; canAsk: boolean; home?: string }): Promise<{ perms: Permissions; warnings: string[]; ignoredAllow: string[]; hooks: Hooks; ignoredHooks: string[] }> {
+export async function createPermissions(o: { cwd: string; mode?: PermissionMode; allowedTools?: string[]; trusted: boolean; canAsk: boolean; home?: string }): Promise<{ perms: Permissions; warnings: string[]; ignoredAllow: string[]; hooks: Hooks; ignoredHooks: string[]; mcp: McpConfig; ignoredMcp: string[] }> {
   const s = await loadSettings(o.cwd, { trusted: o.trusted, home: o.home })
   const perms = new Permissions({
     mode: o.mode ?? s.defaultMode ?? 'default',
     rules: { ...s.permissions, allow: [...s.permissions.allow, ...splitRules(o.allowedTools ?? [])] },
     canAsk: o.canAsk
   })
-  return { perms, warnings: s.warnings, ignoredAllow: o.trusted ? [] : s.projectAllow, hooks: new Hooks(s.hooks, o.cwd), ignoredHooks: o.trusted ? [] : s.ignoredHooks }
+  return { perms, warnings: s.warnings, ignoredAllow: o.trusted ? [] : s.projectAllow, hooks: new Hooks(s.hooks, o.cwd), ignoredHooks: o.trusted ? [] : s.ignoredHooks, mcp: s.mcp, ignoredMcp: o.trusted ? [] : s.ignoredMcp }
 }

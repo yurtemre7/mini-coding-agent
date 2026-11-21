@@ -374,6 +374,11 @@ export class AgentSession {
     this.base = { ...base, files: base.files ?? new FileState() }
   }
 
+  /** Replaces the tool set (MCP servers connected after the session started). */
+  setTools(tools: Tool[]): void {
+    this.base = { ...this.base, tools }
+  }
+
   setHooks(hooks: Hooks): void {
     this.base = { ...this.base, hooks }
   }

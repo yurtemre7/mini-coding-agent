@@ -38,7 +38,7 @@ CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode
 | 4 Desktop vertical slice | Done | `f837382`..`e397d36` | 1 fix round |
 | 5 Hooks, project context | Done (merged to `main`) | | Self-checked |
 | 6 Planning, subagents, WebFetch | Done (on branch): TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
-| 7 Sessions, compaction, MCP | Sessions only (`fa52cdf`, `c044b19`) | | Self-checked, no separate review |
+| 7 Sessions, compaction, MCP | Done: sessions (`fa52cdf`, `c044b19`), compaction, MCP (stdio) | | Self-checked, no live API |
 | 8 Skills, commands, polish, packaging | Not started | | |
 
 Work requested outside the plan (all after Milestone 4, checked by the controller, not by a separate reviewer):
@@ -68,7 +68,9 @@ src/preload/  contextBridge `window.mca` with runtime channel allowlists
 src/renderer/ App, ChatTranscript, PromptInput, ModelCombobox, PermissionDialog, SettingsDialog, ChatsSidebar
 ```
 
-Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`. Not yet: `Skill`, MCP tools.
+Milestone 7 notes: `compact.ts` summarizes the whole history into one `<system-reminder>` user message (todos and instruction reminder re-attached, `readState` cleared). It triggers at 80% of the window after any model call (also mid-turn, and at the start of a turn from the last known size), on `/compact [focus]`, and once per turn on a "prompt too long" rejection (the summary request itself retries with the oldest half of tool results cleared). The transcript gets a `compact` record; loading restarts from the newest one. After a compaction `/rewind` restores files but the compacted history stays. `mcp.ts` runs stdio servers from `.mcp.json` and `mcpServers` in settings files: project-level ones start only in a trusted workspace (and are listed in the trust prompt), user-level ones always. Servers connect in parallel with a 10 s timeout; a failure is a warning. Tools are `mcp__<server>__<tool>`, never read-only (so they prompt in default mode), results are text only and capped at 25k. `/mcp` and the Settings dialog show status.
+
+Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`. MCP tools are added per workspace. Not yet: `Skill`.
 
 Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but the parent's rewind checkpoints and permissions; `Explore` gets only static read-only tools. `WebFetch` follows same-host redirects only (a cross-host redirect is returned to the model), caps at 5 MB / 100k chars, and summarizes with the provider's fast model (`FAST_MODEL` sentinel resolved by the desktop provider proxy). Headless `-p` in plan mode prints the plan and stops. Also added since M4: light/dark/system theme (`mca.theme`), ESLint flat config (`npm run lint`, also in CI).
 
@@ -107,7 +109,8 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 - `Glob` understates the omitted-file count on very large trees.
 - Unicode case folding beyond `toLowerCase` (e.g. long s) is unverified on APFS for protected paths.
 - `listSessions` parses every transcript in a workspace (slow with very large histories); the sidebar does not highlight the active chat.
-- `/compact`, `/model` and `/provider` are stubs in the CLI (the desktop has its own pickers).
+- `/model` and `/provider` are stubs in the CLI (the desktop has its own pickers).
+- MCP: stdio only (no HTTP/SSE, OAuth, resources or prompts); servers are not restarted if they crash mid-session; `Explore` subagents never see MCP tools. Compaction was not exercised against a real model.
 - The `will-navigate` block and the preload allowlist have no runtime tests (the allowlist is checked against the contract at compile time).
 - `env.ts` login-shell parsing can be confused by shell startup output printed before `env -0`.
 
@@ -124,7 +127,7 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 1. Smoke-test with real keys: `mca -p` on both providers, then the desktop flow Read → Grep → Edit (approve) → Bash → Rewind.
 2. Try the M6 demo by hand: in plan mode ask for a refactor; expect parallel Explore subagents, a plan dialog, and todos updating after approval.
 3. `main` CI stays red until the macOS symlink fix (`5faf4e5`) and later commits are merged into it.
-4. Milestone 7 remainder: `compact.ts` (auto at 80%, `/compact`, overflow retry), `mcp.ts`.
+4. Try Milestone 7 by hand: a long session that compacts, quit and `--continue`, a `.mcp.json` server whose tool you approve.
 5. Milestone 8: skills, custom commands, slash autocomplete, README, packaged-app verification.
 6. Open a PR from `feat/mca-v1` once the smoke test passes.
 

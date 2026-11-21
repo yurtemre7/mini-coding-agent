@@ -42,6 +42,7 @@ export interface TrustRequest {
   workspace: string
   rules?: string[] // project allow rules that trusting would enable
   hooks?: string[] // project hooks that trusting would enable
+  mcp?: string[] // project MCP servers (commands) that trusting would start
 }
 export interface Decision {
   allow: boolean
@@ -90,6 +91,8 @@ export interface ViewState {
   provider: ProviderId
   model: string
   workspace: string | null
+  /** One line per MCP server: connected, failed or unsupported. */
+  mcp: string[]
   busy: boolean
   pending: { id: string; request: PromptRequest } | null
   /** Seq of the last event folded into this state; a batch with seq <= this is already included and must be ignored. */
@@ -97,7 +100,7 @@ export interface ViewState {
 }
 
 /** Everything the reducer understands: agent events plus the events main adds for things only it knows. */
-export type ViewEvent = AgentEvent | { type: 'user_message'; text: string; attachments?: string[] } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode }
+export type ViewEvent = AgentEvent | { type: 'user_message'; text: string; attachments?: string[] } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode; mcp?: string[] }
 
 /** One IPC message: consecutive events, `seq` = the seq of the last one. */
 export interface EventBatch {

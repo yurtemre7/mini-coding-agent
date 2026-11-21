@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { asRecord, field } from '../shared/guards'
 import { PERMISSION_MODES, type PermissionMode } from '../shared/types'
+import { describeMcp, emptyMcp, mergeMcp, parseMcpServers, type McpConfig } from './mcp'
 import { describeHooks, mergeHooks, parseHooks, type HookConfig } from './hooks'
 
 export interface Rules {
@@ -17,6 +18,8 @@ export interface Settings {
   projectAllow: string[] // project-level allow rules (applied only when the workspace is trusted)
   hooks: HookConfig // user hooks always; project hooks only when the workspace is trusted
   ignoredHooks: string[] // project hooks left out because the workspace is not trusted (shown in the trust prompt)
+  mcp: McpConfig // user servers always; project servers (settings and .mcp.json) only when the workspace is trusted
+  ignoredMcp: string[] // project servers left out because the workspace is not trusted
   warnings: string[]
   rest: Record<string, unknown> // other keys pass through (MCP, model); project keys only when trusted
 }
@@ -50,13 +53,15 @@ export async function loadSettings(cwd: string, o: { trusted: boolean; home?: st
   const warnings: string[] = []
   const user = await readJson(join(o.home ?? homedir(), '.mca', 'settings.json'), warnings)
   const project = []
+  const mcpFile = await readJson(join(cwd, '.mcp.json'), warnings)
   for (const f of ['.claude/settings.json', '.mca/settings.json', '.mca/settings.local.json']) {
     const j = await readJson(join(cwd, f), warnings)
     if (j) project.push(j)
   }
   const perm = (j: Record<string, unknown>, k: keyof Rules) => strings(field(j.permissions, k))
-  const out: Settings = { permissions: { allow: [], deny: [], ask: [] }, projectAllow: project.flatMap((j) => perm(j, 'allow')), hooks: {}, ignoredHooks: [], warnings, rest: {} }
+  const out: Settings = { permissions: { allow: [], deny: [], ask: [] }, projectAllow: project.flatMap((j) => perm(j, 'allow')), hooks: {}, ignoredHooks: [], mcp: emptyMcp(), ignoredMcp: [], warnings, rest: {} }
   const parsed: HookConfig[] = []
+  const servers: McpConfig[] = []
   const layers = [...(user ? [{ j: user, project: false }] : []), ...project.map((j) => ({ j, project: true }))]
   for (const { j, project: isProject } of layers) {
     for (const k of ['allow', 'deny', 'ask'] as const) if (k !== 'allow' || !isProject || o.trusted) out.permissions[k].push(...perm(j, k))
@@ -66,9 +71,20 @@ export async function loadSettings(cwd: string, o: { trusted: boolean; home?: st
     warnings.push(...h.warnings)
     if (!isProject || o.trusted) parsed.push(h.config)
     else out.ignoredHooks.push(...describeHooks(h.config))
-    const { permissions: _p, hooks: _h, ...others } = j
+    const m = parseMcpServers(j.mcpServers, isProject ? 'project settings' : '~/.mca/settings.json')
+    warnings.push(...m.warnings)
+    if (!isProject || o.trusted) servers.push(m.config)
+    else out.ignoredMcp.push(...describeMcp(m.config))
+    const { permissions: _p, hooks: _h, mcpServers: _m, ...others } = j
     if (!isProject || o.trusted) Object.assign(out.rest, others) // untrusted project keys (future hooks/MCP) must not skip the trust gate
   }
+  if (mcpFile) {
+    const m = parseMcpServers(mcpFile.mcpServers, '.mcp.json')
+    warnings.push(...m.warnings)
+    if (o.trusted) servers.push(m.config)
+    else out.ignoredMcp.push(...describeMcp(m.config))
+  }
+  out.mcp = mergeMcp(...servers)
   out.hooks = mergeHooks(...parsed)
   return out
 }

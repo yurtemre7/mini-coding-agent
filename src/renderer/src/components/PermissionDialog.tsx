@@ -84,10 +84,10 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
                 Trust this workspace?
               </AlertDialogTitle>
               <AlertDialogDescription className="break-all">
-                {request.workspace} defines {[request.rules?.length ? 'allow rules that run without asking' : '', request.hooks?.length ? 'hooks that run shell commands' : ''].filter(Boolean).join(' and ')}. Only trust projects you wrote or reviewed.
+                {request.workspace} defines {[request.rules?.length ? 'allow rules that run without asking' : '', request.hooks?.length ? 'hooks that run shell commands' : '', request.mcp?.length ? 'MCP servers that would be started' : ''].filter(Boolean).join(' and ')}. Only trust projects you wrote or reviewed.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{[...(request.rules ?? []), ...(request.hooks ?? [])].join('\n')}</pre>
+            <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{[...(request.rules ?? []), ...(request.hooks ?? []), ...(request.mcp ?? [])].join('\n')}</pre>
             <AlertDialogFooter>
               <Button variant="outline" onClick={() => onDecision({ allow: false })}>
                 Don&apos;t trust

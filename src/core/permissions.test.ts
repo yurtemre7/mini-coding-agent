@@ -324,9 +324,9 @@ describe('settings and trust', () => {
 
   it('untrusted project keys do not pass through; trusted ones do', async () => {
     const { home, ws } = setup()
-    writeFileSync(join(ws, '.mca/settings.json'), JSON.stringify({ mcpServers: { x: 1 } }))
+    writeFileSync(join(ws, '.mca/settings.json'), JSON.stringify({ futureKey: { x: 1 } }))
     expect((await loadSettings(ws, { trusted: false, home })).rest).toEqual({ model: 'x' })
-    expect((await loadSettings(ws, { trusted: true, home })).rest).toEqual({ model: 'x', mcpServers: { x: 1 } })
+    expect((await loadSettings(ws, { trusted: true, home })).rest).toEqual({ model: 'x', futureKey: { x: 1 } })
   })
 
   it('corrupt state.json is kept: trust is refused, not overwritten', async () => {
