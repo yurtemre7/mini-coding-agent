@@ -140,6 +140,16 @@ describe('AnthropicProvider', () => {
     expect(await p.contextWindow('claude-sonnet-5-5')).toBe(200_000)
     expect(await p.contextWindow('unknown')).toBe(200_000)
   })
+  it('uses max_input_tokens from the models API when the API reports it, and falls back when it does not or the call fails', async () => {
+    let calls = 0
+    const client = { messages: { create: async () => (async function* () {})() }, models: { list: async function* () { calls++; yield { id: 'big', max_input_tokens: 1_000_000 }; yield { id: 'plain' } } } }
+    const p = new AnthropicProvider('k', { client: client as never })
+    expect(await p.contextWindow('big')).toBe(1_000_000)
+    expect(await p.contextWindow('plain')).toBe(200_000)
+    expect(calls).toBe(1) // cached
+    const bad = { messages: client.messages, models: { list: () => { throw new Error('down') } } }
+    expect(await new AnthropicProvider('k', { client: bad as never }).contextWindow('claude-sonnet-5-5')).toBe(200_000)
+  })
 })
 
 describe('AnthropicProvider effort', () => {
