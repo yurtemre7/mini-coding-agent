@@ -22,6 +22,15 @@ describe('SettingsDialog', () => {
     rerender(<SettingsDialog {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } }} />)
     expect(screen.getByRole('status')).toHaveTextContent('No key yet')
   })
+  it('without a key it says where to get one, with a link to the right provider; with a key it does not', () => {
+    const base = { provider: 'openrouter', model: 'm', effort: 'medium', hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } } as const
+    const props = { open: true, onOpenChange: vi.fn(), onUpdate: vi.fn(), onSaveKey: vi.fn() }
+    const { rerender } = render(<SettingsDialog {...props} settings={base} />)
+    expect(screen.getByTestId('key-help')).toHaveTextContent('OpenRouter')
+    expect(screen.getByRole('link', { name: 'Open the key page' })).toHaveAttribute('href', 'https://openrouter.ai/keys')
+    rerender(<SettingsDialog {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: true }, keySource: { anthropic: null, openrouter: 'keychain' } }} />)
+    expect(screen.queryByTestId('key-help')).toBeNull()
+  })
   it('save is disabled until a key is typed', () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} settings={{ provider: 'openrouter', model: 'm', effort: 'medium', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } }} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled()
