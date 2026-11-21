@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FolderOpen, Settings } from 'lucide-react'
+import { FileDiff, FolderOpen, Settings } from 'lucide-react'
 import type { CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { DiffPanel } from './components/DiffPanel'
 import { TodoSidebar } from './components/TodoSidebar'
 import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
@@ -22,6 +23,7 @@ export default function App() {
   const theme = useTheme()
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
+  const [diffOpen, setDiffOpen] = useState(false)
   const [recent, setRecent] = useState<string[]>([])
   const [chats, setChats] = useState<SessionInfo[]>([])
   const [commands, setCommands] = useState<CommandInfo[]>([])
@@ -135,11 +137,21 @@ export default function App() {
         </Button>
       </aside>
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="h-10 shrink-0" />
+        <div className="flex h-10 shrink-0 items-center justify-end px-3">
+          <Button size="sm" variant={diffOpen ? 'secondary' : 'ghost'} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} aria-pressed={diffOpen} onClick={() => setDiffOpen((d) => !d)}>
+            <FileDiff className="mr-1 h-4 w-4" />
+            Changes ({v.changes.total.length})
+          </Button>
+        </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         <ChatTranscript items={v.items} />
         <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
+      {diffOpen && (
+        <aside className="flex w-96 shrink-0 flex-col border-l p-3 pt-12">
+          <DiffPanel changes={v.changes} busy={v.busy} loadDiff={s.changeDiff} onRevert={s.changeRevert} />
+        </aside>
+      )}
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
       <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} {...actions} />
     </main>
