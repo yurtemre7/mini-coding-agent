@@ -1,7 +1,8 @@
-import { type BrowserWindow, dialog, ipcMain } from 'electron'
+import { type BrowserWindow, dialog, ipcMain, Notification } from 'electron'
 import type { IpcContract } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
+import { createNotifier } from './notify'
 import { validators } from './validate'
 
 type Handlers = { [K in keyof IpcContract['invoke']]: (...args: IpcContract['invoke'][K]['args']) => IpcContract['invoke'][K]['result'] | Promise<IpcContract['invoke'][K]['result']> }
@@ -13,7 +14,15 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     if (w && !w.isDestroyed()) w.webContents.send(ch, payload)
   }
   const batcher = createBatcher((batch) => send('agent:events', batch))
+  const notify = createNotifier({
+    desktop: (title, body) => {
+      if (Notification.isSupported()) new Notification({ title, body }).show()
+    },
+    focused: () => !!getWindow()?.isFocused(),
+    url: process.env.MCA_NOTIFY_URL // opt-in: an ntfy.sh topic or similar push endpoint, to get these on a phone
+  })
   const c = new Controller({
+    notify,
     emit: (e, seq) => batcher.push(e, seq),
     prompt: (p) => {
       batcher.flush() // the prompt must not overtake the tool_start it belongs to

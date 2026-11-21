@@ -66,6 +66,7 @@ export type AgentEvent =
   | { type: 'tool_start'; id: string; name: string; input: unknown; parentId?: string }
   | { type: 'tool_end'; id: string; result: string; isError: boolean }
   | { type: 'todos'; todos: Todo[] }
+  | { type: 'attention'; reason: 'loop' | 'long' | 'prompt'; message: string } // the user may be away: a frontend can notify them
   | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }

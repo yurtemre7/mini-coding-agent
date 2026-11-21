@@ -6,6 +6,7 @@ import { FileState } from './filestate'
 import { Hooks, MAX_STOP_BLOCKS } from './hooks'
 import type { Block, Message, ModelProvider } from './provider/types'
 import type { Transcript } from './session'
+import { LoopDetector } from './watchdog'
 import { isZod, toToolDef, truncate, type PlanControl, type SubagentRequest, type Tool, type ToolContext } from './tool'
 
 export interface Frontend {
@@ -227,6 +228,8 @@ export async function runTools(calls: ToolCall[], opts: TurnOptions): Promise<To
   return results
 }
 
+const LOOP_THRESHOLD = 3
+
 export async function runTurn(history: Message[], userText: string, opts: TurnOptions): Promise<TurnReason> {
   const { provider, frontend: fe, signal } = opts
   const maxIterations = opts.maxIterations ?? 50
@@ -262,6 +265,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   try {
     const contextWindow = await provider.contextWindow(opts.model)
     let iteration = 0
+    const loop = new LoopDetector(LOOP_THRESHOLD)
     let stopBlocks = 0 // consecutive Stop-hook blocks
     let overflowed = false // one forced compaction per turn
     const context = (opts.context ??= { tokens: 0 })
@@ -331,6 +335,11 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
         continue
       }
       stopBlocks = 0
+      if (!opts.parentId && loop.record(calls)) {
+        const message = `The model has made the same tool calls ${LOOP_THRESHOLD} times in a row and may be stuck. Press Stop and give it new instructions if that looks right.`
+        fe.emit({ type: 'notice', level: 'warn', message })
+        fe.emit({ type: 'attention', reason: 'loop', message: 'MCA may be stuck in a loop.' })
+      }
       history.push({ role: 'user', content: await runTools(calls, opts) })
       save()
     }

@@ -24,6 +24,10 @@ export interface ControllerDeps {
   emit(e: ViewEvent, seq: number): void
   /** Show a prompt now (not batched). */
   prompt(p: { id: string; request: PromptRequest }): void
+  /** The user may be away: a prompt waits, the model looks stuck, or a turn runs long. The frontend decides how to tell them. */
+  notify?(message: string): void
+  /** Test hooks: how long a prompt waits, and how long a turn runs, before notifying. */
+  timings?: { promptMs?: number; longTurnMs?: number }
   home?: string
   keys?: { get(p: ProviderId): Promise<string | null>; set(p: ProviderId, key: string): Promise<void>; source?(p: ProviderId): Promise<KeySource | null> }
   /** Tests swap in a FakeProvider. */
@@ -158,6 +162,8 @@ export class Controller {
   private frontend: Frontend = {
     emit: (e) => {
       this.apply(e)
+      if (e.type === 'attention') this.d.notify?.(e.message)
+      if (e.type === 'turn_end') this.stopTimer('long')
       if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
     },
     ask: (request) =>
@@ -165,11 +171,23 @@ export class Controller {
         const id = randomUUID()
         this.resolvePending = resolve
         this.pending = { id, request }
+        this.startTimer('prompt', this.d.timings?.promptMs ?? 60_000, 'MCA is waiting for your approval.')
         this.d.prompt(this.pending)
       })
   }
 
+  private timers: Partial<Record<'prompt' | 'long', ReturnType<typeof setTimeout>>> = {}
+  private startTimer(k: 'prompt' | 'long', ms: number, message: string): void {
+    this.stopTimer(k)
+    if (this.d.notify) this.timers[k] = setTimeout(() => this.d.notify?.(message), ms)
+  }
+  private stopTimer(k: 'prompt' | 'long'): void {
+    clearTimeout(this.timers[k])
+    delete this.timers[k]
+  }
+
   private clearPending(): void {
+    this.stopTimer('prompt')
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
@@ -178,6 +196,7 @@ export class Controller {
 
   answer(id: string, d: Decision): void {
     if (this.pending?.id !== id) throw new Error('No matching prompt is waiting for an answer.')
+    this.stopTimer('prompt')
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
@@ -291,7 +310,8 @@ export class Controller {
       return { type: 'text', text: `<attached_file name=${JSON.stringify(f.name)}>\n${body}\n</attached_file>` }
     })
     this.apply({ type: 'user_message', text, ...(files.length && { attachments: files.map((f) => f.name) }) })
-    void s.send(text, blocks).catch((e: Error) => this.notice('error', e.message))
+    this.startTimer('long', this.d.timings?.longTurnMs ?? 10 * 60_000, 'MCA is still working on your request.')
+    void s.send(text, blocks).catch((e: Error) => (this.stopTimer('long'), this.notice('error', e.message)))
   }
 
   abort(): void {
