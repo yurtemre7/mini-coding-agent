@@ -1,5 +1,7 @@
 # Implementation Plan: mini-coding-agent (MCA)
 
+> **Status (2026-11-21): the first implementation (Milestones 0–8) is complete and on `main`; `v0.1.0` is ready to tag.** This file is now the design reference. Open items from it (packaged-app and live-API verification, the Verification Plan's manual smoke tests) and all new work are tracked in [`HANDOVER.md`](HANDOVER.md) under *Backlog*. Boxes ticked below mean "implemented and covered by automated tests"; the two unticked ones need a Mac.
+
 This plan adapts the **Build Claude Code from scratch** architecture (`mini-claude`, Stages 1–14) into **mini-coding-agent (MCA)**: a macOS-first **Electron + React + TypeScript + shadcn/ui** desktop app **and** an interactive **`mca` CLI** (like `claude` / `agy`), sharing one provider-agnostic TypeScript agent runtime.
 
 **How to read this plan**: *Key Decisions* says what we build and why. *Core Contracts* are the four interfaces everything hangs off. *Edge-Case Rules* are binding requirements, grouped by module, and each one should become a test. *Milestones* are ordered so every milestone ends in something you can run.
@@ -343,56 +345,56 @@ Each bullet is a requirement. Where a rule names a number, that number is a name
 Each milestone lists a **Demo**: the command or action that proves it is done.
 
 ### Milestone 0: Scaffolding
-- [ ] Apply *Build and Tooling Changes*: `esbuild` + `build:cli`, `bin`, `tsconfig.node.json` includes, Vitest projects, `asarUnpack`, CI token.
-- [ ] Add `@anthropic-ai/sdk`, `zod`, `@vscode/ripgrep`, `picomatch`.
+- [x] Apply *Build and Tooling Changes*: `esbuild` + `build:cli`, `bin`, `tsconfig.node.json` includes, Vitest projects, `asarUnpack`, CI token.
+- [x] Add `@anthropic-ai/sdk`, `zod`, `@vscode/ripgrep`, `picomatch`.
 - **Demo**: `npm run typecheck && npm test && npm run build` pass, and `node out/cli/index.js --version` prints the version.
 
 ### Milestone 1: Contracts, Providers and Headless Loop (Stages 1–2)
-- [ ] Write the *Core Contracts* in `provider/types.ts`, `tool.ts`, `shared/types.ts`.
-- [ ] `provider/fake.ts` (scripted events), then `anthropic.ts`, `openrouter.ts`, `models.ts`, `factory.ts`.
+- [x] Write the *Core Contracts* in `provider/types.ts`, `tool.ts`, `shared/types.ts`.
+- [x] `provider/fake.ts` (scripted events), then `anthropic.ts`, `openrouter.ts`, `models.ts`, `factory.ts`.
 - [ ] `credentials.ts` (env → Keychain → file). Confirm the Keychain round-trip from both a terminal and the packaged app; if the packaged app triggers a Keychain prompt, fall back to the file store on that path.
-- [ ] `exec.ts`, `env.ts`, `tool.ts` (`toToolDef()`, middle-preserving `truncate()`).
-- [ ] `agent.ts`: `runTurn()`, `runTools()`, `runOne()`, `sealHistory()`; `Read` as the first tool.
-- [ ] `cli/index.ts` headless path with a plain-text `Frontend`.
-- [ ] Tests: both provider adapters against recorded streams (including split chunks, keep-alives, fragmented tool arguments, mid-stream error); `truncate()`; batching order; every *Agent Loop* rule using `FakeProvider`.
+- [x] `exec.ts`, `env.ts`, `tool.ts` (`toToolDef()`, middle-preserving `truncate()`).
+- [x] `agent.ts`: `runTurn()`, `runTools()`, `runOne()`, `sealHistory()`; `Read` as the first tool.
+- [x] `cli/index.ts` headless path with a plain-text `Frontend`.
+- [x] Tests: both provider adapters against recorded streams (including split chunks, keep-alives, fragmented tool arguments, mid-stream error); `truncate()`; batching order; every *Agent Loop* rule using `FakeProvider`.
 - **Demo**: `mca -p "read package.json and tell me the version"` works with `--provider anthropic` and `--provider openrouter`.
 
 ### Milestone 2: File Tools, Search and Bash (Stages 3–5)
-- [ ] `paths.ts`, `filestate.ts`, `tools/files.ts`, `tools/search.ts`, `tools/bash.ts`.
-- [ ] Minimal `--permission-mode bypassPermissions` flag (allow everything) so mutating tools can be exercised now; Milestone 3 replaces the stub with the real engine.
-- [ ] Tests: the *Paths*, *File Tools*, *Search* and *Bash* rules, in temporary directories. Include: stale and unread edits, `$&` literals, CRLF, symlink escape, `cd` persistence across `exit 3`, child-process kill on timeout, backgrounded process not hanging.
+- [x] `paths.ts`, `filestate.ts`, `tools/files.ts`, `tools/search.ts`, `tools/bash.ts`.
+- [x] Minimal `--permission-mode bypassPermissions` flag (allow everything) so mutating tools can be exercised now; Milestone 3 replaces the stub with the real engine.
+- [x] Tests: the *Paths*, *File Tools*, *Search* and *Bash* rules, in temporary directories. Include: stale and unread edits, `$&` literals, CRLF, symlink escape, `cd` persistence across `exit 3`, child-process kill on timeout, backgrounded process not hanging.
 - **Demo**: `mca -p "add a test for X and run it" --permission-mode bypassPermissions` edits files and runs the tests.
 
 ### Milestone 3: Permissions, Trust and Interactive REPL (Stage 6)
-- [ ] `settings.ts`, `trust.ts`, `permissions.ts` (`decide()`, command splitter, `isReadOnlyCommand()`).
-- [ ] `cli/ui.ts`: streaming `⏺`/`⎿` output, numbered permission prompt, Ctrl+C handling, `/mode`, `/rewind`, `/help`, `/exit`.
-- [ ] Tests: a table-driven matrix of mode × rule × tool for the decision order; chained-command cases; headless denial.
+- [x] `settings.ts`, `trust.ts`, `permissions.ts` (`decide()`, command splitter, `isReadOnlyCommand()`).
+- [x] `cli/ui.ts`: streaming `⏺`/`⎿` output, numbered permission prompt, Ctrl+C handling, `/mode`, `/rewind`, `/help`, `/exit`.
+- [x] Tests: a table-driven matrix of mode × rule × tool for the decision order; chained-command cases; headless denial.
 - **Demo**: an interactive `mca` session prompts before an edit, "Yes for this session" stops the next prompt, and `/rewind` restores the file.
 
 ### Milestone 4: Desktop Vertical Slice
-- [ ] `main/ipc.ts`: `IpcContract` handlers (`session:send`, `session:abort`, `session:getState`, `workspace:select`, `settings:*`, `prompt:answer`), event batching, cleanup on quit.
-- [ ] `useAgentSession.ts`, `ChatTranscript.tsx`, `PromptInput.tsx`, `PermissionDialog.tsx`, `SettingsDialog.tsx` (provider and key setup), mode selector, rewind button.
-- [ ] Tests: `useAgentSession` reducer against event sequences; `PermissionDialog` returns each of the three decisions; `SettingsDialog` never renders a stored key.
+- [x] `main/ipc.ts`: `IpcContract` handlers (`session:send`, `session:abort`, `session:getState`, `workspace:select`, `settings:*`, `prompt:answer`), event batching, cleanup on quit.
+- [x] `useAgentSession.ts`, `ChatTranscript.tsx`, `PromptInput.tsx`, `PermissionDialog.tsx`, `SettingsDialog.tsx` (provider and key setup), mode selector, rewind button.
+- [x] Tests: `useAgentSession` reducer against event sequences; `PermissionDialog` returns each of the three decisions; `SettingsDialog` never renders a stored key.
 - **Demo**: in `npm run dev`, set a key, open a repo, run a prompt that triggers `Read` → `Grep` → `Edit` (approved in the dialog) → `Bash`, then rewind.
 
 ### Milestone 5: Hooks and Project Context (Stages 7–8)
-- [ ] `hooks.ts` and `context.ts` (stable system prompt, first-turn reminder, instruction discovery, `@import`, git snapshot); Anthropic cache breakpoints.
-- [ ] Trust prompt in both frontends when a workspace has project hooks, MCP servers or allow rules.
-- [ ] Tests: discovery order and de-duplication, `@import` cycle and depth, exit-code handling for hooks, the `Stop` loop cap, untrusted workspace ignoring project hooks.
+- [x] `hooks.ts` and `context.ts` (stable system prompt, first-turn reminder, instruction discovery, `@import`, git snapshot); Anthropic cache breakpoints.
+- [x] Trust prompt in both frontends when a workspace has project hooks, MCP servers or allow rules.
+- [x] Tests: discovery order and de-duplication, `@import` cycle and depth, exit-code handling for hooks, the `Stop` loop cap, untrusted workspace ignoring project hooks.
 - **Demo**: a repo with `AGENTS.md` and a `PreToolUse` hook that blocks `rm` behaves accordingly; a second prompt in the same session reports cache-read tokens on Anthropic.
 
 ### Milestone 6: Planning, Subagents and WebFetch (Stages 9–10)
-- [ ] `tools/todo.ts` + `TodoSidebar.tsx`; `tools/plan.ts` + `PlanApprovalSheet.tsx` and the CLI plan prompt.
-- [ ] `runSubagent()` + `tools/task.ts`; nested rendering through `parentId` in both frontends.
-- [ ] `tools/web.ts`.
-- [ ] Tests: plan approve and reject mode transitions; subagent isolation (own `readState`, shared checkpoint, no `Task` tool); WebFetch redirect and size rules against a local HTTP server.
+- [x] `tools/todo.ts` + `TodoSidebar.tsx`; `tools/plan.ts` + `PlanApprovalSheet.tsx` and the CLI plan prompt.
+- [x] `runSubagent()` + `tools/task.ts`; nested rendering through `parentId` in both frontends.
+- [x] `tools/web.ts`.
+- [x] Tests: plan approve and reject mode transitions; subagent isolation (own `readState`, shared checkpoint, no `Task` tool); WebFetch redirect and size rules against a local HTTP server.
 - **Demo**: in `plan` mode the agent explores with parallel `Explore` subagents, presents a plan, and executes it after approval while the todo list updates.
 
 ### Milestone 7: Sessions, Compaction and MCP (Stages 11–12)
-- [ ] `session.ts` with `--continue`, `--resume` and the desktop session switcher.
-- [ ] `compact.ts` with auto-trigger, `/compact [focus]` and the overflow retry.
-- [ ] Add `@modelcontextprotocol/sdk`; `mcp.ts`; MCP status in Settings and `/help`.
-- [ ] Tests: resume from a transcript with a truncated last line and a dangling `tool_use`; compaction trigger arithmetic with cached tokens; forced compaction on overflow using `FakeProvider`; MCP name sanitizing and a failing server not blocking startup.
+- [x] `session.ts` with `--continue`, `--resume` and the desktop session switcher.
+- [x] `compact.ts` with auto-trigger, `/compact [focus]` and the overflow retry.
+- [x] Add `@modelcontextprotocol/sdk`; `mcp.ts`; MCP status in Settings and `/help`.
+- [x] Tests: resume from a transcript with a truncated last line and a dangling `tool_use`; compaction trigger arithmetic with cached tokens; forced compaction on overflow using `FakeProvider`; MCP name sanitizing and a failing server not blocking startup.
 - **Demo**: quit mid-session and `mca --continue` picks it up; a long session compacts and keeps working; a tool from a `.mcp.json` server is callable after approval.
 
 ### Milestone 8: Skills, Commands, Polish and Packaging (Stages 13–14)

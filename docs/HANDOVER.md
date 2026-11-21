@@ -1,19 +1,18 @@
 # MCA Implementation Handover
 
-Status as of 2026-11-21. Plan: [`docs/PLAN.md`](PLAN.md). Work branch: `yurtemre7/zen-lovelace-kk85pz` (Milestone 5 is merged into `main`; Milestone 6, light/dark theme and lint are on the branch).
+Status as of 2026-11-21. Design reference: [`docs/PLAN.md`](PLAN.md). Contributor workflow: [`CLAUDE.md`](../CLAUDE.md).
 
 ## Summary
 
-Milestones 0–4 of the plan are done and reviewed, and two pieces of Milestone 7 (saved chats, remembered workspaces) were pulled forward at the user's request. On top of the plan, the desktop app gained model selection, API-key detection, an effort setting, `.env` key support and Lucide icons. Milestones 5, 6, 8 and the rest of 7 have not started.
+**The first implementation is done.** Milestones 0–8 of the plan are implemented, tested and merged to `main`: provider-agnostic runtime (Anthropic, OpenRouter), file/search/Bash/Web/Task/Todo/Skill tools, permissions and workspace trust, hooks, project context, sessions, compaction, MCP (stdio), custom commands and skills, the `mca` CLI and the Electron desktop app, plus CI and a tag-triggered release workflow for an unsigned macOS app. Beyond the plan: model picker, effort setting, `.env` keys, light/dark theme, ESLint, attachments.
 
 | | |
 |---|---|
-| Typecheck | clean |
-| Tests | 373 passing at `a42d22f` (Vitest, 29 files, no network) |
-| Build | `npm run build` passes (electron-vite + esbuild CLI bundle) |
-| Packaging | `npm run package:mac` never run |
-| In progress | Uncommitted work in the tree adds message attachments (`session:send` takes attachments, size/count limits in `validate.ts`); 2 tests fail against it (`validate.test.ts`, `PromptInput.test.tsx`). The figures above are for the last commit, `a42d22f`. |
+| Branch | `main` is the trunk; CI is green on Ubuntu and macOS, and `package:mac` succeeds in CI |
+| Tests | 446 (Vitest, no network). `bash.test.ts` "timeout kills the whole process group" fails only in the Linux dev container, passes on CI runners |
+| Release | `v0.1.0` matches `package.json` but is **not tagged yet** (the cloud session could not push tags). The release workflow has never run |
 | Live API | never exercised: every test uses `FakeProvider` or recorded/synthetic streams |
+| Packaged app | built by CI, never launched |
 
 ## Running it
 
@@ -36,10 +35,10 @@ CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode
 | 2 File tools, search, Bash | Done | `3b9042a`..`f815dd8` | 2 fix rounds |
 | 3 Permissions, trust, REPL | Done | `9f03f38`..`8bb75ce` | 3 fix rounds (security) |
 | 4 Desktop vertical slice | Done | `f837382`..`e397d36` | 1 fix round |
-| 5 Hooks, project context | Done (merged to `main`) | | Self-checked |
-| 6 Planning, subagents, WebFetch | Done (on branch): TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
+| 5 Hooks, project context | Done | | Self-checked |
+| 6 Planning, subagents, WebFetch | Done: TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
 | 7 Sessions, compaction, MCP | Done: sessions (`fa52cdf`, `c044b19`), compaction, MCP (stdio) | | Self-checked, no live API |
-| 8 Skills, commands, polish, packaging | Done except manual packaged-app verification: `Skill` tool + skills index in the context reminder, custom commands (`$ARGUMENTS`, `$1`–`$9`), `/model` `/provider`, desktop slash autocomplete (and `/…` input routed to commands), `--help`, README | | Self-checked, no live API |
+| 8 Skills, commands, polish, packaging | Done (merged); packaged-app check from Finder still manual: `Skill` tool + skills index in the context reminder, custom commands (`$ARGUMENTS`, `$1`–`$9`), `/model` `/provider`, desktop slash autocomplete (and `/…` input routed to commands), `--help`, README | | Self-checked, no live API |
 
 Work requested outside the plan (all after Milestone 4, checked by the controller, not by a separate reviewer):
 
@@ -70,7 +69,9 @@ src/renderer/ App, ChatTranscript, PromptInput, ModelCombobox, PermissionDialog,
 
 Milestone 7 notes: `compact.ts` summarizes the whole history into one `<system-reminder>` user message (todos and instruction reminder re-attached, `readState` cleared). It triggers at 80% of the window after any model call (also mid-turn, and at the start of a turn from the last known size), on `/compact [focus]`, and once per turn on a "prompt too long" rejection (the summary request itself retries with the oldest half of tool results cleared). The transcript gets a `compact` record; loading restarts from the newest one. After a compaction `/rewind` restores files but the compacted history stays. `mcp.ts` runs stdio servers from `.mcp.json` and `mcpServers` in settings files: project-level ones start only in a trusted workspace (and are listed in the trust prompt), user-level ones always. Servers connect in parallel with a 10 s timeout; a failure is a warning. Tools are `mcp__<server>__<tool>`, never read-only (so they prompt in default mode), results are text only and capped at 25k. `/mcp` and the Settings dialog show status.
 
-Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`. MCP tools are added per workspace. Not yet: `Skill`.
+Registered tools today: `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Bash`, `TodoWrite`, `ExitPlanMode`, `Task`, `WebFetch`, `Skill`. MCP tools are added per workspace. Subagents never get `Task`, `TodoWrite`, `ExitPlanMode` or `Skill`.
+
+Milestone 8 notes: skills live in `{~/,<project>/}{.claude,.mca}/skills/<name>/SKILL.md` (later wins); the reminder lists name + description (200 chars) and the `Skill` tool returns the body. Custom commands are `{...}/commands/<name>.md` (`$ARGUMENTS`, `$1`–`$9`); built-in names always win; a custom command becomes a normal prompt. The desktop prompt routes any `/…` text without attachments to `session:command`, and `commands:list` feeds the autocomplete.
 
 Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but the parent's rewind checkpoints and permissions; `Explore` gets only static read-only tools. `WebFetch` follows same-host redirects only (a cross-host redirect is returned to the model), caps at 5 MB / 100k chars, and summarizes with the provider's fast model (`FAST_MODEL` sentinel resolved by the desktop provider proxy). Headless `-p` in plan mode prints the plan and stops. Also added since M4: light/dark/system theme (`mca.theme`), ESLint flat config (`npm run lint`, also in CI).
 
@@ -109,7 +110,7 @@ git commit -am "release 0.2.0" && git push
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-The tag must equal the `package.json` version, or the workflow stops. It runs lint, typecheck and tests, builds arm64 and x64 `.dmg`/`.zip` with `identity: null` (no signing, `CSC_IDENTITY_AUTO_DISCOVERY=false`), writes `SHA256SUMS.txt`, and creates the GitHub release with `gh release create` (a tag containing `-`, such as `v0.2.0-beta.1`, is marked prerelease). Users must clear the quarantine flag (`xattr -dr com.apple.quarantine`), which the release notes explain. The release workflow has never run: the first tag is its test.
+The tag must equal the `package.json` version, or the workflow stops. It runs lint, typecheck and tests, builds arm64 and x64 `.dmg`/`.zip` with `identity: null` (no signing, `CSC_IDENTITY_AUTO_DISCOVERY=false`), writes `SHA256SUMS.txt`, and creates the GitHub release with `gh release create` (a tag containing `-`, such as `v0.2.0-beta.1`, is marked prerelease). Users must clear the quarantine flag (`xattr -dr com.apple.quarantine`), which the release notes explain. The release workflow has never run: the first tag (`v0.1.0`) is its test.
 
 ## Known gaps and parked findings
 
@@ -121,7 +122,6 @@ The tag must equal the `package.json` version, or the workflow stops. It runs li
 - `Glob` understates the omitted-file count on very large trees.
 - Unicode case folding beyond `toLowerCase` (e.g. long s) is unverified on APFS for protected paths.
 - `listSessions` parses every transcript in a workspace (slow with very large histories); the sidebar does not highlight the active chat.
-- `/model` and `/provider` are stubs in the CLI (the desktop has its own pickers).
 - MCP: stdio only (no HTTP/SSE, OAuth, resources or prompts); servers are not restarted if they crash mid-session; `Explore` subagents never see MCP tools. Compaction was not exercised against a real model.
 - The `will-navigate` block and the preload allowlist have no runtime tests (the allowlist is checked against the contract at compile time).
 - `env.ts` login-shell parsing can be confused by shell startup output printed before `env -0`.
@@ -135,14 +135,30 @@ The tag must equal the `package.json` version, or the workflow stops. It runs li
 - Desktop flows by hand: folder picker, closing the window mid-turn, trust dialog on launch, resuming a saved chat. The user has run the app and confirmed chat, permission prompts and the model picker work.
 - CI on `macos-latest` and `npm run package:mac`.
 
-## Next steps
+## Development flow
 
-1. Smoke-test with real keys: `mca -p` on both providers, then the desktop flow Read → Grep → Edit (approve) → Bash → Rewind.
-2. Try the M6 demo by hand: in plan mode ask for a refactor; expect parallel Explore subagents, a plan dialog, and todos updating after approval.
-3. `main` CI stays red until the macOS symlink fix (`5faf4e5`) and later commits are merged into it.
-4. Try Milestone 7 by hand: a long session that compacts, quit and `--continue`, a `.mcp.json` server whose tool you approve.
-5. Milestone 8 leftovers: verify the packaged app on a Mac from Finder (bundled `rg`, Bash finding node/git, Keychain read). Not possible on the Linux dev container.
-6. Open a PR from `feat/mca-v1` once the smoke test passes.
+1. Branch from `main` (`feat/<topic>` or `fix/<topic>`); never commit to `main` directly once a remote reviewer exists. Small, focused commits.
+2. Before pushing run `npm run lint && npm run typecheck && npm test && npm run build`. New behaviour needs a test (core logic in `src/core/*.test.ts` with `FakeProvider`, UI with Testing Library).
+3. Open a PR to `main`. CI (`ci.yml`) runs lint, typecheck, test and build on Ubuntu and macOS, then `package:mac`; all must be green to merge.
+4. Update this file when behaviour, decisions or known gaps change (keep *Backlog* current: add what you find, delete what you fix).
+5. Release: bump `version`, commit, tag `vX.Y.Z` (see *Releasing*). Tags `vX.Y.Z-rc.1` make prereleases.
+
+## Backlog
+
+Ordered by value. Pull from the top; each item should end as a PR.
+
+**Verify first (needs a Mac / real keys)**
+1. Push tag `v0.1.0`, watch the release workflow, install the `.dmg` per the README, and walk the packaged-app checklist: bundled `rg` runs, Bash finds `node`/`git` when launched from Finder, Keychain key is read, no Keychain prompt loop.
+2. Smoke-test with real keys: `mca -p` on both providers; desktop flow Read → Grep → Edit (approve) → Bash → Rewind; plan mode with parallel Explore subagents; a long session that compacts then `--continue`; a `.mcp.json` server.
+3. Confirm model ids and which models accept `output_config.effort`.
+
+**Product**
+- Persist rewind checkpoints (survive restart, bounded size); highlight the active chat in the sidebar.
+- MCP: restart crashed servers, expose MCP tools to `Explore`, HTTP/SSE transport.
+- Code signing and notarization (needs an Apple Developer ID), then auto-update.
+- Windows/Linux builds (the core is portable; Keychain falls back to `~/.mca/credentials.json`).
+
+**Hardening** (see *Known gaps* for the full list): Bash deny-rule matching with options between words, `Edit` on non-UTF-8 files, `readState` realpath keying, runtime tests for the `will-navigate` block and preload allowlist.
 
 ## Working notes for the next person
 
