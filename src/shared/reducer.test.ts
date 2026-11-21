@@ -29,6 +29,14 @@ describe('reduce', () => {
     expect(s.items[0]).toMatchObject({ id: 'a', done: false })
     expect(s.items[1]).toMatchObject({ id: 'b', parentId: 'a', done: true, result: 'boom', isError: true })
   })
+  it('usage accumulates this chat\'s request tokens and ignores estimates without them', () => {
+    const s = [
+      { type: 'usage', contextTokens: 10, contextWindow: 100, inputTokens: 10, outputTokens: 2 },
+      { type: 'usage', contextTokens: 30, contextWindow: 100, inputTokens: 30, outputTokens: 5 },
+      { type: 'usage', contextTokens: 12, contextWindow: 100 }
+    ].reduce((st, e) => reduce(st, e as never), emptyView())
+    expect(s.usage).toEqual({ contextTokens: 12, contextWindow: 100, totalIn: 40, totalOut: 7 })
+  })
   it('turn_end clears busy; usage, todos and notices are recorded', () => {
     const s = run([
       { type: 'turn_start' },

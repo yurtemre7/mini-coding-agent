@@ -45,7 +45,7 @@ describe('runTurn', () => {
     expect(events.map((e) => e.type)).toEqual(['turn_start', 'text_delta', 'usage', 'tool_start', 'tool_end', 'text_delta', 'changes', 'turn_end'])
     expect(events[0].type).toBe('turn_start')
     expect(events.at(-1)).toEqual({ type: 'turn_end', reason: 'done' })
-    expect(events).toContainEqual({ type: 'usage', contextTokens: 5, contextWindow: 200_000 })
+    expect(events).toContainEqual({ type: 'usage', contextTokens: 5, contextWindow: 200_000, inputTokens: 5, outputTokens: 1 })
     expect(s.provider.requests[1].messages.at(-1)!.role).toBe('user') // second request carries the tool result
   })
 

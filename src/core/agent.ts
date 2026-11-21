@@ -290,7 +290,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
           } else if (ev.type === 'tool_use') content.push(ev)
           else if (ev.type === 'usage') {
             context.tokens = ev.contextTokens
-            fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow })
+            fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow, inputTokens: ev.contextTokens, outputTokens: ev.outputTokens })
           } else stop = ev.reason
         }
       } catch (e) {

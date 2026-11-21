@@ -29,7 +29,7 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
     case 'changes':
       return { ...s, changes: { turn: e.turn, total: e.total } }
     case 'usage':
-      return { ...s, usage: { contextTokens: e.contextTokens, contextWindow: e.contextWindow } }
+      return { ...s, usage: { contextTokens: e.contextTokens, contextWindow: e.contextWindow, totalIn: (s.usage?.totalIn ?? 0) + (e.inputTokens ?? 0), totalOut: (s.usage?.totalOut ?? 0) + (e.outputTokens ?? 0) } }
     case 'notice':
       return add({ kind: 'notice', level: e.level, message: e.message })
     case 'rewind': {

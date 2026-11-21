@@ -66,7 +66,7 @@ export type AgentEvent =
   | { type: 'tool_start'; id: string; name: string; input: unknown; parentId?: string }
   | { type: 'tool_end'; id: string; result: string; isError: boolean }
   | { type: 'todos'; todos: Todo[] }
-  | { type: 'usage'; contextTokens: number; contextWindow: number }
+  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
   /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
@@ -99,7 +99,8 @@ export interface ViewState {
   items: Item[]
   todos: Todo[]
   changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
-  usage?: { contextTokens: number; contextWindow: number }
+  /** totalIn/totalOut: tokens sent and received by this chat's requests since it was opened (subagent requests are not counted) */
+  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number }
   mode: PermissionMode
   provider: ProviderId
   model: string
