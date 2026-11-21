@@ -84,17 +84,20 @@ const cases: [string, PermissionMode, any, unknown, any, Outcome][] = [
   ['protected write in bypass -> allow (ruling)', 'bypassPermissions', {}, Write, { file_path: protectedFile, content: '' }, 'allow'],
   ['explicit ask rule in bypass -> prompt', 'bypassPermissions', { ask: ['Write(**/*.lock)'] }, Write, { file_path: join(root, 'x.lock'), content: '' }, 'prompt'],
   // deny-rule bypass attempts (all under bypassPermissions + deny Bash(rm:*))
-  ...['rm\t-rf x', 'echo $(rm x)', 'FOO=1 rm x', '(rm x)', '(rm)', '{ rm x; }', 'rm${IFS}x', "echo $'\\'' ; rm x ; echo $'\\''", 'echo `rm x`', 'eval rm x', 'bash -c "rm x"', '! rm x', 'A=1 B=2 rm x', 'echo "$(rm x)"', 'env rm x', 'xargs rm', 'nice -n5 rm x', 'nohup rm x', 'time rm x', 'command rm x', 'builtin rm x', 'sudo rm x', 'doas rm x', 'timeout 5 rm x', 'watch rm x', 'ls | xargs rm', 'find . -exec rm {} \\;', 'find . -execdir rm {} +', 'find . -ok rm {} \\;'].map(
+  ...['rm\t-rf x', 'echo $(rm x)', 'FOO=1 rm x', '(rm x)', '(rm)', '{ rm x; }', 'rm${IFS}x', "echo $'\\'' ; rm x ; echo $'\\''", 'echo `rm x`', 'eval rm x', 'bash -c "rm x"', '! rm x', 'A=1 B=2 rm x', 'echo "$(rm x)"', 'env rm x', 'xargs rm', 'nice -n5 rm x', 'nohup rm x', 'time rm x', 'command rm x', 'builtin rm x', 'sudo rm x', 'doas rm x', 'timeout 5 rm x', 'watch rm x', 'ls | xargs rm', 'find . -exec rm {} \\;', 'find . -execdir rm {} +', 'find . -ok rm {} \\;', '\\rm x', "'rm' x", 'r""m x', '/bin/rm x', 'FOO="a b" rm x', 'if true; then rm x; fi', 'while true; do rm x; done', 'for i in 1; do rm x; done', '>/dev/null rm x', 'r{m,} x', 'a=rm; $a x', './rm x', 'r*m x'].map(
     (command): [string, PermissionMode, any, unknown, any, Outcome] => [`deny evasion: ${command}`, 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command }, 'deny']
   ),
   ['deny does not over-match a different program', 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command: 'echo remove' }, 'allow'],
+  ['env-assigned command never auto-allows', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: 'FOO=1 npm test' }, 'prompt'],
+  ['rg with allowlisted options is read-only', 'plan', {}, Bash, { command: 'rg -in -C3 foo src' }, 'allow'],
+  ['quoted-whole read-only arg is fine', 'default', {}, Bash, { command: 'cat "a.txt"' }, 'allow'],
+  ['multi-word deny prefix, consecutive tokens', 'bypassPermissions', { deny: ['Bash(git push:*)'] }, Bash, { command: "'git' \\push origin" }, 'deny'],
   ['wrapper is never auto-allowed', 'default', { allow: ['Bash(env:*)'] }, Bash, { command: 'env ls' }, 'prompt'],
-  ['env-prefix strip lets allow match', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: 'CI=1 npm test' }, 'allow'],
   ['allow never applies to opaque commands', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: "npm test $'x'" }, 'prompt'],
   ['allow never applies to ${', 'default', { allow: ['Bash(echo:*)'] }, Bash, { command: 'echo ${HOME}' }, 'prompt'],
   ['allow never applies to eval', 'default', { allow: ['Bash(eval:*)'] }, Bash, { command: 'eval ls' }, 'prompt'],
   // read-only auto-allow leaks
-  ...['cat $HOME/.ssh/id_rsa', 'cat ~root/.ssh/x', 'cat .e*', 'cat .en[v]', 'cat .en?', 'cat {.env,x}', 'rg --file=/etc/x', 'rg -f/etc/x', 'rg --pre=./x foo', 'rg --hostname-bin=./x foo', 'rg --file /etc/x', 'tree -o out.txt'].map(
+  ...['cat $HOME/.ssh/id_rsa', 'cat ~root/.ssh/x', 'cat .e*', 'cat .en[v]', 'cat .en?', 'cat {.env,x}', 'rg --file=/etc/x', 'rg -f/etc/x', 'rg --pre=./x foo', 'rg --hostname-bin=./x foo', 'rg --file /etc/x', 'tree -o out.txt', 'cat .e""nv', "cat .e'n'v", 'cat ""/etc/passwd', "cat ''/etc/passwd", 'rg --hidden .', 'rg -uuu x', 'rg -L x', 'git show HEAD:.env', 'grep -r x .'].map(
     (command): [string, PermissionMode, any, unknown, any, Outcome] => [`read-only leak: ${command}`, 'default', {}, Bash, { command }, 'prompt']
   ),
   ['WebFetch domain rule allows host and subdomain', 'default', { allow: ['WebFetch(domain:example.com)'] }, { name: 'WebFetch', readOnly: true }, { url: 'https://docs.example.com/a' }, 'allow'],

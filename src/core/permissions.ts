@@ -90,7 +90,8 @@ export function parseCommand(cmd: string): ParsedCommand {
 
 const WRAPPERS = new Set(['env', 'xargs', 'nice', 'nohup', 'time', 'command', 'builtin', 'sudo', 'doas', 'exec', 'timeout', 'watch'])
 
-const READ_ONLY_PROGRAMS = new Set(['ls', 'cat', 'pwd', 'head', 'tail', 'wc', 'rg', 'echo', 'which', 'file', 'stat', 'du', 'df', 'basename', 'dirname', 'realpath', 'uname', 'whoami', 'date', 'true'])
+const READ_ONLY_PROGRAMS = new Set(['ls', 'cat', 'pwd', 'head', 'tail', 'wc', 'rg', 'grep', 'echo', 'which', 'file', 'stat', 'du', 'df', 'basename', 'dirname', 'realpath', 'uname', 'whoami', 'date', 'true'])
+const RG_OPTIONS = /^(-[inlcwFve]+|-[CAB]\d+|--(line-number|ignore-case|files-with-matches|count|fixed-strings|word-regexp|invert-match))$/
 const GIT_READ = new Set(['status', 'log', 'diff', 'show', 'branch'])
 const BRANCH_FLAGS = new Set(['-a', '-r', '-v', '-vv', '--list', '--show-current', '--all', '--remotes'])
 
@@ -100,7 +101,7 @@ function segmentIsReadOnly(seg: string): boolean {
     if (!GIT_READ.has(sub) || [sub, ...rest].some((a) => a.startsWith('--output') || a.startsWith('--ext-diff'))) return false
     return sub !== 'branch' || rest.every((a) => BRANCH_FLAGS.has(a)) // `git branch -D x` mutates
   }
-  if (prog === 'rg') return ![sub, ...rest].some((a) => a?.startsWith('--pre') || a?.startsWith('--hostname-bin')) // these run a program
+  if (prog === 'rg' || prog === 'grep') return [sub, ...rest].every((a) => !a?.startsWith('-') || RG_OPTIONS.test(a)) // any other option may run a program, follow links or read ignored files
   return READ_ONLY_PROGRAMS.has(prog)
 }
 
@@ -176,23 +177,33 @@ function bashSpecMatches(spec: string, text: string): boolean {
   return text === spec
 }
 
+/** Words of a command with quotes and backslashes removed, split on whitespace and shell punctuation. */
+const words = (s: string): string[] => s.replace(/['"\\]/g, '').split(/[\s;&|()<>{}$`=,]+/).filter(Boolean)
+
 /**
- * Bash. deny ('any'): some normalised segment (or the whole command) matches; an opaque command ($(), $', ${, backticks, eval, sh -c) is denied when the
- * rule's program appears as a whole token anywhere in it (over-denying is fine).
- * allow ('all'): the whole command equals an exact rule, or every normalised segment matches and the command is not opaque.
+ * Bash. deny/ask ('any'): structural token matching over the WHOLE command, never trusting the shell syntax: quotes/backslashes removed, simple braces
+ * collapsed, a rule's words must appear as consecutive tokens (or basenames: /bin/rm). A segment whose command word is computed ($ { * ? [) matches
+ * every Bash rule. Over-denying is accepted (`echo rm` is denied).
+ * allow ('all'): the whole command equals an exact rule, or every segment (whitespace-normalised, NO env-prefix stripping) matches and the command is not opaque.
  */
 function bashRuleMatches(rules: string[], cmd: string, mode: 'any' | 'all'): boolean {
   const specs = rules.map(parseRule).filter((r) => r.tool === 'Bash')
   if (specs.some((r) => r.spec === undefined)) return true // bare `Bash`
+  if (!specs.length) return false
   const p = parseCommand(cmd)
-  const segs = p.segments.map(normalizeSegment)
-  const hit = (seg: string) => specs.some((r) => bashSpecMatches(r.spec!, seg))
   const whole = specs.some((r) => r.spec === cmd.trim()) // exact-string rules (session grants of compound commands); a prefix rule must never match a whole chain
-  if (mode === 'all') return !p.subst && (whole || (segs.length > 0 && segs.every(hit)))
-  if (whole || segs.some(hit)) return true
-  if (!p.subst) return false
-  const tokens = new Set(cmd.split(/[\s;&|()$`{}'"<>]+/).filter(Boolean))
-  return specs.some((r) => tokens.has(r.spec!.replace(/:\*$/, '').split(/\s+/)[0]))
+  if (mode === 'all') {
+    const hit = (seg: string) => specs.some((r) => bashSpecMatches(r.spec!, seg))
+    return !p.subst && (whole || (p.segments.length > 0 && p.segments.map((g) => g.replace(/\s+/g, ' ').trim()).every(hit)))
+  }
+  if (whole || p.segments.some((g) => specs.some((r) => bashSpecMatches(r.spec!, normalizeSegment(g))))) return true
+  if (p.segments.some((g) => /[$*?[{]/.test(normalizeSegment(g).split(' ')[0]))) return true // computed command word: unknowable
+  const lists = [words(cmd), words(cmd.replace(/[{},]/g, ''))]
+  const base = (t: string) => t.slice(t.lastIndexOf('/') + 1) || t
+  return specs.some((r) => {
+    const w = words(r.spec!.replace(/:\*$/, ''))
+    return w.length > 0 && lists.some((t) => t.some((_, i) => w.every((x, k) => t[i + k] === x || (k === 0 && base(t[i]) === x))))
+  })
 }
 
 function matches(rules: string[], tool: Tool, input: any, ctx: ToolContext, mode: 'any' | 'all'): boolean {
@@ -245,13 +256,18 @@ export class Permissions {
     return cmd
       .split(/\s+/)
       .slice(1)
-      .map((t) => t.replace(/^['"]|['"]$/g, ''))
-      .every((t) => {
+      .every((raw) => {
+        const wrapped = /^'[^']*'$|^"[^"]*"$/.test(raw)
+        if (!wrapped && /['"\\]/.test(raw)) return false // partial quoting / escapes can spell any path (.e""nv)
+        const t = wrapped ? raw.slice(1, -1) : raw
         if (!t) return true
         if (/[$~*?[{\\`]/.test(t)) return false // expansions can name any path
         if (t.startsWith('-')) return !/[=/.]/.test(t) // attached option values (--file=/etc/x, -f/etc/x) are paths in disguise
+        const sensitive = (p: string) => this.rules.ask.some((r) => ruleMatches(r, { name: 'Read' } as Tool, { file_path: resolvePath(ctx.cwd, p) }, ctx))
+        const colon = t.indexOf(':') // git show REV:path
+        if (colon >= 0 && sensitive(t.slice(colon + 1))) return false
         const abs = resolvePath(ctx.cwd, t)
-        return isInsideWorkspace(ctx.root, abs) && !this.rules.ask.some((r) => ruleMatches(r, { name: 'Read' } as Tool, { file_path: abs }, ctx))
+        return isInsideWorkspace(ctx.root, abs) && !sensitive(t)
       })
   }
 
