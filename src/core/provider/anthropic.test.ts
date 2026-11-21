@@ -1,0 +1,133 @@
+import { describe, expect, it, vi } from 'vitest'
+import { AnthropicProvider, type AnthropicLike } from './anthropic'
+import { ProviderError } from './retry'
+import type { StreamEvent, StreamRequest } from './types'
+
+const req = (over: Partial<StreamRequest> = {}): StreamRequest => ({
+  model: 'm', system: 'sys', maxTokens: 10, tools: [], signal: new AbortController().signal,
+  messages: [{ role: 'user', content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }],
+  ...over
+})
+async function* gen(events: any[], failAfter?: Error) {
+  for (const e of events) yield e
+  if (failAfter) throw failAfter
+}
+const collect = async (it: AsyncIterable<StreamEvent>) => {
+  const out: StreamEvent[] = []
+  for await (const e of it) out.push(e)
+  return out
+}
+const client = (...calls: (() => Promise<AsyncIterable<any>>)[]) => {
+  const create = vi.fn(async () => calls.shift()!())
+  return { create, client: { messages: { create } } as AnthropicLike }
+}
+const apiError = (status: number, headers: Record<string, string> = {}) =>
+  Object.assign(new Error('boom'), { status, headers: new Headers(headers) })
+const sleep = vi.fn(async () => {})
+
+const happy = [
+  { type: 'message_start', message: { usage: { input_tokens: 10, cache_read_input_tokens: 100, cache_creation_input_tokens: 5 } } },
+  { type: 'content_block_start', content_block: { type: 'text' } },
+  { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hel' } },
+  { type: 'content_block_delta', delta: { type: 'text_delta', text: 'lo' } },
+  { type: 'content_block_stop' },
+  { type: 'content_block_start', content_block: { type: 'tool_use', id: 't1', name: 'Read' } },
+  { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"file_' } },
+  { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: 'path":"x"}' } },
+  { type: 'content_block_stop' },
+  { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 7 } }
+]
+
+describe('AnthropicProvider', () => {
+  it('maps a stream: text, fragmented tool args, cached-token usage, stop', async () => {
+    const { client: c } = client(async () => gen(happy))
+    const events = await collect(new AnthropicProvider('k', { client: c }).stream(req()))
+    expect(events).toEqual([
+      { type: 'text_delta', text: 'Hel' },
+      { type: 'text_delta', text: 'lo' },
+      { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'x' } },
+      { type: 'usage', contextTokens: 115, outputTokens: 7 },
+      { type: 'stop', reason: 'tool_use' }
+    ])
+  })
+
+  it('keeps unparseable tool args as the raw string; drops a tool_use cut off by max_tokens', async () => {
+    const bad = [
+      { type: 'content_block_start', content_block: { type: 'tool_use', id: 't1', name: 'Read' } },
+      { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"a":' } },
+      { type: 'content_block_stop' },
+      { type: 'content_block_start', content_block: { type: 'tool_use', id: 't2', name: 'Read' } },
+      { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: '{"a' } },
+      { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: {} }
+    ]
+    const { client: c } = client(async () => gen(bad))
+    const events = await collect(new AnthropicProvider('k', { client: c }).stream(req()))
+    expect(events.filter((e) => e.type === 'tool_use')).toEqual([{ type: 'tool_use', id: 't1', name: 'Read', input: '{"a":' }])
+    expect(events.at(-1)).toEqual({ type: 'stop', reason: 'max_tokens' })
+  })
+
+  it('sends cache_control on the system prompt and the last block of the last message only', async () => {
+    const { client: c, create } = client(async () => gen([]))
+    await collect(new AnthropicProvider('k', { client: c }).stream(req()))
+    const body = (create.mock.calls[0] as any[])[0]
+    expect(body.system[0].cache_control).toEqual({ type: 'ephemeral' })
+    expect(body.messages[0].content[0].cache_control).toBeUndefined()
+    expect(body.messages[0].content[1].cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  it('retries 429/5xx with retry-after, then succeeds', async () => {
+    sleep.mockClear()
+    const { client: c, create } = client(
+      async () => Promise.reject(apiError(429, { 'retry-after': '3' })),
+      async () => Promise.reject(apiError(529)),
+      async () => gen(happy)
+    )
+    const events = await collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))
+    expect(create).toHaveBeenCalledTimes(3)
+    expect(sleep.mock.calls.map((x: any[]) => x[0])).toEqual([3000, 2000]) // retry-after, then exponential (attempt 1)
+    expect(events.at(-1)).toEqual({ type: 'stop', reason: 'tool_use' })
+  })
+
+  it('gives up after 4 retries', async () => {
+    const calls = Array.from({ length: 5 }, () => async () => Promise.reject(apiError(500)))
+    const { client: c, create } = client(...calls)
+    await expect(collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))).rejects.toThrow('boom')
+    expect(create).toHaveBeenCalledTimes(5)
+  })
+
+  it('fails 401 immediately, naming the env var', async () => {
+    const { client: c, create } = client(async () => Promise.reject(apiError(401)))
+    await expect(collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))).rejects.toThrow(/ANTHROPIC_API_KEY/)
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not retry once an event was emitted', async () => {
+    const { client: c, create } = client(
+      async () => gen([{ type: 'content_block_delta', delta: { type: 'text_delta', text: 'x' } }], new ProviderError('overloaded', 529)),
+      async () => gen(happy)
+    )
+    const seen: StreamEvent[] = []
+    await expect(
+      (async () => {
+        for await (const e of new AnthropicProvider('k', { client: c, sleep }).stream(req())) seen.push(e)
+      })()
+    ).rejects.toThrow('overloaded')
+    expect(seen).toEqual([{ type: 'text_delta', text: 'x' }])
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats an in-stream overloaded_error before any event as retryable', async () => {
+    const { client: c, create } = client(
+      async () => gen([{ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }]),
+      async () => gen(happy)
+    )
+    await collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))
+    expect(create).toHaveBeenCalledTimes(2)
+  })
+
+  it('knows the context window (default 200k)', async () => {
+    const p = new AnthropicProvider('k', { client: client().client })
+    expect(await p.contextWindow('claude-sonnet-5-5')).toBe(200_000)
+    expect(await p.contextWindow('unknown')).toBe(200_000)
+  })
+})
