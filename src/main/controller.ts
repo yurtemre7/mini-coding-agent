@@ -288,7 +288,7 @@ export class Controller {
   }
 
   /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
-  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'mcp']
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp']
 
   async command(line: string): Promise<void> {
     const s = this.session

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AgentSession, type Frontend } from './agent'
-import { expandCommand, HELP, loadCommands, parseInput, runCommand, type CommandEnv } from './commands'
+import { BUILTINS, expandCommand, HELP, loadCommands, parseInput, runCommand, type CommandEnv } from './commands'
 import { Permissions } from './permissions'
 import { FakeProvider } from './provider/fake'
 import { builtinTools } from './registry'
@@ -12,13 +12,14 @@ describe('parseInput', () => {
   it('commands, unknown names, path-like input and plain prompts', () => {
     expect(parseInput('/mode plan')).toEqual({ kind: 'command', name: 'mode', args: 'plan' })
     expect(parseInput('  /exit ')).toEqual({ kind: 'command', name: 'exit', args: '' })
+    expect(BUILTINS).toContain('diff')
     expect(parseInput('/nope x')).toEqual({ kind: 'unknown', name: 'nope' })
     expect(parseInput('/Users/me/app/file.ts explain this')).toMatchObject({ kind: 'prompt' })
     expect(parseInput('/etc/hosts')).toMatchObject({ kind: 'prompt' })
     expect(parseInput('hello /mode')).toMatchObject({ kind: 'prompt' })
   })
   it('/help states the checkpoint limits', () => {
-    expect(HELP).toMatch(/memory/)
+    expect(HELP).toMatch(/saved with the chat/)
     expect(HELP).toMatch(/Bash/)
   })
 })
@@ -93,6 +94,34 @@ describe('/mode, /clear, unavailable', () => {
     await runCommand('compact', 'tests', env)
     expect(session.history).toHaveLength(1)
     expect(JSON.stringify(session.history[0])).toContain('SUM')
+  })
+})
+
+describe('/diff', () => {
+  it('prints a summary and the patch for an edited file; /diff all spans turns; empty says so', async () => {
+    const { dir, session, out, env } = setup([
+      [...tool('1', 'Read', { file_path: 'a.txt' })],
+      [...tool('2', 'Edit', { file_path: 'a.txt', old_string: 'orig', new_string: 'edited' })],
+      done,
+      [...tool('3', 'Write', { file_path: 'b.txt', content: 'new\n' })],
+      done
+    ])
+    writeFileSync(join(dir, 'a.txt'), 'orig\n')
+    await runCommand('diff', '', env)
+    expect(out.at(-1)).toBe('No file changes.')
+    await session.send('edit it')
+    await runCommand('diff', '', env)
+    expect(out.at(-1)).toMatch(/M a\.txt \+1 -1/)
+    expect(out.at(-1)).toContain('+edited')
+    await session.send('make b')
+    await runCommand('diff', '', env)
+    expect(out.at(-1)).toMatch(/A b\.txt \+1 -0/)
+    expect(out.at(-1)).not.toContain('a.txt')
+    await runCommand('diff', 'all', env)
+    expect(out.at(-1)).toContain('a.txt')
+    expect(out.at(-1)).toContain('b.txt')
+    await runCommand('diff', 'nonsense', env)
+    expect(out.at(-1)).toBe('Usage: /diff [all]')
   })
 })
 

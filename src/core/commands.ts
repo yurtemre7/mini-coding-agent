@@ -1,11 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
+import { diffFor, summarizeChanges } from './changes'
 import type { AgentSession } from './agent'
 import { parseFrontmatter } from './frontmatter'
 import { MODES, parseMode, type Permissions } from './permissions'
 
-export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'mcp', 'exit'] as const
+export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp', 'exit'] as const
 
 export type Parsed = { kind: 'prompt'; text: string } | { kind: 'command'; name: string; args: string } | { kind: 'unknown'; name: string }
 
@@ -95,6 +96,7 @@ export const BUILTIN_INFO: Record<(typeof BUILTINS)[number], string> = {
   model: 'Show or set the model',
   provider: 'Show or switch the provider',
   rewind: 'Undo the last turn and its file changes',
+  diff: 'Show the files the agent changed (this turn, or all)',
   trust: 'Trust this workspace',
   mcp: 'List MCP servers and their status',
   exit: 'Quit'
@@ -106,13 +108,14 @@ export const HELP = `Commands:
   /mode [name]     Show or set the permission mode (${MODES.join(' | ')})
   /mcp             List MCP servers (from .mcp.json or the mcpServers setting; trusted workspaces only) and their status
   /rewind          Undo the last turn: restore its files and drop it from the conversation (repeat to go further back)
+  /diff [all]      Show the files the agent changed in the last turn (or in the whole chat) with their diffs
   /trust           Trust this workspace so its project allow rules apply
   /model [id]      Show or set the model for the next turn
   /provider [id]   Show or switch the provider (needs its API key)
   /compact [focus] Summarize the conversation to free context (also happens automatically at 80% of the window)
   /exit            Quit
 
-Known limits: rewind checkpoints live in memory (lost on restart) and do not cover changes made through Bash.
+Known limits: rewind checkpoints are saved with the chat but do not cover changes made through Bash.
 Ctrl+C aborts a running turn; at an empty prompt press it twice within 2 s to exit. End a line with \\ to continue on the next line.`
 
 export async function runCommand(name: string, args: string, env: CommandEnv): Promise<void> {
@@ -174,6 +177,17 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
       const files = restored.map((p) => relative(env.workspace, p) || p)
       if (session.history.length === before) return print(`Restored files${files.length ? `: ${files.join(', ')}` : ''}. The conversation is unchanged.`)
       return print(files.length ? `Rewound the last turn. Restored: ${files.join(', ')}` : 'Rewound the last turn (it changed no files).')
+    }
+    case 'diff': {
+      const scope = args.trim()
+      if (scope !== '' && scope !== 'all') return print('Usage: /diff [all]')
+      const images = session.files.beforeImages(scope === 'all' ? 'all' : 'turn')
+      const changes = await summarizeChanges(images, env.workspace)
+      if (!changes.length) return print('No file changes.')
+      const mark = { added: 'A', modified: 'M', deleted: 'D' } as const
+      const lines = changes.map((c) => `${mark[c.status]} ${c.path} +${c.additions} -${c.deletions}${c.binary ? ' (binary)' : ''}${c.tooLarge ? ' (too large to diff)' : ''}`)
+      const patches = await Promise.all(changes.map((c) => diffFor(images, env.workspace, join(env.workspace, c.path))))
+      return print([...lines, '', ...patches.filter((p): p is string => !!p)].join('\n'))
     }
     case 'trust':
       try {
