@@ -52,6 +52,11 @@ export class FileState {
     return loading.catch((e: Error) => [`Could not read saved checkpoints: ${e.message}`])
   }
 
+  /** Resolves once the saved turns of an attached store have been loaded. */
+  async ready(): Promise<void> {
+    await this.shared.ready
+  }
+
   private enqueue(job: () => Promise<unknown>): Promise<void> {
     const run = this.shared.chain.then(job)
     this.shared.chain = run.catch(() => {}) // a failing disk must not block edits; the in-memory checkpoint still works

@@ -174,4 +174,39 @@ describe('main -> batcher -> renderer apply', () => {
     expect(view!.items).toEqual(c.getState().items)
     expect(turns()).toBe(1)
   })
+  describe('changes', () => {
+    const turnWithWrite = async () => {
+      const t = await setup([[]])
+      const file = join(t.ws, 'a.txt')
+      ;(t.c as any).d.makeProvider = () => new FakeProvider([write(file), say])
+      t.c.send('write it')
+      while (!t.prompts.length) await new Promise((r) => setTimeout(r, 5))
+      t.c.answer(t.prompts[0].id, { allow: true, scope: 'once' })
+      await t.idle()
+      return { ...t, file }
+    }
+    it('a turn reports its changes; changeDiff returns the patch and refuses unknown files', async () => {
+      const { c } = await turnWithWrite()
+      expect(c.getState().changes.turn).toMatchObject([{ path: 'a.txt', status: 'added', additions: 1 }])
+      expect(await c.changeDiff('turn', 'a.txt')).toContain('+hi')
+      await expect(c.changeDiff('turn', 'nope.txt')).rejects.toThrow(/Unknown changed file/)
+      await expect(c.changeDiff('turn', '../../etc/passwd')).rejects.toThrow(/Unknown changed file/)
+    })
+    it('changeRevert removes a created file and refreshes the list; unknown paths touch nothing', async () => {
+      const { c, ws, file } = await turnWithWrite()
+      await expect(c.changeRevert('turn', '../outside.txt')).rejects.toThrow(/Unknown changed file/)
+      await c.changeRevert('turn', 'a.txt')
+      await expect(readFile(file, 'utf8')).rejects.toThrow()
+      expect(c.getState().changes).toEqual({ turn: [], total: [] })
+      expect(ws).toBeTruthy()
+    })
+    it('changeRevert is refused while a turn is running', async () => {
+      const { c, ws, prompts } = await setup([[]])
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'b.txt')), say])
+      c.send('go')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      await expect(c.changeRevert('turn', 'b.txt')).rejects.toThrow(/while a turn is running/)
+      c.abort()
+    })
+  })
 })
