@@ -396,8 +396,8 @@ Each milestone lists a **Demo**: the command or action that proves it is done.
 - **Demo**: quit mid-session and `mca --continue` picks it up; a long session compacts and keeps working; a tool from a `.mcp.json` server is callable after approval.
 
 ### Milestone 8: Skills, Commands, Polish and Packaging (Stages 13–14)
-- [ ] `tools/skill.ts`, `commands.ts`, remaining built-ins, slash autocomplete in `PromptInput.tsx`.
-- [ ] Finalize `--help`; update `README.md` (CLI usage, key setup, config files, known limits).
+- [x] `tools/skill.ts`, `commands.ts`, remaining built-ins, slash autocomplete in `PromptInput.tsx`.
+- [x] Finalize `--help`; update `README.md` (CLI usage, key setup, config files, known limits).
 - [ ] Verify the packaged app end to end, launched from Finder: bundled `rg` runs, `Bash` finds `node` and `git`, Keychain key is read.
 - **Demo**: the *Verification Plan* passes in full.
 
