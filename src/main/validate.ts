@@ -8,6 +8,11 @@ const bad = (m: string): never => {
 const str = (v: unknown, name: string): string => (typeof v === 'string' ? v : bad(`${name} must be a string`))
 const provider = (v: unknown): ProviderId => (PROVIDER_IDS.includes(v as ProviderId) ? (v as ProviderId) : bad('unknown provider'))
 const effort = (v: unknown): Effort => (EFFORT_LEVELS.includes(v as Effort) ? (v as Effort) : bad('unknown effort'))
+const scope = (v: unknown): 'turn' | 'all' => (v === 'turn' || v === 'all' ? v : bad('scope must be "turn" or "all"'))
+const changedPath = (v: unknown): string => {
+  const p = str(v, 'path')
+  return p.length > 0 && p.length <= 4096 && !p.includes('\0') ? p : bad('invalid path')
+}
 const obj = (v: unknown, name: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : bad(`${name} must be an object`))
 
 const attachments = (v: unknown): Attachment[] => {
@@ -28,6 +33,8 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'session:abort': () => [],
   'session:getState': () => [],
   'session:command': ([l]) => [str(l, 'command')],
+  'changes:diff': ([s, p]) => [scope(s), changedPath(p)],
+  'changes:revert': ([s, p]) => [scope(s), changedPath(p)],
   'commands:list': () => [],
   'workspace:select': () => [],
   'workspace:recent': () => [],

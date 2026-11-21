@@ -77,6 +77,11 @@ export class Transcript {
     return join(sessionDir(this.cwd, this.o.home), `${this.id}.jsonl`)
   }
 
+  /** Rewind checkpoints of this chat. */
+  get checkpointDir(): string {
+    return join(sessionDir(this.cwd, this.o.home), `${this.id}.checkpoints`)
+  }
+
   private write(r: Rec): void {
     if (!this.started) {
       mkdirSync(sessionDir(this.cwd, this.o.home), { recursive: true })

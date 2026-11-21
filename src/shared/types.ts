@@ -1,3 +1,13 @@
+/** One file the agent changed, as the review panel and `/diff` list it. Paths are workspace-relative with forward slashes. */
+export interface ChangeSummary {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+  additions: number
+  deletions: number
+  binary: boolean
+  tooLarge: boolean
+}
+
 /** One entry of a provider's model list. `free` marks a model that costs nothing (OpenRouter's `:free` variants). */
 export interface ModelInfo {
   id: string
@@ -59,6 +69,8 @@ export type AgentEvent =
   | { type: 'usage'; contextTokens: number; contextWindow: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
+  /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
+  | { type: 'changes'; turn: ChangeSummary[]; total: ChangeSummary[] }
 
 // ---------- Desktop view state and IPC ----------
 
@@ -86,6 +98,7 @@ export type Item =
 export interface ViewState {
   items: Item[]
   todos: Todo[]
+  changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
   usage?: { contextTokens: number; contextWindow: number }
   mode: PermissionMode
   provider: ProviderId
@@ -140,6 +153,10 @@ export interface IpcContract {
     'session:getState': { args: []; result: ViewState }
     /** A slash command line such as "/rewind" or "/mode plan"; its output arrives as notice events. */
     'session:command': { args: [line: string]; result: void }
+    /** The unified diff of one file the agent changed (`path` is a ChangeSummary path); `scope` is the newest turn or the whole chat. */
+    'changes:diff': { args: [scope: 'turn' | 'all', path: string]; result: string }
+    /** Puts one changed file back to its state before the agent touched it. Refused while a turn runs. */
+    'changes:revert': { args: [scope: 'turn' | 'all', path: string]; result: void }
     'workspace:select': { args: []; result: void }
     /** Recently opened workspaces, newest first (folders that vanished are dropped). */
     'workspace:recent': { args: []; result: string[] }
@@ -166,7 +183,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

@@ -39,6 +39,8 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     openWorkspace: (path: string) => call((a) => a.invoke('workspace:open', path)),
     openChat: (id: string) => call((a) => a.invoke('session:open', id)),
     newChat: () => call((a) => a.invoke('session:new')),
+    changeDiff: (scope: 'turn' | 'all', path: string): Promise<string> => (api ? api.invoke('changes:diff', scope, path) : Promise.resolve('')),
+    changeRevert: (scope: 'turn' | 'all', path: string) => call((a) => a.invoke('changes:revert', scope, path)),
     answer: (id: string, d: Decision) => {
       setState((s) => s && { ...s, pending: null })
       return api?.invoke('prompt:answer', id, d).catch(() => {}) // an answer that lost the race with an abort is moot

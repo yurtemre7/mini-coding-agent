@@ -36,7 +36,7 @@ mca --continue                                    # resume the newest saved sess
 
 `mca --help` lists every flag. Exit codes: 0 ok, 1 runtime error, 2 usage error or missing key. Headless runs treat the workspace as untrusted unless you pass `--trust`.
 
-Slash commands (CLI and desktop prompt): `/help`, `/clear`, `/compact [focus]`, `/mode [mode]`, `/model [id]`, `/provider [id]`, `/rewind`, `/trust`, `/mcp`, `/exit`. Typing `/` in the desktop prompt opens an autocomplete list.
+Slash commands (CLI and desktop prompt): `/help`, `/clear`, `/compact [focus]`, `/mode [mode]`, `/model [id]`, `/provider [id]`, `/rewind`, `/diff [all]`, `/trust`, `/mcp`, `/exit`. Typing `/` in the desktop prompt opens an autocomplete list.
 
 ## Configuration
 
@@ -74,7 +74,7 @@ Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tag
 ## Known limits
 
 - Packaged-app behaviour is **unverified**: bundled `rg`, `Bash` finding node/git when launched from Finder, and Keychain reads need a manual check on a Mac (CI only builds the app).
-- `/rewind` restores files edited through Write/Edit; it does not undo Bash side effects or memory.
+- `/rewind` restores files edited through Write/Edit (checkpoints are saved with the chat, so it also works after a restart); it does not undo Bash side effects or memory.
 - MCP supports stdio servers only; results are capped at 25k characters.
 - Subagents are one level deep and cannot use `Skill`, `Task`, `TodoWrite` or `ExitPlanMode`.
 

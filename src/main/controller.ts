@@ -1,6 +1,8 @@
+import { resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AgentSession, type Frontend } from '../core/agent'
 import { BUILTIN_INFO, loadCommands, parseInput, runCommand } from '../core/commands'
+import { diffFor, summarizeChanges } from '../core/changes'
 import { getKey, keySource, setKey } from '../core/credentials'
 import { createPermissions, type Permissions } from '../core/permissions'
 import { DEFAULT_MODELS, FAST_MODEL } from '../core/provider/models'
@@ -261,6 +263,7 @@ export class Controller {
     this.session.load(messages, transcript)
     this.apply({ type: 'clear' })
     for (const e of messagesToEvents(messages)) this.apply(e)
+    void this.refreshChanges()
   }
 
   private announce(): void {
@@ -288,7 +291,7 @@ export class Controller {
   }
 
   /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
-  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust', 'mcp']
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp']
 
   async command(line: string): Promise<void> {
     const s = this.session
@@ -302,6 +305,7 @@ export class Controller {
     await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp, models: this.modelEnv() })
     if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
     if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
+    if (p.name === 'rewind') await this.refreshChanges() // the previous turn's changes are now the newest
     this.announce() // mode may have changed
     for (const m of out) this.notice('info', m)
   }
@@ -313,6 +317,39 @@ export class Controller {
       setModel: async (model: string) => void (await this.update({ model })),
       setProvider: async (id: string) => (await this.update({ provider: id as ProviderId }), this.model)
     }
+  }
+
+  private async changeSet(scope: 'turn' | 'all'): Promise<{ root: string; images: Map<string, Buffer | null> }> {
+    if (!this.session || !this.workspace) throw new Error('Open a workspace first.')
+    await this.session.files.ready()
+    return { root: this.workspace, images: this.session.files.beforeImages(scope) }
+  }
+
+  /** Recomputes the changed-file summaries from disk and tells the renderer. */
+  private async refreshChanges(): Promise<void> {
+    try {
+      const turn = await this.changeSet('turn')
+      const total = await this.changeSet('all')
+      this.apply({ type: 'changes', turn: await summarizeChanges(turn.images, turn.root), total: await summarizeChanges(total.images, total.root) })
+    } catch (e) {
+      this.notice('warn', `Could not list changed files: ${(e as Error).message}`)
+    }
+  }
+
+  /** The diff of one changed file. `path` must be one of the listed changes; anything else is refused. */
+  async changeDiff(scope: 'turn' | 'all', path: string): Promise<string> {
+    const { root, images } = await this.changeSet(scope)
+    const diff = await diffFor(images, root, resolve(root, path))
+    if (diff === undefined) throw new Error('Unknown changed file.')
+    return diff
+  }
+
+  /** Restores one changed file to its state before the agent touched it, then refreshes the list. */
+  async changeRevert(scope: 'turn' | 'all', path: string): Promise<void> {
+    this.assertIdle('revert a file')
+    const { root } = await this.changeSet(scope)
+    if (!(await this.session!.files.revertFile(resolve(root, path), scope))) throw new Error('Unknown changed file.')
+    await this.refreshChanges()
   }
 
   /** What slash autocomplete offers: the commands the window may run plus the workspace's custom ones. */

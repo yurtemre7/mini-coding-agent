@@ -75,3 +75,14 @@ describe('messagesToEvents todos', () => {
     expect(events).toContainEqual({ type: 'todos', todos: [{ content: 'a', status: 'pending' }] })
   })
 })
+
+describe('changes', () => {
+  const c = { path: 'a.ts', status: 'modified' as const, additions: 1, deletions: 0, binary: false, tooLarge: false }
+  it('a changes event replaces the state; clear and rewind reset it', () => {
+    const s0 = reduce(emptyView(), { type: 'user_message', text: 'hi' })
+    const s1 = reduce(s0, { type: 'changes', turn: [c], total: [c] })
+    expect(s1.changes).toEqual({ turn: [c], total: [c] })
+    expect(reduce(s1, { type: 'rewind' }).changes).toEqual({ turn: [], total: [] })
+    expect(reduce(s1, { type: 'clear' }).changes).toEqual({ turn: [], total: [] })
+  })
+})
