@@ -1,7 +1,7 @@
 import { mkdtempSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getKey, setKey, type Keychain } from './credentials'
 
 // Every call passes a fake keychain or `undefined` explicitly; the real Keychain is never touched.
@@ -9,16 +9,11 @@ const fakeKeychain = (store: Record<string, string> = {}): Keychain => ({
   get: async (p) => store[p] ?? null,
   set: async (p, k) => void (store[p] = k)
 })
-const old = { home: process.env.HOME, key: process.env.ANTHROPIC_API_KEY }
-
 beforeEach(() => {
-  process.env.HOME = mkdtempSync(join(tmpdir(), 'mca-home-'))
-  delete process.env.ANTHROPIC_API_KEY
+  vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'mca-home-')))
+  vi.stubEnv('ANTHROPIC_API_KEY', '')
 })
-afterEach(() => {
-  process.env.HOME = old.home
-  if (old.key) process.env.ANTHROPIC_API_KEY = old.key
-})
+afterEach(() => vi.unstubAllEnvs())
 
 describe('credentials', () => {
   it('prefers env, then keychain, then file', async () => {
@@ -26,7 +21,7 @@ describe('credentials', () => {
     await setKey('anthropic', 'from-file', { get: async () => null, set: async () => Promise.reject(new Error('no keychain')) })
     expect(await getKey('anthropic', fakeKeychain())).toBe('from-file')
     expect(await getKey('anthropic', kc)).toBe('from-keychain')
-    process.env.ANTHROPIC_API_KEY = 'from-env'
+    vi.stubEnv('ANTHROPIC_API_KEY', 'from-env')
     expect(await getKey('anthropic', kc)).toBe('from-env')
   })
   it('returns null when nothing is set', async () => expect(await getKey('openrouter', fakeKeychain())).toBeNull())

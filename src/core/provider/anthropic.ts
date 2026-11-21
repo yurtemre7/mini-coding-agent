@@ -19,7 +19,10 @@ const parseJson = (s: string): unknown => {
 
 function toProviderError(e: any): Error {
   const status: number | undefined = e?.status
-  if (status === undefined || e instanceof ProviderError) return e
+  if (e instanceof ProviderError) return e
+  // the SDK throws an APIError with no status for in-stream error events
+  const inStream = e?.error?.error?.type ?? e?.error?.type
+  if (status === undefined) return inStream === 'overloaded_error' ? new ProviderError(e.message, 529) : e
   if (status === 401 || status === 403) return new ProviderError(authMessage('Anthropic', 'ANTHROPIC_API_KEY'), status)
   const ra = Number(e.headers?.get?.('retry-after'))
   return new ProviderError(e.message, status, ra > 0 ? ra * 1000 : undefined)

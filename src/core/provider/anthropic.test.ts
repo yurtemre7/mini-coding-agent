@@ -116,9 +116,10 @@ describe('AnthropicProvider', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 
-  it('treats an in-stream overloaded_error before any event as retryable', async () => {
+  it('treats an in-stream overloaded_error (thrown, no status) before any event as retryable', async () => {
     const { client: c, create } = client(
-      async () => gen([{ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }]),
+      // the real SDK throws an APIError without status for in-stream error events
+      async () => gen([], Object.assign(new Error('Overloaded'), { status: undefined, error: { type: 'error', error: { type: 'overloaded_error' } } })),
       async () => gen(happy)
     )
     await collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))

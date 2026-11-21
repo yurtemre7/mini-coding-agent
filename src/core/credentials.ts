@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -58,8 +58,10 @@ export async function setKey(p: ProviderId, key: string, keychain = defaultKeych
   const store = await readFileStore()
   store[p] = key
   await mkdir(join(homedir(), '.mca'), { recursive: true })
-  await writeFile(file(), JSON.stringify(store, null, 2), { mode: 0o600 })
-  await chmod(file(), 0o600) // mode is ignored when the file already existed
+  // temp file + rename: the key is never in a file that is group/world readable
+  const tmp = `${file()}.${process.pid}.tmp`
+  await writeFile(tmp, JSON.stringify(store, null, 2), { mode: 0o600 })
+  await rename(tmp, file())
 }
 
 export const hasKey = async (p: ProviderId, keychain = defaultKeychain()): Promise<boolean> => !!(await getKey(p, keychain))

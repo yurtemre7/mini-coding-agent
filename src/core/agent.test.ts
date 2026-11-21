@@ -124,6 +124,23 @@ describe('runTurn', () => {
     expect(askResult).toMatchObject({ allow: false })
   })
 
+  it('ask() after abort resolves immediately as a denial', async () => {
+    let askResult: unknown
+    const tool = echo({
+      run: async (_i, ctx) => {
+        await new Promise((r) => ctx.signal.addEventListener('abort', r))
+        askResult = await ctx.ask({ kind: 'permission', toolName: 'Echo', input: {} })
+        return 'done'
+      }
+    })
+    const s = setup([[use('1', 'Echo', { msg: 'x' }), stop('tool_use')]], [tool], { frontend: { emit: () => {}, ask: () => new Promise(() => {}) } })
+    const p = s.go()
+    await new Promise((r) => setTimeout(r, 20))
+    s.ctl.abort()
+    await p
+    expect(askResult).toMatchObject({ allow: false })
+  })
+
   it('batches consecutive read-only calls in parallel (max 8), non-read-only alone, results in call order', async () => {
     const log: string[] = []
     let inflight = 0

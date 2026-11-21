@@ -52,7 +52,7 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
     child.stderr.setEncoding('utf8').on('data', (d: string) => err.push(d))
     let timedOut = false
     let aborted = false
-    let killTimer: NodeJS.Timeout | undefined
+    let killTimer: NodeJS.Timeout
     const kill = () => {
       const signalGroup = (s: NodeJS.Signals) => {
         try {
@@ -63,6 +63,7 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
       }
       signalGroup('SIGTERM')
       killTimer = setTimeout(() => signalGroup('SIGKILL'), 2000)
+      killTimer.unref()
     }
     const timer = o.timeoutMs ? setTimeout(() => ((timedOut = true), kill()), o.timeoutMs) : undefined
     const onAbort = () => ((aborted = true), kill())
@@ -70,7 +71,7 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
     else o.signal?.addEventListener('abort', onAbort, { once: true })
     const finish = (code: number | null) => {
       clearTimeout(timer)
-      clearTimeout(killTimer)
+      // killTimer stays armed: group members that ignored SIGTERM still get SIGKILL
       o.signal?.removeEventListener('abort', onAbort)
       // resolve on `exit` + drain, not `close`: a backgrounded child can hold the pipes open forever
       setTimeout(() => {

@@ -18,7 +18,7 @@ export function toOpenAI(system: string, messages: Message[]): unknown[] {
       out.push({ role: 'assistant', content: text || null, ...(calls.length && { tool_calls: calls }) })
     } else {
       // tool results first, each its own message, immediately after the assistant message
-      for (const b of m.content) if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.tool_use_id, content: b.content })
+      for (const b of m.content) if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.tool_use_id, content: b.is_error ? `Error: ${b.content}` : b.content })
       const text = m.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n')
       if (text) out.push({ role: 'user', content: text })
     }

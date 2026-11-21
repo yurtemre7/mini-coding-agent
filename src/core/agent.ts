@@ -67,11 +67,13 @@ export async function runOne(call: ToolCall, opts: TurnOptions): Promise<ToolRes
       cwd: opts.cwd,
       signal: opts.signal,
       // a pending ask() resolves as a denial the moment the turn is aborted
-      ask: (req) =>
-        Promise.race([
-          fe.ask(req),
-          new Promise<Decision>((res) => opts.signal.addEventListener('abort', () => res({ allow: false, feedback: 'Aborted' }), { once: true }))
-        ])
+      ask: (req) => {
+        const denied: Decision = { allow: false, feedback: 'Aborted' }
+        if (opts.signal.aborted) return Promise.resolve(denied)
+        let onAbort!: () => void
+        const aborted = new Promise<Decision>((res) => opts.signal.addEventListener('abort', (onAbort = () => res(denied)), { once: true }))
+        return Promise.race([fe.ask(req), aborted]).finally(() => opts.signal.removeEventListener('abort', onAbort))
+      }
     }
     const denied = await opts.decide?.(tool, input, ctx)
     if (denied !== undefined) throw new Error(`Permission denied: ${denied}`)
@@ -153,7 +155,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
         return (reason = 'error')
       }
       if (stop === 'max_tokens') {
-        // a truncated tool_use is never executed
+        // a truncated tool_use is never executed. ALL tool_use blocks go: OpenRouter also emits the cut call (with raw args), so it cannot be told apart
         const kept = content.filter((b) => b.type !== 'tool_use')
         content.splice(0, content.length, ...kept)
         if (!kept.length) history.pop() // never send an empty assistant message

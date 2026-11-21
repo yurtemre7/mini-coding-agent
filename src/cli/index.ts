@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util'
 import pkg from '../../package.json'
 import { getKey, type ProviderId } from '../core/credentials'
 import { DEFAULT_MODELS } from '../core/provider/models'
-import { createProvider, MissingKeyError, PROVIDER_IDS } from '../core/provider/factory'
+import { PROVIDER_IDS, providerFromCredentials } from '../core/provider/factory'
 import { runHeadless } from './headless'
 
 const USAGE = `Usage: mca -p "<prompt>" [options]
@@ -61,12 +61,16 @@ async function main(): Promise<void> {
     for (const p of PROVIDER_IDS) if (!id && (await getKey(p))) id = p
     id ??= 'anthropic'
   }
-  const key = await getKey(id)
-  if (!key) return fail(new MissingKeyError(id).message)
+  let provider
+  try {
+    provider = await providerFromCredentials(id)
+  } catch (e) {
+    return fail((e as Error).message)
+  }
 
   const code = await runHeadless({
     prompt,
-    provider: createProvider(id, key),
+    provider,
     model: values.model ?? DEFAULT_MODELS[id].main,
     cwd: process.cwd(),
     io: { out: (s) => void process.stdout.write(s), err: (s) => void process.stderr.write(s) }
