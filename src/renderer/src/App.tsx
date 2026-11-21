@@ -122,7 +122,7 @@ export default function App() {
           <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
         </Button>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
-          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onChat={s.openChat} onNew={s.newChat} />
+          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} />
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && (

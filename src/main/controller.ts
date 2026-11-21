@@ -13,7 +13,7 @@ import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
-import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
+import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
@@ -243,6 +243,13 @@ export class Controller {
   async openRecent(dir: string): Promise<void> {
     if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace. Open it with the folder picker.')
     await this.selectWorkspace(dir)
+  }
+
+  /** Drops a workspace from the recent list. The open workspace stays; files and saved chats are untouched. */
+  async forgetRecent(dir: string): Promise<void> {
+    if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace.')
+    if (dir === this.workspace) throw new Error('Open another workspace first; this one is in use.')
+    await forgetWorkspace(dir, this.d.home)
   }
 
   chats(): SessionInfo[] {

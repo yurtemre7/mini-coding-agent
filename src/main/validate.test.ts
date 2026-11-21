@@ -33,7 +33,8 @@ describe('IPC validation', () => {
     ['prompt:answer', ['id', null]],
     ['session:open', ['../x']],
     ['session:open', [5]],
-    ['workspace:open', [{}]]
+    ['workspace:open', [{}]],
+    ['workspace:forget', [5]]
   ])('%s rejects %j', (ch, args) => {
     expect(() => v[ch](args as unknown[])).toThrow(/Invalid request/)
   })

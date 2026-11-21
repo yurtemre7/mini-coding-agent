@@ -38,6 +38,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     },
     'workspace:recent': () => c.recent(),
     'workspace:open': (p) => c.openRecent(p),
+    'workspace:forget': (p) => c.forgetRecent(p),
     'session:list': () => c.chats(),
     'session:open': (id) => c.openChat(id),
     'session:new': () => c.newChat(),

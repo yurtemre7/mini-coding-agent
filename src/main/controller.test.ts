@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -125,6 +125,17 @@ describe('Controller', () => {
     expect(await c.recent()).toContain(ws)
     await c.openRecent(ws)
     expect(c.getState().items).toEqual([{ kind: 'user', text: 'second' }, { kind: 'text', text: 'done' }]) // a workspace switch continues the newest saved chat
+  })
+  it('forgetting a recent workspace removes only the list entry; the open one and unknown paths are refused', async () => {
+    const { c, ws } = await setup([[]])
+    const other = await mkdtemp(join(tmpdir(), 'mca-ws2-'))
+    await c.selectWorkspace(other)
+    expect(await c.recent()).toEqual(expect.arrayContaining([ws, other]))
+    await expect(c.forgetRecent(other)).rejects.toThrow(/in use/)
+    await expect(c.forgetRecent('/etc')).rejects.toThrow(/Unknown workspace/)
+    await c.forgetRecent(ws)
+    expect(await c.recent()).toEqual([other])
+    expect((await stat(ws)).isDirectory()).toBe(true) // the folder itself is still there
   })
   it('/resume lists saved chats newest first and opens one by number or id; bad arguments say so', async () => {
     const { c, idle } = await setup([[]])

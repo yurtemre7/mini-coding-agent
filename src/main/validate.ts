@@ -39,6 +39,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'workspace:select': () => [],
   'workspace:recent': () => [],
   'workspace:open': ([p]) => [str(p, 'path')], // the controller only accepts paths from the recent list
+  'workspace:forget': ([p]) => [str(p, 'path')],
   'session:list': () => [],
   'session:open': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'session:new': () => [],
