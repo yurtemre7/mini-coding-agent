@@ -1,5 +1,6 @@
 import type { Decision, PermissionMode } from '../shared/types'
-import { AgentSession, type Frontend, type TurnOptions } from '../core/agent'
+import { AgentSession, type Frontend } from '../core/agent'
+import { createPermissions } from '../core/permissions'
 import { builtinTools } from '../core/registry'
 import type { ModelProvider } from '../core/provider/types'
 
@@ -26,17 +27,12 @@ export function plainFrontend(io: Io): Frontend {
   }
 }
 
-/** Stub until Milestone 3's rules engine: read-only tools run; everything else needs bypassPermissions because headless cannot ask. */
-export function headlessDecide(mode: PermissionMode): NonNullable<TurnOptions['decide']> {
-  return async (tool, input) => {
-    if (mode === 'bypassPermissions') return undefined
-    const ro = typeof tool.readOnly === 'function' ? tool.readOnly(input) : tool.readOnly
-    return ro ? undefined : `${tool.name} changes files or runs commands and needs approval, which headless mode cannot ask for. Re-run with --permission-mode bypassPermissions to allow it.`
-  }
-}
-
 /** Runs one prompt to completion. Returns the process exit code (0 ok, 1 runtime error). */
-export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; cwd: string; io: Io; permissionMode?: PermissionMode }): Promise<number> {
+export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; cwd: string; io: Io; permissionMode?: PermissionMode; allowedTools?: string[]; trust?: boolean; home?: string }): Promise<number> {
+  // headless cannot ask, so a call that needs approval is denied with a message naming the flags; untrusted unless --trust
+  const { perms, warnings, ignoredAllow } = await createPermissions({ cwd: o.cwd, mode: o.permissionMode, allowedTools: o.allowedTools, trusted: !!o.trust, canAsk: false, home: o.home })
+  for (const w of warnings) o.io.err(`warn: ${w}\n`)
+  if (ignoredAllow.length) o.io.err('warn: project allow rules ignored because the workspace is not trusted (pass --trust).\n')
   const session = new AgentSession({
     provider: o.provider,
     model: o.model,
@@ -44,7 +40,7 @@ export async function runHeadless(o: { prompt: string; provider: ModelProvider; 
     tools: builtinTools,
     cwd: o.cwd,
     frontend: plainFrontend(o.io),
-    decide: headlessDecide(o.permissionMode ?? 'default')
+    decide: perms.decide
   })
   const reason = await session.send(o.prompt)
   o.io.out('\n')

@@ -18,6 +18,8 @@ export interface PermissionRequest {
   kind: 'permission'
   toolName: string
   input: unknown
+  reason?: string // why a prompt is needed (protected path, outside workspace, ...)
+  suggestion?: string // the rule "Yes for this session" would store
 }
 export interface PlanRequest {
   kind: 'plan'
@@ -26,6 +28,7 @@ export interface PlanRequest {
 export interface TrustRequest {
   kind: 'trust'
   workspace: string
+  rules?: string[] // project allow rules that trusting would enable
 }
 export interface Decision {
   allow: boolean

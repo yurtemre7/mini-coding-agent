@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -44,11 +44,32 @@ describe('permission mode', () => {
   it('default denies Write naming --permission-mode; bypassPermissions allows it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mca-perm-'))
     const a = io()
-    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: a.io })
+    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: a.io, home: dir })
     expect(a.o.err).toContain('--permission-mode')
+    expect(a.o.err).toContain('--allowed-tools')
     expect(existsSync(join(dir, 'a.txt'))).toBe(false)
     const b = io()
-    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: b.io, permissionMode: 'bypassPermissions' })
+    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: b.io, home: dir, permissionMode: 'bypassPermissions' })
+    expect(existsSync(join(dir, 'a.txt'))).toBe(true)
+  })
+
+  it('acceptEdits allows an inside write; --allowed-tools allows it in default mode', async () => {
+    for (const o of [{ permissionMode: 'acceptEdits' as const }, { allowedTools: ['Write'] }]) {
+      const dir = mkdtempSync(join(tmpdir(), 'mca-perm-'))
+      await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: io().io, home: dir, ...o })
+      expect(existsSync(join(dir, 'a.txt'))).toBe(true)
+    }
+  })
+
+  it('project allow rules apply only with trust', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mca-perm-'))
+    mkdirSync(join(dir, '.mca'))
+    writeFileSync(join(dir, '.mca/settings.json'), JSON.stringify({ permissions: { allow: ['Write'] } }))
+    const a = io()
+    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: a.io, home: mkdtempSync(join(tmpdir(), 'mca-home-')) })
+    expect(existsSync(join(dir, 'a.txt'))).toBe(false)
+    expect(a.o.err).toContain('not trusted')
+    await runHeadless({ prompt: 'p', provider: new FakeProvider(writeCall('a.txt')), model: 'm', cwd: dir, io: io().io, home: mkdtempSync(join(tmpdir(), 'mca-home-')), trust: true })
     expect(existsSync(join(dir, 'a.txt'))).toBe(true)
   })
 })

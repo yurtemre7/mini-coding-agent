@@ -189,6 +189,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
 /** One turn at a time: a second send() while a turn runs is rejected. */
 export class AgentSession {
   history: Message[] = []
+  private starts: number[] = [] // history index where each turn began; parallels the FileState checkpoint stack
   private controller?: AbortController
   constructor(private base: Omit<TurnOptions, 'signal'>) {
     this.base = { ...base, files: base.files ?? new FileState() }
@@ -198,9 +199,30 @@ export class AgentSession {
     return !!this.controller
   }
 
+  get files(): FileState {
+    return this.base.files!
+  }
+
+  /** Undoes the newest turn: restores its files, then drops it from history. Returns restored paths, or undefined when there is nothing to undo. */
+  async rewind(): Promise<string[] | undefined> {
+    if (this.controller) throw new Error('A turn is running. Abort it before rewinding.')
+    const restored = await this.files.rewind() // first: if it throws, history is untouched and the rewind can be retried
+    if (!restored) return undefined
+    this.history.length = this.starts.pop() ?? 0
+    return restored
+  }
+
+  clear(): void {
+    if (this.controller) throw new Error('A turn is running. Abort it before clearing.')
+    this.history.length = 0
+    this.starts.length = 0
+    this.base.files = new FileState()
+  }
+
   async send(text: string): Promise<TurnReason> {
     if (this.controller) throw new Error('A turn is already running. Wait for it to finish or abort it.')
     this.controller = new AbortController()
+    this.starts.push(this.history.length)
     try {
       return await runTurn(this.history, text, { ...this.base, signal: this.controller.signal })
     } finally {

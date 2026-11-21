@@ -3,16 +3,22 @@ import pkg from '../../package.json'
 import { getKey, type ProviderId } from '../core/credentials'
 import { DEFAULT_MODELS } from '../core/provider/models'
 import { PROVIDER_IDS, providerFromCredentials } from '../core/provider/factory'
+import { MODES, parseMode, splitRules } from '../core/permissions'
 import { runHeadless } from './headless'
+import { runInteractive } from './ui'
 
-const USAGE = `Usage: mca -p "<prompt>" [options]
+const USAGE = `Usage: mca [options]            Interactive session
+       mca -p "<prompt>" [options]
 
 Options:
   -p, --print            Run one prompt non-interactively; answer on stdout, tool activity on stderr
       --provider <id>    anthropic | openrouter (default: first one with a key)
       --model <id>       Model id (default: the provider's main model)
       --permission-mode <mode>
-                         default (read-only tools only) | bypassPermissions (allow Write, Edit and Bash)
+                         default | acceptEdits | plan | bypassPermissions
+      --allowed-tools <rules>
+                         Rules that run without asking, e.g. "Bash(npm run test:*) Edit"
+      --trust            Apply this workspace's project allow rules (headless is untrusted by default)
   -h, --help             Show this help
   -v, --version          Print the version
 
@@ -41,7 +47,9 @@ async function main(): Promise<void> {
         print: { type: 'boolean', short: 'p' },
         provider: { type: 'string' },
         model: { type: 'string' },
-        'permission-mode': { type: 'string' }
+        'permission-mode': { type: 'string' },
+        'allowed-tools': { type: 'string', multiple: true },
+        trust: { type: 'boolean' }
       },
       allowPositionals: true,
       strict: true
@@ -52,14 +60,17 @@ async function main(): Promise<void> {
   const { values, positionals } = parsed
   if (values.version) return console.log(pkg.version)
   if (values.help) return console.log(USAGE)
-  if (!values.print) return fail('Interactive mode is not available yet. Use -p "<prompt>".')
 
-  const permissionMode = values['permission-mode'] ?? 'default'
-  if (permissionMode !== 'default' && permissionMode !== 'bypassPermissions') return fail(`Unknown permission mode "${permissionMode}". Use default or bypassPermissions.`)
+  const modeArg = values['permission-mode']
+  const permissionMode = modeArg === undefined ? undefined : parseMode(modeArg)
+  if (modeArg !== undefined && !permissionMode) return fail(`Unknown permission mode "${modeArg}". Use ${MODES.join(', ')}.`)
+  const allowedTools = splitRules(values['allowed-tools'] ?? [])
 
-  const stdin = await readStdin()
-  const prompt = [positionals.join(' '), stdin].filter((s) => s.trim()).join('\n\n')
-  if (!prompt) return fail('No prompt given.')
+  let prompt = ''
+  if (values.print) {
+    prompt = [positionals.join(' '), await readStdin()].filter((s) => s.trim()).join('\n\n')
+    if (!prompt) return fail('No prompt given.')
+  } else if (!process.stdin.isTTY) return fail('Interactive mode needs a terminal. Use -p "<prompt>" for non-interactive runs.')
 
   let id = values.provider as ProviderId | undefined
   if (id && !PROVIDER_IDS.includes(id)) return fail(`Unknown provider "${id}". Use anthropic or openrouter.`)
@@ -74,12 +85,17 @@ async function main(): Promise<void> {
     return fail((e as Error).message)
   }
 
+  const model = values.model ?? DEFAULT_MODELS[id].main
+  if (!values.print) return runInteractive({ provider, model, cwd: process.cwd(), mode: permissionMode, allowedTools, trust: values.trust })
+
   const code = await runHeadless({
     prompt,
     provider,
-    model: values.model ?? DEFAULT_MODELS[id].main,
+    model,
     cwd: process.cwd(),
     permissionMode,
+    allowedTools,
+    trust: values.trust,
     io: { out: (s) => void process.stdout.write(s), err: (s) => void process.stderr.write(s) }
   })
   process.exitCode = code

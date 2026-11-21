@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import { exec } from '../exec'
 import { loginEnv } from '../env'
+import { isReadOnlyCommand } from '../permissions'
 import type { Tool } from '../tool'
 
 const DEFAULT_TIMEOUT = 120_000
@@ -23,7 +24,7 @@ export const Bash: Tool<z.infer<typeof schema>> = {
     'stdin is closed and git/pagers are non-interactive. Default timeout 120s, max 600s; on timeout the command is killed and partial output returned. ' +
     'Do not start long-running servers in the foreground. Prefer Read, Glob, Grep and Edit over cat, find, grep and sed.',
   schema,
-  readOnly: false, // shortcut: every command is treated as mutating; Milestone 3 adds isReadOnlyCommand()
+  readOnly: (input) => isReadOnlyCommand(input.command),
   async run({ command, timeout }, ctx) {
     let notice = ''
     let cwd = ctx.cwd
