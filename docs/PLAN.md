@@ -17,6 +17,9 @@ This plan adapts the **Build Claude Code from scratch** architecture (`mini-clau
    - Shared pure-Node runtime in `src/core/` with zero Electron imports.
    - **`mca` CLI** (`bin: { "mca": "./out/cli/index.js" }`): Interactive terminal REPL (streaming `⏺`/`⎿` output, permission prompts, slash commands, `Ctrl+C` abort, `--continue`, and `-p "<prompt>"` headless mode).
    - **Electron Desktop App**: React + Tailwind CSS v4 + shadcn/ui workspace communicating with `src/core/` over typed IPC.
+4. **UI Consistency & Language**:
+   - **Any shadcn/ui component** may be installed (`npx shadcn@latest add <component>`) and used wherever appropriate to keep the desktop UI consistent, accessible, and cohesive (avoid ad-hoc unstyled controls when a shadcn/ui primitive fits).
+   - **English-only**: All UI text, labels, error messages, CLI prompts, and documentation are written in clear English.
 
 ---
 
@@ -142,8 +145,8 @@ src/
 - `@modelcontextprotocol/sdk` — Stdio MCP client for `.mcp.json` servers
 - *(OpenRouter uses Node 22 built-in `fetch` + SSE streaming parser — no extra SDK required)*
 
-### shadcn/ui Components (Added Incrementally)
-- `scroll-area`, `textarea`, `input`, `select`, `dialog`, `separator`, `tabs`, `tooltip`, `switch`, `sheet`
+### shadcn/ui Components
+- Any shadcn/ui component can be added on demand via `npx shadcn@latest add <component>` to maintain a consistent UI (e.g., `scroll-area`, `textarea`, `input`, `select`, `dialog`, `separator`, `tabs`, `tooltip`, `switch`, `sheet`, `dropdown-menu`, `command`, `alert`, `collapsible`, `popover`, `sonner`).
 
 ---
 
