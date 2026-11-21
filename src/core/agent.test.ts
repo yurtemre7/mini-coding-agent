@@ -236,7 +236,7 @@ describe('resumed checkpoints', () => {
     writeFileSync(file, 'edited')
     const out: string[] = []
     const { opts } = setup([], [echo()])
-    const s = new AgentSession({ provider: opts.provider, model: 'm', system: 's', tools: [], cwd, frontend: opts.frontend, decide: async () => ({ allow: true }) })
+    const s = new AgentSession({ provider: opts.provider, model: 'm', system: 's', tools: [], cwd, frontend: opts.frontend, decide: async () => undefined })
     s.load([], t1) // a new run opens the same chat
     await s.files.attach(new (await import('./checkpoints')).CheckpointStore(t1.checkpointDir)) // wait for the load
     await runCommand('rewind', '', { session: s, perms: new Permissions({ mode: 'default', canAsk: false }), workspace: cwd, print: (m) => void out.push(m), exit() {}, trustWorkspace: async () => {} })

@@ -134,11 +134,11 @@ export class FileState {
   /** Undoes the newest turn's file changes. Returns the restored paths, or undefined when there is nothing to rewind. */
   async rewind(): Promise<string[] | undefined> {
     if (this.rewinding) throw new Error('A rewind is already in progress.')
-    await this.shared.ready
-    const entry = this.shared.stack.at(-1)
-    if (!entry) return undefined
-    this.rewinding = true
+    this.rewinding = true // set before the first await so a second call is rejected, not interleaved
     try {
+      await this.shared.ready
+      const entry = this.shared.stack.at(-1)
+      if (!entry) return undefined
       for (const [path, bytes] of entry.files) await this.restore(path, bytes)
       this.shared.stack.pop() // only after every file was restored, so a failed rewind can be retried
       const { store } = this.shared
