@@ -69,10 +69,18 @@ export interface ViewState {
   workspace: string | null
   busy: boolean
   pending: { id: string; request: PromptRequest } | null
+  /** Seq of the last event folded into this state; a batch with seq <= this is already included and must be ignored. */
+  seq: number
 }
 
 /** Everything the reducer understands: agent events plus the events main adds for things only it knows. */
-export type ViewEvent = AgentEvent | { type: 'user_message'; text: string } | { type: 'rewind' } | { type: 'clear' }
+export type ViewEvent = AgentEvent | { type: 'user_message'; text: string } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode }
+
+/** One IPC message: consecutive events, `seq` = the seq of the last one. */
+export interface EventBatch {
+  seq: number
+  events: ViewEvent[]
+}
 
 /** Never contains a key: the renderer only learns whether one exists. */
 export interface SettingsInfo {
@@ -84,24 +92,28 @@ export interface SettingsInfo {
 export interface IpcContract {
   invoke: {
     'app:getInfo': { args: []; result: AppInfo }
-    'session:send': { args: [text: string]; result: ViewState }
+    'session:send': { args: [text: string]; result: void }
     'session:abort': { args: []; result: void }
     'session:getState': { args: []; result: ViewState }
     /** A slash command line such as "/rewind" or "/mode plan"; its output arrives as notice events. */
-    'session:command': { args: [line: string]; result: ViewState }
-    'workspace:select': { args: []; result: ViewState }
+    'session:command': { args: [line: string]; result: void }
+    'workspace:select': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
     'settings:update': { args: [patch: { provider?: ProviderId; model?: string }]; result: SettingsInfo }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
   }
   events: {
-    'agent:events': ViewEvent[]
+    'agent:events': EventBatch
     'prompt:request': { id: string; request: PromptRequest }
   }
 }
 
-export const EVENT_CHANNELS = ['agent:events', 'prompt:request'] as const satisfies readonly (keyof IpcContract['events'])[]
+// Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'prompt:answer': true }
+const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
+export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
+export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]
 
 export type McaApi = {
   invoke<K extends keyof IpcContract['invoke']>(channel: K, ...args: IpcContract['invoke'][K]['args']): Promise<IpcContract['invoke'][K]['result']>

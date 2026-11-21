@@ -2,24 +2,25 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { IpcContract } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
+import { validators } from './validate'
 
 type Handlers = { [K in keyof IpcContract['invoke']]: (...args: IpcContract['invoke'][K]['args']) => IpcContract['invoke'][K]['result'] | Promise<IpcContract['invoke'][K]['result']> }
 
 /** Registers every IpcContract channel (a missing or renamed one fails typecheck) and wires the Controller to the window. */
-export function registerIpc(getWindow: () => BrowserWindow | undefined, getAppInfo: Handlers['app:getInfo']): Controller {
+export async function registerIpc(getWindow: () => BrowserWindow | undefined, getAppInfo: Handlers['app:getInfo']): Promise<{ controller: Controller; dispose(): void }> {
   const send = <K extends keyof IpcContract['events']>(ch: K, payload: IpcContract['events'][K]) => {
     const w = getWindow()
     if (w && !w.isDestroyed()) w.webContents.send(ch, payload)
   }
-  const batcher = createBatcher((events) => send('agent:events', events))
+  const batcher = createBatcher((batch) => send('agent:events', batch))
   const c = new Controller({
-    emit: (e) => batcher.push(e),
+    emit: (e, seq) => batcher.push(e, seq),
     prompt: (p) => {
       batcher.flush() // the prompt must not overtake the tool_start it belongs to
       send('prompt:request', p)
     }
   })
-  void c.init()
+  await c.init() // so the first getSettings already reflects the stored keys
 
   const handlers: Handlers = {
     'app:getInfo': getAppInfo,
@@ -32,7 +33,6 @@ export function registerIpc(getWindow: () => BrowserWindow | undefined, getAppIn
       const opts = { properties: ['openDirectory' as const] }
       const r = await (w ? dialog.showOpenDialog(w, opts) : dialog.showOpenDialog(opts))
       if (!r.canceled && r.filePaths[0]) await c.selectWorkspace(r.filePaths[0])
-      return c.getState()
     },
     'settings:get': () => c.getSettings(),
     'settings:setKey': (p, key) => c.setKey(p, key),
@@ -40,7 +40,14 @@ export function registerIpc(getWindow: () => BrowserWindow | undefined, getAppIn
     'prompt:answer': (id, d) => c.answer(id, d)
   }
   for (const ch of Object.keys(handlers) as (keyof Handlers)[]) {
-    ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...args))
+    ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...validators[ch](args)))
   }
-  return c
+  return {
+    controller: c,
+    dispose() {
+      c.dispose()
+      batcher.dispose()
+      for (const ch of Object.keys(handlers)) ipcMain.removeHandler(ch)
+    }
+  }
 }

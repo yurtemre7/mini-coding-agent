@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FakeProvider } from '../core/provider/fake'
 import type { StreamEvent } from '../core/provider/types'
-import type { ProviderId, ViewEvent } from '../shared/types'
+import { applyBatch } from '../shared/reducer'
+import type { EventBatch, ProviderId, ViewEvent, ViewState } from '../shared/types'
+import { createBatcher } from './batcher'
 import { Controller } from './controller'
 
 const write = (p: string): StreamEvent[] => [{ type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: p, content: 'hi' } }, { type: 'stop', reason: 'tool_use' }]
@@ -18,7 +20,7 @@ async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKe
   const store: Partial<Record<ProviderId, string>> = hasKey ? { anthropic: 'k' } : {}
   const c = new Controller({
     home,
-    emit: (e) => events.push(e),
+    emit: (e) => void events.push(e),
     prompt: (p) => prompts.push(p),
     keys: { get: async (p) => store[p] ?? null, set: async (p, k) => void (store[p] = k) },
     makeProvider: () => new FakeProvider(turns)
@@ -52,7 +54,7 @@ describe('Controller', () => {
     c.abort()
     await idle()
     expect(c.getState().pending).toBeNull()
-    c.answer(prompts[0].id, { allow: true }) // already gone: must not throw
+    expect(() => c.answer(prompts[0].id, { allow: true })).toThrow() // already gone
     await expect(readFile(join(ws, 'b.txt'), 'utf8')).rejects.toThrow()
   })
   it('settings never expose a key; provider/model changes are blocked mid-turn', async () => {
@@ -67,8 +69,58 @@ describe('Controller', () => {
   })
   it('/mode and unknown commands report through notices', async () => {
     const { c } = await setup([[]])
-    expect((await c.command('/mode plan')).mode).toBe('plan')
-    const s = await c.command('/nope')
-    expect(s.items.at(-1)).toMatchObject({ kind: 'notice', level: 'error' })
+    await c.command('/mode plan')
+    expect(c.getState().mode).toBe('plan')
+    await c.command('/nope')
+    expect(c.getState().items.at(-1)).toMatchObject({ kind: 'notice', level: 'error' })
+    await c.command('/exit') // CLI-only: not exposed to the renderer
+    expect(c.getState().items.at(-1)).toMatchObject({ kind: 'notice', level: 'error', message: expect.stringContaining('/exit') })
+  })
+  it('/trust asks through the trust prompt and trusts only on yes', async () => {
+    const { c, prompts, ws } = await setup([[]])
+    const done = c.command('/trust')
+    while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+    expect(c.getState().pending?.request).toMatchObject({ kind: 'trust', workspace: ws })
+    c.answer(prompts[0].id, { allow: false })
+    await done
+    expect(c.getState().items.at(-1)).toMatchObject({ message: 'Workspace not trusted.' })
+  })
+  it('answering with an id that is not pending is rejected', async () => {
+    const { c } = await setup([[]])
+    expect(() => c.answer('nope', { allow: true })).toThrow(/No matching prompt/)
+  })
+})
+
+describe('main -> batcher -> renderer apply', () => {
+  it('send and /rewind never double-apply, even when a snapshot lands mid-stream', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'mca-home-'))
+    const ws = await mkdtemp(join(tmpdir(), 'mca-ws-'))
+    let view: ViewState | undefined // the renderer's state
+    const old: EventBatch[] = []
+    const b = createBatcher((batch) => (old.push(batch), (view = view && applyBatch(view, batch))), 1000)
+    const c = new Controller({
+      home,
+      emit: (e, seq) => b.push(e, seq),
+      prompt: () => {},
+      keys: { get: async () => 'k', set: async () => {} },
+      makeProvider: () => new FakeProvider([say, say])
+    })
+    const snapshot = () => (b.flush(), (view = c.getState())) // what session:getState does
+    const idle = async () => { while (c.getState().busy) await new Promise((r) => setTimeout(r, 5)); b.flush() }
+    await c.selectWorkspace(ws)
+    snapshot()
+    c.send('one')
+    await idle()
+    snapshot() // mounted mid-session
+    const turns = () => view!.items.filter((i) => i.kind === 'user').length
+    expect(turns()).toBe(1)
+    for (const stale of old) expect(applyBatch(view!, stale)).toBe(view) // batches the snapshot already includes are ignored
+    c.send('two')
+    await idle()
+    expect(view!.items).toEqual(c.getState().items)
+    await c.command('/rewind') // nothing to restore for a text-only turn: history still drops one turn
+    b.flush()
+    expect(view!.items).toEqual(c.getState().items)
+    expect(turns()).toBe(1)
   })
 })

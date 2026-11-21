@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { reduce } from '../../../shared/reducer'
+import { applyBatch } from '../../../shared/reducer'
 import type { Decision, McaApi, ViewState } from '../../../shared/types'
 
 /** Main owns the conversation: mount asks for a snapshot, then the batched event stream is folded in with the same reducer main uses. */
@@ -10,25 +10,18 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
   useEffect(() => {
     if (!api) return
     api.invoke('session:getState').then(setState, (e: Error) => setError(e.message))
-    const offEvents = api.on('agent:events', (events) =>
-      setState((s) => {
-        if (!s) return s
-        const next = events.reduce(reduce, s)
-        return events.some((e) => e.type === 'turn_end') ? { ...next, pending: null } : next
-      })
-    )
+    const offEvents = api.on('agent:events', (batch) => setState((s) => s && applyBatch(s, batch)))
     const offPrompt = api.on('prompt:request', (pending) => setState((s) => s && { ...s, pending }))
     return () => (offEvents(), offPrompt())
   }, [api])
 
   // every action returns main's fresh snapshot; failures (busy, no workspace...) surface as an error banner
   const call = useCallback(
-    async (run: (a: McaApi) => Promise<ViewState | void>) => {
+    async (run: (a: McaApi) => Promise<unknown>) => {
       if (!api) return
       setError(null)
       try {
-        const s = await run(api)
-        if (s) setState(s)
+        await run(api)
       } catch (e) {
         setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
       }
@@ -45,8 +38,9 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     selectWorkspace: () => call((a) => a.invoke('workspace:select')),
     answer: (id: string, d: Decision) => {
       setState((s) => s && { ...s, pending: null })
-      return call((a) => a.invoke('prompt:answer', id, d))
+      return api?.invoke('prompt:answer', id, d).catch(() => {}) // an answer that lost the race with an abort is moot
     },
-    refresh: () => call((a) => a.invoke('session:getState'))
+    /** A snapshot carries its seq, so batches it already includes are dropped by applyBatch. */
+    refresh: () => api?.invoke('session:getState').then(setState, (e: Error) => setError(e.message))
   }
 }

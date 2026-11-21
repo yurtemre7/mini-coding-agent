@@ -1,4 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
+import { isExternalUrl } from './urls'
 import { join } from 'path'
 import type { AppInfo } from '../shared/types'
 import { registerIpc } from './ipc'
@@ -14,7 +15,7 @@ export function getAppInfo(): AppInfo {
   }
 }
 
-let controller: Controller | undefined
+let ipc: { controller: Controller; dispose(): void } | undefined
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -40,12 +41,12 @@ function createWindow(): BrowserWindow {
 
   // Links (Markdown, target=_blank) go to the system browser; the app window itself never navigates away.
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    if (/^(https?|mailto):/i.test(details.url)) void shell.openExternal(details.url)
+    if (isExternalUrl(details.url)) void shell.openExternal(details.url)
     return { action: 'deny' }
   })
   mainWindow.webContents.on('will-navigate', (e) => e.preventDefault())
   // Closing the window during a turn aborts it: denies pending prompts and kills child processes.
-  mainWindow.on('close', () => controller?.abort())
+  mainWindow.on('close', () => ipc?.controller.abort())
 
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -56,10 +57,10 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setName('mini-coding-agent')
 
-  controller = registerIpc(() => BrowserWindow.getAllWindows()[0], getAppInfo)
+  ipc = await registerIpc(() => BrowserWindow.getAllWindows()[0], getAppInfo)
   createWindow()
 
   app.on('activate', () => {
@@ -75,5 +76,5 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => controller?.dispose())
+app.on('before-quit', () => ipc?.dispose())
 

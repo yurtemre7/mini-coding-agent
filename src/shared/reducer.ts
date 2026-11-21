@@ -1,8 +1,8 @@
-import type { Item, ViewEvent, ViewState } from './types'
+import type { EventBatch, Item, ViewEvent, ViewState } from './types'
 
-type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy'>
+type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode'>
 
-export const emptyView = (): Reduced => ({ items: [], todos: [], busy: false })
+export const emptyView = (): Reduced => ({ items: [], todos: [], busy: false, workspace: null, mode: 'default' })
 
 /** Pure: turns the event stream into what the transcript shows. Main and the renderer both run exactly this. */
 export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
@@ -35,6 +35,15 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
       return at < 0 ? s : { ...s, items: s.items.slice(0, at) }
     }
     case 'clear':
-      return { ...s, ...emptyView() }
+      return { ...s, items: [], todos: [], usage: undefined, busy: false }
+    case 'session':
+      return { ...s, workspace: e.workspace, mode: e.mode }
   }
+}
+
+/** Renderer side: folds a batch into a snapshot-derived state. Batches already covered by the snapshot's seq are dropped. */
+export function applyBatch(s: ViewState, b: EventBatch): ViewState {
+  if (b.seq <= s.seq) return s
+  const next = b.events.reduce(reduce, s)
+  return { ...next, seq: b.seq, ...(b.events.some((e) => e.type === 'turn_end') && { pending: null }) }
 }

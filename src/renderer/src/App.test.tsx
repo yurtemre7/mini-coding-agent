@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { McaApi, ViewState } from '../../shared/types'
 
-const view: ViewState = { items: [], todos: [], mode: 'default', provider: 'anthropic', model: 'm', workspace: null, busy: false, pending: null }
+const view: ViewState = { items: [], todos: [], mode: 'default', provider: 'anthropic', model: 'm', workspace: null, busy: false, pending: null, seq: 0 }
 
 const api = (hasKey: boolean): McaApi => ({
   invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false } } : view)) as any,

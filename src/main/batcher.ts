@@ -1,8 +1,9 @@
-import type { ViewEvent } from '../shared/types'
+import type { EventBatch, ViewEvent } from '../shared/types'
 
 /** Queues events and flushes them in one IPC message every `ms`; consecutive text deltas (same parent) merge into one. Electron-free. */
-export function createBatcher(send: (events: ViewEvent[]) => void, ms = 30) {
+export function createBatcher(send: (batch: EventBatch) => void, ms = 30) {
   let queue: ViewEvent[] = []
+  let seq = 0
   let timer: ReturnType<typeof setTimeout> | undefined
   const flush = () => {
     clearTimeout(timer)
@@ -10,10 +11,11 @@ export function createBatcher(send: (events: ViewEvent[]) => void, ms = 30) {
     if (!queue.length) return
     const out = queue
     queue = []
-    send(out)
+    send({ seq, events: out })
   }
   return {
-    push(e: ViewEvent) {
+    push(e: ViewEvent, eventSeq: number) {
+      seq = eventSeq
       const last = queue.at(-1)
       if (e.type === 'text_delta' && last?.type === 'text_delta' && last.parentId === e.parentId) last.text += e.text
       else queue.push(e.type === 'text_delta' ? { ...e } : e)

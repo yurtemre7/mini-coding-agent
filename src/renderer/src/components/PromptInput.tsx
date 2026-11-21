@@ -34,7 +34,7 @@ export function PromptInput({ busy, disabled, mode, onSend, onStop, onMode, onRe
         }}
       />
       <div className="flex items-center gap-2">
-        <Select value={mode} onValueChange={(m) => onMode(m as PermissionMode)}>
+        <Select value={mode} disabled={disabled} onValueChange={(m) => onMode(m as PermissionMode)}>
           <SelectTrigger aria-label="Permission mode" className="w-48">
             <SelectValue />
           </SelectTrigger>

@@ -43,6 +43,8 @@ function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNod
   )
 }
 
+const keyOf = (i: Item, n: number) => (i.kind === 'tool' ? `tool-${i.id}` : `${i.kind}-${n}`)
+
 function Row({ item, items }: { item: Item; items: Item[] }) {
   if (item.kind === 'user') return <div className="ml-auto max-w-[80%] rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">{item.text}</div>
   if (item.kind === 'text') return <Markdown>{item.text}</Markdown>
@@ -51,7 +53,7 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
   return (
     <ToolCard tool={item}>
       {items.filter((c) => 'parentId' in c && c.parentId === item.id).map((c, i) => (
-        <div key={i} className="ml-3 border-l pl-3">
+        <div key={keyOf(c, i)} className="ml-3 border-l pl-3">
           <Row item={c} items={items} />
         </div>
       ))}
@@ -61,10 +63,19 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
 
 export function ChatTranscript({ items }: { items: Item[] }) {
   const end = useRef<HTMLDivElement>(null)
-  useEffect(() => end.current?.scrollIntoView?.({ block: 'end' }), [items])
+  const stick = useRef(true) // follow the stream only while the user is already at the bottom
+  useEffect(() => {
+    if (stick.current) end.current?.scrollIntoView?.({ block: 'end' })
+  }, [items])
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto p-4">
-      {items.map((item, i) => (!('parentId' in item) || !item.parentId ? <Row key={i} item={item} items={items} /> : null))}
+    <div
+      className="flex-1 space-y-3 overflow-y-auto p-4"
+      onScroll={(e) => {
+        const el = e.currentTarget
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+      }}
+    >
+      {items.map((item, i) => (!('parentId' in item) || !item.parentId ? <Row key={keyOf(item, i)} item={item} items={items} /> : null))}
       <div ref={end} />
     </div>
   )

@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the ava
 
 export interface ControllerDeps {
   /** Every state change, in order. The ipc layer batches these. */
-  emit(e: ViewEvent): void
+  emit(e: ViewEvent, seq: number): void
   /** Show a prompt now (not batched). */
   prompt(p: { id: string; request: PromptRequest }): void
   home?: string
@@ -30,7 +30,7 @@ export interface ControllerDeps {
  */
 export class Controller {
   private view = { ...emptyView() }
-  private mode: ViewState['mode'] = 'default'
+  private seq = 0
   private provider: ProviderId = 'anthropic'
   private model: string = DEFAULT_MODELS.anthropic.main
   private workspace: string | null = null
@@ -43,12 +43,20 @@ export class Controller {
 
   constructor(private d: ControllerDeps) {
     this.keys = d.keys ?? { get: getKey, set: setKey }
+    const outer = this
+    this.proxy = {
+      get id() {
+        return outer.provider
+      },
+      contextWindow: async () => (await this.current()).contextWindow(this.model),
+      stream: (req) => this.stream(req)
+    }
   }
 
   private apply(e: ViewEvent): void {
     this.view = reduce(this.view, e)
     if (e.type === 'turn_end') this.clearPending()
-    this.d.emit(e)
+    this.d.emit(e, ++this.seq)
   }
 
   private notice(level: 'info' | 'warn' | 'error', message: string): void {
@@ -56,7 +64,7 @@ export class Controller {
   }
 
   getState(): ViewState {
-    return { ...this.view, mode: this.perms?.mode ?? this.mode, provider: this.provider, model: this.model, workspace: this.workspace, pending: this.pending }
+    return { ...this.view, mode: this.perms?.mode ?? this.view.mode, provider: this.provider, model: this.model, workspace: this.workspace, pending: this.pending, seq: this.seq }
   }
 
   async getSettings(): Promise<SettingsInfo> {
@@ -95,11 +103,7 @@ export class Controller {
   }
 
   /** Same shape as the CLI's provider, but resolved lazily from the credential store so a key saved mid-session just works. */
-  private proxy: ModelProvider = {
-    id: 'anthropic',
-    contextWindow: async () => (await this.current()).contextWindow(this.model),
-    stream: (req) => this.stream(req)
-  }
+  private proxy: ModelProvider
   private async current(): Promise<ModelProvider> {
     if (this.cache?.id === this.provider) return this.cache.p
     const key = await this.keys.get(this.provider)
@@ -131,7 +135,7 @@ export class Controller {
   }
 
   answer(id: string, d: Decision): void {
-    if (this.pending?.id !== id) return // stale or duplicate answer
+    if (this.pending?.id !== id) throw new Error('No matching prompt is waiting for an answer.')
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
@@ -162,17 +166,21 @@ export class Controller {
     this.workspace = dir
     this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide })
     this.apply({ type: 'clear' })
+    this.announce()
     for (const w of built.warnings) this.notice('warn', w)
   }
 
+  private announce(): void {
+    this.apply({ type: 'session', workspace: this.workspace, mode: this.perms?.mode ?? 'default' })
+  }
+
   /** Starts a turn and returns at once; progress arrives as events. */
-  send(text: string): ViewState {
+  send(text: string): void {
     const s = this.session
     if (!s || !this.workspace) throw new Error('Open a workspace first.')
     if (s.busy) throw new Error('A turn is already running.')
     this.apply({ type: 'user_message', text })
     void s.send(text).catch((e: Error) => this.notice('error', e.message))
-    return this.getState()
   }
 
   abort(): void {
@@ -180,32 +188,39 @@ export class Controller {
     this.clearPending() // a prompt still on screen is a denial; the turn then unwinds
   }
 
-  async command(line: string): Promise<ViewState> {
+  /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'trust']
+
+  async command(line: string): Promise<void> {
     const s = this.session
     const p = parseInput(line)
     if (p.kind === 'prompt') return this.send(p.text)
-    if (p.kind === 'unknown') this.notice('error', `Unknown command /${p.name}.`)
-    else if (!s || !this.perms || !this.workspace) this.notice('error', 'Open a workspace first.')
-    else {
-      const out: string[] = []
-      const before = s.history.length
-      await runCommand(p.name, p.args, {
-        session: s,
-        perms: this.perms,
-        workspace: this.workspace,
-        print: (m) => void out.push(m),
-        exit: () => {},
-        trustWorkspace: async () => {
-          await trustWorkspace(this.workspace!, this.d.home)
-          const fresh = await createPermissions({ cwd: this.workspace!, trusted: true, canAsk: true, home: this.d.home })
-          for (const r of fresh.perms.rules.allow) if (!this.perms!.rules.allow.includes(r)) this.perms!.rules.allow.push(r)
-        }
-      })
-      if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
-      if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
-      for (const m of out) this.notice('info', m)
+    if (p.kind === 'unknown' || !Controller.COMMANDS.includes(p.name)) return this.notice('error', `Unknown command /${p.name}.`)
+    if (!s || !this.perms || !this.workspace) return this.notice('error', 'Open a workspace first.')
+    if (p.name === 'trust') return this.trust()
+    const out: string[] = []
+    const before = s.history.length
+    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {} })
+    if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
+    if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
+    this.announce() // mode may have changed
+    for (const m of out) this.notice('info', m)
+  }
+
+  /** Never trusts silently: the user answers the same TrustRequest prompt as on workspace open. */
+  private async trust(): Promise<void> {
+    const dir = this.workspace!
+    this.assertIdle('change trust')
+    const fresh = await createPermissions({ cwd: dir, trusted: false, canAsk: true, home: this.d.home })
+    if (!(await this.frontend.ask({ kind: 'trust', workspace: dir, rules: fresh.ignoredAllow })).allow) return this.notice('info', 'Workspace not trusted.')
+    try {
+      await trustWorkspace(dir, this.d.home)
+    } catch (e) {
+      return this.notice('warn', (e as Error).message)
     }
-    return this.getState()
+    const trusted = await createPermissions({ cwd: dir, trusted: true, canAsk: true, home: this.d.home })
+    for (const r of trusted.perms.rules.allow) if (!this.perms!.rules.allow.includes(r)) this.perms!.rules.allow.push(r)
+    this.notice('info', `Trusted ${dir}. Its project allow rules are now active.`)
   }
 
   /** Window closed or app quitting: abort the turn (denies pending asks, kills children). */
