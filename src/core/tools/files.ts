@@ -1,15 +1,12 @@
-import { open, readFile, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { mkdir, open, readFile, stat, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import { z } from 'zod'
-import type { Tool } from '../tool'
+import { resolvePath } from '../paths'
+import type { Tool, ToolContext } from '../tool'
 
 const MAX_UNPAGED_BYTES = 256 * 1024
 const DEFAULT_LIMIT = 2000
 const MAX_LINE = 2000
-
-// shortcut: plain resolve + ~ expansion; workspace/protected-path checks and readState come with paths.ts / filestate.ts (Milestone 2)
-export const resolvePath = (cwd: string, p: string): string => resolve(cwd, p.replace(/^~(?=$|\/)/, homedir()))
 
 const schema = z.object({
   file_path: z.string().describe('Absolute path, or relative to the working directory'),
@@ -44,6 +41,7 @@ export const Read: Tool<z.infer<typeof schema>> = {
     }
     // shortcut: whole file is read into memory even for a small window; stream by line if multi-MB files matter
     const text = await readFile(p, 'utf8')
+    ctx.files.markRead(p, text, info.mtimeMs) // a partial read counts as a read
     if (text === '') return '(file is empty)'
     const lines = text.split('\n')
     if (lines.at(-1) === '') lines.pop()
@@ -55,5 +53,71 @@ export const Read: Tool<z.infer<typeof schema>> = {
       .map((l, i) => `${String(start + i).padStart(6)}\t${l.length > MAX_LINE ? l.slice(0, MAX_LINE) + '... [line truncated]' : l}`)
       .join('\n')
     return end < lines.length ? `${body}\n\n(${lines.length - end} more lines. Use offset=${end + 1} to continue.)` : body
+  }
+}
+
+const stamp = async (p: string, content: string, ctx: ToolContext): Promise<void> => ctx.files.markRead(p, content, (await stat(p)).mtimeMs)
+
+const writeSchema = z.object({
+  file_path: z.string().describe('Absolute path, or relative to the working directory'),
+  content: z.string().describe('The full new content of the file')
+})
+
+export const Write: Tool<z.infer<typeof writeSchema>> = {
+  name: 'Write',
+  description:
+    'Create a file or overwrite it with the given content; parent directories are created. ' +
+    'Overwriting an existing file requires reading it first with Read. Prefer Edit for changes to existing files.',
+  schema: writeSchema,
+  readOnly: false,
+  async run({ file_path, content }, ctx) {
+    const p = resolvePath(ctx.cwd, file_path)
+    const info = await stat(p).catch(() => undefined)
+    if (info?.isDirectory()) throw new Error(`${p} is a directory, not a file.`)
+    if (info) await ctx.files.assertFresh(p, 'overwrite')
+    await ctx.files.record(p)
+    await mkdir(dirname(p), { recursive: true })
+    await writeFile(p, content)
+    await stamp(p, content, ctx)
+    return `${info ? 'Overwrote' : 'Created'} ${p}`
+  }
+}
+
+const editSchema = z.object({
+  file_path: z.string().describe('Absolute path, or relative to the working directory'),
+  old_string: z.string().describe('Exact text to replace; must be unique in the file unless replace_all is set'),
+  new_string: z.string().describe('Replacement text'),
+  replace_all: z.boolean().optional().describe('Replace every occurrence')
+})
+
+export const Edit: Tool<z.infer<typeof editSchema>> = {
+  name: 'Edit',
+  description:
+    'Replace exact text in a file. The file must have been read with Read first. old_string must match exactly (including whitespace) and be unique, ' +
+    'or set replace_all. Do not include the line-number prefixes shown by Read.',
+  schema: editSchema,
+  readOnly: false,
+  async run({ file_path, old_string, new_string, replace_all }, ctx) {
+    if (old_string === new_string) throw new Error('old_string and new_string are identical; there is nothing to change.')
+    if (old_string === '') throw new Error('old_string is empty. To create or fully replace a file, use Write.')
+    const p = resolvePath(ctx.cwd, file_path)
+    const info = await stat(p).catch(() => undefined)
+    if (!info) throw new Error(`File not found: ${p}`)
+    if (info.isDirectory()) throw new Error(`${p} is a directory, not a file.`)
+    await ctx.files.assertFresh(p, 'edit')
+    const text = await readFile(p, 'utf8')
+    let [from, to] = [old_string, new_string]
+    // the model writes LF; a CRLF file only matches after converting, and the replacement keeps the file's line endings
+    if (!text.includes(from) && text.includes('\r\n') && !from.includes('\r')) [from, to] = [from.replace(/\n/g, '\r\n'), to.replace(/\n/g, '\r\n')]
+    const parts = text.split(from)
+    const count = parts.length - 1
+    if (count === 0) throw new Error(`old_string was not found in ${p}. It must match exactly, including whitespace and indentation; Read the file again and copy the text.`)
+    if (count > 1 && !replace_all) throw new Error(`old_string matches ${count} places in ${p}. Add surrounding context to make it unique, or set replace_all.`)
+    // split/join (not String.replace) so `$&` and `$1` in the replacement stay literal
+    const next = replace_all ? parts.join(to) : parts[0] + to + parts.slice(1).join(from)
+    await ctx.files.record(p)
+    await writeFile(p, next)
+    await stamp(p, next, ctx)
+    return `Edited ${p} (${replace_all ? count : 1} replacement${replace_all && count > 1 ? 's' : ''}).`
   }
 }

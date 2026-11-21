@@ -1,5 +1,5 @@
-import type { Decision } from '../shared/types'
-import { AgentSession, type Frontend } from '../core/agent'
+import type { Decision, PermissionMode } from '../shared/types'
+import { AgentSession, type Frontend, type TurnOptions } from '../core/agent'
 import { builtinTools } from '../core/registry'
 import type { ModelProvider } from '../core/provider/types'
 
@@ -26,15 +26,25 @@ export function plainFrontend(io: Io): Frontend {
   }
 }
 
+/** Stub until Milestone 3's rules engine: read-only tools run; everything else needs bypassPermissions because headless cannot ask. */
+export function headlessDecide(mode: PermissionMode): NonNullable<TurnOptions['decide']> {
+  return async (tool, input) => {
+    if (mode === 'bypassPermissions') return undefined
+    const ro = typeof tool.readOnly === 'function' ? tool.readOnly(input) : tool.readOnly
+    return ro ? undefined : `${tool.name} changes files or runs commands and needs approval, which headless mode cannot ask for. Re-run with --permission-mode bypassPermissions to allow it.`
+  }
+}
+
 /** Runs one prompt to completion. Returns the process exit code (0 ok, 1 runtime error). */
-export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; cwd: string; io: Io }): Promise<number> {
+export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; cwd: string; io: Io; permissionMode?: PermissionMode }): Promise<number> {
   const session = new AgentSession({
     provider: o.provider,
     model: o.model,
     system: SYSTEM_PROMPT,
     tools: builtinTools,
     cwd: o.cwd,
-    frontend: plainFrontend(o.io)
+    frontend: plainFrontend(o.io),
+    decide: headlessDecide(o.permissionMode ?? 'default')
   })
   const reason = await session.send(o.prompt)
   o.io.out('\n')

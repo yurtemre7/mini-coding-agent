@@ -11,6 +11,8 @@ Options:
   -p, --print            Run one prompt non-interactively; answer on stdout, tool activity on stderr
       --provider <id>    anthropic | openrouter (default: first one with a key)
       --model <id>       Model id (default: the provider's main model)
+      --permission-mode <mode>
+                         default (read-only tools only) | bypassPermissions (allow Write, Edit and Bash)
   -h, --help             Show this help
   -v, --version          Print the version
 
@@ -38,7 +40,8 @@ async function main(): Promise<void> {
         version: { type: 'boolean', short: 'v' },
         print: { type: 'boolean', short: 'p' },
         provider: { type: 'string' },
-        model: { type: 'string' }
+        model: { type: 'string' },
+        'permission-mode': { type: 'string' }
       },
       allowPositionals: true,
       strict: true
@@ -50,6 +53,9 @@ async function main(): Promise<void> {
   if (values.version) return console.log(pkg.version)
   if (values.help) return console.log(USAGE)
   if (!values.print) return fail('Interactive mode is not available yet. Use -p "<prompt>".')
+
+  const permissionMode = values['permission-mode'] ?? 'default'
+  if (permissionMode !== 'default' && permissionMode !== 'bypassPermissions') return fail(`Unknown permission mode "${permissionMode}". Use default or bypassPermissions.`)
 
   const stdin = await readStdin()
   const prompt = [positionals.join(' '), stdin].filter((s) => s.trim()).join('\n\n')
@@ -73,6 +79,7 @@ async function main(): Promise<void> {
     provider,
     model: values.model ?? DEFAULT_MODELS[id].main,
     cwd: process.cwd(),
+    permissionMode,
     io: { out: (s) => void process.stdout.write(s), err: (s) => void process.stderr.write(s) }
   })
   process.exitCode = code

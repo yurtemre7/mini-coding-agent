@@ -1,11 +1,15 @@
 import { z } from 'zod'
 import type { Decision, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import type { FileState } from './filestate'
 import type { ToolDef } from './provider/types'
 
 export type JsonSchema = Record<string, unknown>
 
 export interface ToolContext {
-  cwd: string
+  cwd: string // current working directory (Bash `cd` persists)
+  root: string // workspace root
+  files: FileState
+  setCwd(dir: string): void
   signal: AbortSignal
   ask(request: PermissionRequest | PlanRequest | TrustRequest): Promise<Decision>
 }

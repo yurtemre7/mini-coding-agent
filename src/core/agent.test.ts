@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '../shared/types'
 import { AgentSession, runTurn, sealHistory, type Frontend, type TurnOptions } from './agent'
+import { FileState } from './filestate'
 import { FakeProvider } from './provider/fake'
 import type { Message, StreamEvent } from './provider/types'
 import type { Tool } from './tool'
@@ -198,5 +199,17 @@ describe('AgentSession', () => {
     await expect(session.send('b')).rejects.toThrow(/already running/)
     expect(await first).toBe('done')
     expect(session.busy).toBe(false)
+  })
+})
+
+describe('checkpoints', () => {
+  it('runTurn pushes one checkpoint entry per turn', async () => {
+    const files = new FileState()
+    const { go } = setup([[stop('end_turn')], [stop('end_turn')]], [echo()], { files })
+    await go()
+    await go()
+    expect(await files.rewind()).toEqual([])
+    expect(await files.rewind()).toEqual([])
+    expect(await files.rewind()).toBeUndefined()
   })
 })

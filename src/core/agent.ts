@@ -1,4 +1,5 @@
 import type { AgentEvent, Decision, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import { FileState } from './filestate'
 import type { Block, Message, ModelProvider } from './provider/types'
 import { isZod, toToolDef, truncate, type Tool, type ToolContext } from './tool'
 
@@ -16,6 +17,7 @@ export interface TurnOptions {
   frontend: Frontend
   signal: AbortSignal
   maxTokens?: number
+  files?: FileState // readState + checkpoints + Bash cwd; AgentSession keeps one across turns
   maxIterations?: number // 50 per turn (25 for subagents)
   /** Permission seam (filled in Milestone 3). Return a denial reason to block the call; undefined allows it. */
   decide?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<string | undefined>
@@ -63,8 +65,12 @@ export async function runOne(call: ToolCall, opts: TurnOptions): Promise<ToolRes
       if (!parsed.success) throw new Error(`Invalid input for ${tool.name}: ${describeIssues(parsed.error)}`)
       input = parsed.data
     } // shortcut: raw JSON-Schema (MCP) tools are validated by their server
+    const files = (opts.files ??= new FileState())
     const ctx: ToolContext = {
-      cwd: opts.cwd,
+      cwd: files.cwd ?? opts.cwd,
+      root: opts.cwd,
+      files,
+      setCwd: (dir) => void (files.cwd = dir),
       signal: opts.signal,
       // a pending ask() resolves as a denial the moment the turn is aborted
       ask: (req) => {
@@ -127,6 +133,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   let reason: TurnReason = 'done'
   fe.emit({ type: 'turn_start' })
   history.push({ role: 'user', content: [{ type: 'text', text: userText }] })
+  ;(opts.files ??= new FileState()).beginTurn()
   try {
     const contextWindow = await provider.contextWindow(opts.model)
     let iteration = 0
@@ -183,7 +190,9 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
 export class AgentSession {
   history: Message[] = []
   private controller?: AbortController
-  constructor(private base: Omit<TurnOptions, 'signal'>) {}
+  constructor(private base: Omit<TurnOptions, 'signal'>) {
+    this.base = { ...base, files: base.files ?? new FileState() }
+  }
 
   get busy(): boolean {
     return !!this.controller

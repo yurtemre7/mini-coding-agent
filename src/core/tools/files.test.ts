@@ -2,10 +2,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { testCtx } from './testutil'
 import { Read } from './files'
 
 let dir: string
-const read = (input: object) => Read.run(input as any, { cwd: dir, signal: new AbortController().signal, ask: async () => ({ allow: false }) })
+const read = (input: object) => Read.run(input as any, testCtx(dir))
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'mca-read-'))
