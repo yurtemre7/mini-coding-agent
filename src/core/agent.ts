@@ -1,4 +1,5 @@
 import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import { buildSummary, estimateTokens, isOverflow, shouldCompact } from './compact'
 import { FileState } from './filestate'
 import { Hooks, MAX_STOP_BLOCKS } from './hooks'
 import type { Block, Message, ModelProvider } from './provider/types'
@@ -37,6 +38,10 @@ export interface TurnOptions {
   parentId?: string
   /** Builds the <system-reminder> block (date, git snapshot, instruction files) sent with the first user message of a session. */
   reminder?: () => Promise<string>
+  /** Size of the context after the newest model call; shared across turns so compaction can trigger at the start of one. */
+  context?: { tokens: number }
+  /** Called after the history was replaced by a summary (the transcript records the boundary). */
+  onCompact?: (summary: Message) => void
 }
 
 type ToolCall = Extract<Block, { type: 'tool_use' }>
@@ -104,6 +109,8 @@ export async function runSubagent(r: SubagentRequest, opts: TurnOptions): Promis
     attachments: undefined,
     persist: undefined,
     reminder: undefined,
+    context: undefined, // a subagent neither compacts nor reports the parent's context size
+    onCompact: undefined,
     plan: undefined,
     maxIterations: 25
   })
@@ -254,8 +261,16 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
     const contextWindow = await provider.contextWindow(opts.model)
     let iteration = 0
     let stopBlocks = 0 // consecutive Stop-hook blocks
+    let overflowed = false // one forced compaction per turn
+    const context = (opts.context ??= { tokens: 0 })
+    const compact = async () => {
+      await compactHistory(history, opts)
+      saved = history.length
+    }
     for (; ; iteration++) {
       if (signal.aborted) return (reason = 'aborted')
+      // history is valid here: it ends with the user's message or with tool results
+      if (!opts.parentId && shouldCompact(context.tokens, contextWindow)) await compact()
       if (iteration >= maxIterations) {
         fe.emit({ type: 'notice', level: 'warn', message: `Stopped after ${maxIterations} model calls in one turn. Send another message to continue.` })
         return (reason = 'max_iterations')
@@ -263,15 +278,27 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
       const content: Block[] = []
       history.push({ role: 'assistant', content }) // filled while streaming so aborted text is kept
       let stop = 'end_turn'
-      for await (const ev of provider.stream({ model: opts.model, system: opts.system, messages: history.slice(0, -1), tools: toolDefs, maxTokens: opts.maxTokens ?? 8192, effort: opts.effort, signal })) {
-        if (ev.type === 'text_delta') {
-          const last = content.at(-1)
-          if (last?.type === 'text') last.text += ev.text
-          else content.push({ type: 'text', text: ev.text })
-          fe.emit({ type: 'text_delta', text: ev.text })
-        } else if (ev.type === 'tool_use') content.push(ev)
-        else if (ev.type === 'usage') fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow })
-        else stop = ev.reason
+      try {
+        for await (const ev of provider.stream({ model: opts.model, system: opts.system, messages: history.slice(0, -1), tools: toolDefs, maxTokens: opts.maxTokens ?? 8192, effort: opts.effort, signal })) {
+          if (ev.type === 'text_delta') {
+            const last = content.at(-1)
+            if (last?.type === 'text') last.text += ev.text
+            else content.push({ type: 'text', text: ev.text })
+            fe.emit({ type: 'text_delta', text: ev.text })
+          } else if (ev.type === 'tool_use') content.push(ev)
+          else if (ev.type === 'usage') {
+            context.tokens = ev.contextTokens
+            fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow })
+          } else stop = ev.reason
+        }
+      } catch (e) {
+        // "prompt too long": summarize once and send the same request again
+        if (overflowed || opts.parentId || content.length || signal.aborted || !isOverflow(e)) throw e
+        overflowed = true
+        history.pop()
+        fe.emit({ type: 'notice', level: 'warn', message: 'The conversation is too long for the model; compacting it.' })
+        await compact()
+        continue
       }
       if (signal.aborted) return (reason = 'aborted')
       if (stop === 'error') {
@@ -319,6 +346,21 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   }
 }
 
+/**
+ * Replaces the whole history with one summary message (a tool_use/tool_result pair can never be split). The history is left alone if summarizing fails.
+ * `readState` is cleared because the model no longer remembers what it read.
+ */
+export async function compactHistory(history: Message[], opts: TurnOptions, focus?: string): Promise<void> {
+  const summary = await buildSummary(history, { provider: opts.provider, model: opts.model, effort: opts.effort, signal: opts.signal, focus, reminder: opts.reminder })
+  const before = history.length
+  history.splice(0, history.length, summary)
+  opts.files?.clearReads()
+  if (opts.context) opts.context.tokens = 0
+  opts.onCompact?.(summary)
+  opts.frontend.emit({ type: 'notice', level: 'info', message: `Conversation compacted (${before} messages → summary).` })
+  opts.frontend.emit({ type: 'usage', contextTokens: estimateTokens(history), contextWindow: await opts.provider.contextWindow(opts.model) })
+}
+
 /** One turn at a time: a second send() while a turn runs is rejected. */
 export class AgentSession {
   history: Message[] = []
@@ -327,6 +369,7 @@ export class AgentSession {
   /** Where messages are saved; set by the frontend. clear() moves to a new file. */
   store?: Transcript
   private saveFailed = false
+  private context = { tokens: 0 }
   constructor(private base: Omit<TurnOptions, 'signal'>) {
     this.base = { ...base, files: base.files ?? new FileState() }
   }
@@ -348,8 +391,11 @@ export class AgentSession {
     if (this.controller) throw new Error('A turn is running. Abort it before rewinding.')
     const restored = await this.files.rewind() // first: if it throws, history is untouched and the rewind can be retried
     if (!restored) return undefined
-    this.history.length = this.starts.pop() ?? 0
-    this.persist(() => this.store?.rewind(this.history.length))
+    const start = this.starts.pop() // none after a compaction: the turn is no longer a separate part of the history
+    if (start !== undefined) {
+      this.history.length = start
+      this.persist(() => this.store?.rewind(this.history.length))
+    }
     return restored
   }
 
@@ -358,7 +404,37 @@ export class AgentSession {
     this.history.length = 0
     this.starts.length = 0
     this.base.files = new FileState()
+    this.context.tokens = 0
     this.store = this.store?.fresh()
+  }
+
+  /** /compact [focus]: summarizes the conversation now. Returns false when there is nothing to compact. */
+  async compact(focus?: string): Promise<boolean> {
+    if (this.controller) throw new Error('A turn is running. Abort it before compacting.')
+    if (!this.history.length) return false
+    this.controller = new AbortController()
+    const store = this.store
+    try {
+      await compactHistory(this.history, this.options(store, this.controller.signal), focus)
+      this.starts.length = 0
+      return true
+    } finally {
+      this.controller = undefined
+    }
+  }
+
+  private options(store: Transcript | undefined, signal: AbortSignal, attachments?: Block[]): TurnOptions {
+    return {
+      ...this.base,
+      attachments,
+      signal,
+      context: this.context,
+      persist: (m) => this.persist(() => store?.append(m)),
+      onCompact: (m) => {
+        this.starts.length = 0
+        this.persist(() => store?.compact(m))
+      }
+    }
   }
 
   /** Continues a saved conversation: replaces the history (rewind checkpoints of earlier runs are gone). */
@@ -367,6 +443,7 @@ export class AgentSession {
     this.history.splice(0, this.history.length, ...messages)
     this.starts.length = 0
     this.base.files = new FileState()
+    this.context.tokens = 0
     this.store = store
   }
 
@@ -386,7 +463,7 @@ export class AgentSession {
     const store = this.store
     this.starts.push(this.history.length)
     try {
-      return await runTurn(this.history, text, { ...this.base, attachments, persist: (m) => this.persist(() => store?.append(m)), signal: this.controller.signal })
+      return await runTurn(this.history, text, this.options(store, this.controller.signal, attachments))
     } finally {
       this.controller = undefined
     }

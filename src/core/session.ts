@@ -18,7 +18,7 @@ export interface SessionInfo {
   messageCount: number
 }
 type Meta = SessionMeta & { type: 'meta'; version: number; cwd: string; created: string; title: string }
-type Rec = Meta | ({ type: 'message' } & Message) | { type: 'rewind'; length: number }
+type Rec = Meta | ({ type: 'message' } & Message) | ({ type: 'compact' } & Message) | { type: 'rewind'; length: number }
 
 /** Ids are our own UUIDs; anything else (a renderer or CLI argument) never reaches the filesystem. */
 export const isSessionId = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(s)
@@ -50,6 +50,7 @@ export function parseTranscript(text: string): { meta: Meta; messages: Message[]
       if (r.version !== VERSION) throw new Error(`Unsupported session version ${String(r.version)} (this MCA reads version ${VERSION}). Update MCA to open it.`)
       meta ??= r
     } else if (r?.type === 'message' && (r.role === 'user' || r.role === 'assistant') && Array.isArray(r.content)) messages.push({ role: r.role, content: r.content })
+    else if (r?.type === 'compact' && (r.role === 'user' || r.role === 'assistant') && Array.isArray(r.content)) messages.splice(0, messages.length, { role: r.role, content: r.content }) // boundary: everything before it is summarized
     else if (r?.type === 'rewind' && Number.isInteger(r.length) && r.length >= 0) messages.length = Math.min(messages.length, r.length)
     else damaged = true
   }
@@ -88,6 +89,11 @@ export class Transcript {
   /** One complete message, never a delta. */
   append(m: Message): void {
     this.write({ type: 'message', role: m.role, content: m.content })
+  }
+
+  /** The whole history was replaced by this summary message. Loading starts from the newest of these. */
+  compact(m: Message): void {
+    this.write({ type: 'compact', role: m.role, content: m.content })
   }
 
   /** /rewind: the history is now `length` messages long. */

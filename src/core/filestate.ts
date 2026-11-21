@@ -19,6 +19,11 @@ export class FileState {
     return f
   }
 
+  /** After a compaction the model no longer remembers what it read, so it must read before it edits again. */
+  clearReads(): void {
+    this.reads.clear()
+  }
+
   markRead(path: string, content: string, mtimeMs: number): void {
     this.reads.set(path, { mtimeMs, hash: hash(content) })
   }

@@ -31,7 +31,8 @@ export const HELP = `Commands:
   /mode [name]     Show or set the permission mode (${MODES.join(' | ')})
   /rewind          Undo the last turn: restore its files and drop it from the conversation (repeat to go further back)
   /trust           Trust this workspace so its project allow rules apply
-  /compact, /model, /provider   Not available yet
+  /compact [focus] Summarize the conversation to free context (also happens automatically at 80% of the window)
+  /model, /provider   Not available yet
   /exit            Quit
 
 Known limits: rewind checkpoints live in memory (lost on restart) and do not cover changes made through Bash.
@@ -48,6 +49,14 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
       if (session.busy) return print('A turn is running.')
       session.clear()
       return print('Conversation cleared.')
+    case 'compact':
+      if (session.busy) return print('A turn is running.')
+      try {
+        if (!(await session.compact(args.trim() || undefined))) print('Nothing to compact.')
+      } catch (e) {
+        print(`Compaction failed: ${(e as Error).message}`)
+      }
+      return
     case 'mode': {
       if (!args) return print(`Permission mode: ${perms.mode} (available: ${MODES.join(', ')})`)
       const m = parseMode(args.trim())

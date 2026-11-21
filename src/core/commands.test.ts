@@ -85,9 +85,13 @@ describe('/mode, /clear, unavailable', () => {
     expect(session.history).toEqual([])
     expect(await session.rewind()).toBeUndefined()
   })
-  it('/compact says it is not available yet', async () => {
-    const { out, env } = setup([])
+  it('/compact on an empty chat says so, and otherwise replaces the history with a summary', async () => {
+    const { out, env, session } = setup([done, [{ type: 'text_delta', text: 'SUM' }, { type: 'stop', reason: 'end_turn' }]])
     await runCommand('compact', '', env)
-    expect(out.at(-1)).toContain('not available yet')
+    expect(out.at(-1)).toBe('Nothing to compact.')
+    await session.send('hi')
+    await runCommand('compact', 'tests', env)
+    expect(session.history).toHaveLength(1)
+    expect(JSON.stringify(session.history[0])).toContain('SUM')
   })
 })
