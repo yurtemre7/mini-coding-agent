@@ -39,7 +39,7 @@ CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode
 | 5 Hooks, project context | Done (merged to `main`) | | Self-checked |
 | 6 Planning, subagents, WebFetch | Done (on branch): TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
 | 7 Sessions, compaction, MCP | Done: sessions (`fa52cdf`, `c044b19`), compaction, MCP (stdio) | | Self-checked, no live API |
-| 8 Skills, commands, polish, packaging | Not started | | |
+| 8 Skills, commands, polish, packaging | Done except manual packaged-app verification: `Skill` tool + skills index in the context reminder, custom commands (`$ARGUMENTS`, `$1`–`$9`), `/model` `/provider`, desktop slash autocomplete (and `/…` input routed to commands), `--help`, README | | Self-checked, no live API |
 
 Work requested outside the plan (all after Milestone 4, checked by the controller, not by a separate reviewer):
 
@@ -129,6 +129,7 @@ The tag must equal the `package.json` version, or the workflow stops. It runs li
 ## Not verified (manual)
 
 - Any call to the real Anthropic or OpenRouter API, including that `claude-sonnet-5-5`, `claude-haiku-5-5` and the `anthropic/...` OpenRouter ids are valid, and which models accept `output_config.effort`.
+- Packaged-app check from Finder (M8): bundled `rg`, Bash finds node/git, Keychain read; plus the unproven release workflow (first tag is its test).
 - Keychain round-trip from the packaged app; launching from Finder (PATH resolution, bundled `rg`).
 - Ctrl+C behaviour in a real terminal (logic is unit-tested), and Ctrl+C leaving no child process behind.
 - Desktop flows by hand: folder picker, closing the window mid-turn, trust dialog on launch, resuming a saved chat. The user has run the app and confirmed chat, permission prompts and the model picker work.
@@ -140,7 +141,7 @@ The tag must equal the `package.json` version, or the workflow stops. It runs li
 2. Try the M6 demo by hand: in plan mode ask for a refactor; expect parallel Explore subagents, a plan dialog, and todos updating after approval.
 3. `main` CI stays red until the macOS symlink fix (`5faf4e5`) and later commits are merged into it.
 4. Try Milestone 7 by hand: a long session that compacts, quit and `--continue`, a `.mcp.json` server whose tool you approve.
-5. Milestone 8: skills, custom commands, slash autocomplete, README, packaged-app verification.
+5. Milestone 8 leftovers: verify the packaged app on a Mac from Finder (bundled `rg`, Bash finding node/git, Keychain read). Not possible on the Linux dev container.
 6. Open a PR from `feat/mca-v1` once the smoke test passes.
 
 ## Working notes for the next person

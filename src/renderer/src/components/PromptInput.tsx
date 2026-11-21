@@ -2,7 +2,7 @@ import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { ArrowUp, FileText, Paperclip, X, ClipboardList, FilePen, Gauge, Shield, ShieldOff, Square, Undo2, type LucideIcon } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS } from '@/lib/providers'
-import { EFFORT_LEVELS, IMAGE_MIMES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, PERMISSION_MODES, type Effort, type PermissionMode } from '../../../shared/types'
+import { EFFORT_LEVELS, IMAGE_MIMES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, PERMISSION_MODES, type CommandInfo, type Effort, type PermissionMode } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,6 +22,8 @@ export interface PromptInputProps {
   onStop(): void
   onMode(mode: PermissionMode): void
   onRewind(): void
+  /** Slash commands offered while the text starts with `/`. */
+  commands?: CommandInfo[]
 }
 
 const toBase64 = (f: File) =>
@@ -32,12 +34,19 @@ const toBase64 = (f: File) =>
     r.readAsDataURL(f)
   })
 
-export function PromptInput({ busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind }: PromptInputProps) {
+export function PromptInput({ busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [] }: PromptInputProps) {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<number | null>(null)
   const picker = useRef<HTMLInputElement>(null)
+  // slash autocomplete: only while the first word is being typed
+  const [active, setActive] = useState(0)
+  const [dismissed, setDismissed] = useState(false)
+  const prefix = /^\/([\w-]*)$/.exec(text)?.[1]
+  const matches = prefix === undefined || dismissed ? [] : commands.filter((c) => c.name.toLowerCase().startsWith(prefix.toLowerCase()))
+  const open = matches.length > 0 && !(matches.length === 1 && matches[0].name === prefix) // an exactly typed command needs no menu
+  const pick = (c: CommandInfo) => (setText(`/${c.name} `), setActive(0))
   const canSend = !!text.trim() || files.length > 0
   const submit = () => {
     if (busy || disabled || !canSend) return
@@ -98,13 +107,43 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, effo
         </div>
       )}
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+      {open && (
+        <ul role="listbox" aria-label="Commands" className="max-h-48 overflow-auto rounded-md border bg-popover p-1 text-sm shadow-md">
+          {matches.map((c, i) => (
+            <li key={c.name} role="option" aria-selected={i === active}>
+              <button type="button" className={'flex w-full min-w-0 items-baseline gap-2 rounded px-2 py-1 text-left hover:bg-accent ' + (i === active ? 'bg-accent' : '')} onMouseDown={(e) => (e.preventDefault(), pick(c))}>
+                <span className="font-mono">/{c.name}</span>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">{c.description}</span>
+                {c.custom && <span className="ml-auto shrink-0 text-xs text-muted-foreground">custom</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <Textarea
         onPaste={onPaste}
         value={text}
         disabled={disabled}
         placeholder={disabled ? 'Open a workspace to start' : 'Ask MCA to work on your code (Enter to send, Shift+Enter for a new line)'}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => (setText(e.target.value), setActive(0), setDismissed(false))}
         onKeyDown={(e) => {
+          if (open && !e.nativeEvent.isComposing) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault()
+              setActive((a) => (a + (e.key === 'ArrowDown' ? 1 : matches.length - 1)) % matches.length)
+              return
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+              e.preventDefault()
+              pick(matches[Math.min(active, matches.length - 1)])
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setDismissed(true)
+              return
+            }
+          }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault()
             submit()

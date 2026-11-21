@@ -1,7 +1,9 @@
 import { createInterface } from 'node:readline/promises'
 import type { Decision, Effort, PermissionMode, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { AgentSession, type Frontend } from '../core/agent'
-import { parseInput, runCommand } from '../core/commands'
+import { loadCommands, parseInput, runCommand } from '../core/commands'
+import { DEFAULT_MODELS } from '../core/provider/models'
+import { PROVIDER_IDS, providerFromCredentials } from '../core/provider/factory'
 import { createPermissions, type Permissions } from '../core/permissions'
 import type { ModelProvider } from '../core/provider/types'
 import { fastModelFor } from '../core/provider/models'
@@ -188,7 +190,8 @@ export async function runInteractive(o: {
   for (const s of mcp.status) if (s.state !== 'connected') term.write(`warn: MCP server "${s.name}": ${s.message}\n`)
   const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: [...builtinTools, ...mcp.tools], cwd: o.cwd, frontend: fe, decide: perms.decide, plan: perms, fastModel: fastModelFor(o.provider.id), hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
 
-  const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
+  const cur = { provider: o.provider, model: o.model }
+  const saved = startSession(o.cwd, () => ({ provider: cur.provider.id, model: cur.model }), { continue: o.continue, resume: o.resume, home: o.home })
   session.load(saved.messages, saved.transcript)
 
   let exiting = false
@@ -224,7 +227,22 @@ export async function runInteractive(o: {
       mcp = await McpManager.start(fresh.mcp, { cwd: o.cwd })
       session.setTools([...builtinTools, ...mcp.tools])
     },
-    mcpStatus: () => describeStatus(mcp.status)
+    mcpStatus: () => describeStatus(mcp.status),
+    models: {
+      current: () => ({ provider: cur.provider.id, model: cur.model }),
+      providers: PROVIDER_IDS,
+      setModel: async (id: string) => {
+        session.setModel({ model: id })
+        cur.model = id
+      },
+      setProvider: async (id: string) => {
+        const next = await providerFromCredentials(id as (typeof PROVIDER_IDS)[number]) // throws with the key-setup message when there is no key
+        const model = DEFAULT_MODELS[next.id as (typeof PROVIDER_IDS)[number]].main
+        session.setModel({ provider: next, model, fastModel: fastModelFor(next.id) })
+        Object.assign(cur, { provider: next, model })
+        return model
+      }
+    }
   }
   term.write(`mca (${o.model}) - mode: ${perms.mode}. Type /help for commands.\n`)
   if (saved.note) term.write(`${saved.note}\n`)
@@ -233,7 +251,7 @@ export async function runInteractive(o: {
       let text = await term.readLine('> ')
       while (text.endsWith('\\')) text = text.slice(0, -1) + '\n' + (await term.readLine('… '))
       if (!text.trim()) continue
-      const p = parseInput(text)
+      const p = parseInput(text, await loadCommands(o.cwd, { home: o.home }))
       if (p.kind === 'unknown') term.write(`Unknown command /${p.name}. Type /help for the list.\n`)
       else if (p.kind === 'command') await runCommand(p.name, p.args, env)
       else {

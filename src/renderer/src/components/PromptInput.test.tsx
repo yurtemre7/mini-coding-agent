@@ -41,4 +41,26 @@ describe('PromptInput', () => {
     fireEvent.click(screen.getByRole('button', { name: /stop/i }))
     expect(onStop).toHaveBeenCalled()
   })
+  it('slash autocomplete: filters, arrows + Tab complete, Escape closes, exact command sends', () => {
+    const onSend = vi.fn()
+    const commands = [
+      { name: 'compact', description: 'Summarize', custom: false },
+      { name: 'clear', description: 'Reset', custom: false },
+      { name: 'fix', description: 'My fix', custom: true }
+    ]
+    render(<PromptInput {...base} onSend={onSend} commands={commands} />)
+    const box = screen.getByRole('textbox')
+    fireEvent.change(box, { target: { value: '/c' } })
+    expect(screen.getAllByRole('option')).toHaveLength(2)
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    fireEvent.keyDown(box, { key: 'Tab' })
+    expect(box).toHaveValue('/clear ')
+    fireEvent.change(box, { target: { value: '/f' } })
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(box, { target: { value: '/fix' } })
+    expect(screen.queryByRole('listbox')).toBeNull() // typed exactly: no menu, Enter sends
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onSend).toHaveBeenCalledWith('/fix', undefined)
+  })
 })

@@ -117,6 +117,13 @@ export interface SessionInfo {
 }
 
 /** Never contains a key: the renderer only learns whether one exists. */
+/** A slash command offered by autocomplete. */
+export interface CommandInfo {
+  name: string
+  description: string
+  custom: boolean
+}
+
 export interface SettingsInfo {
   provider: ProviderId
   model: string
@@ -149,6 +156,8 @@ export interface IpcContract {
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
     'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
+    /** Slash commands of the current workspace (built-in and custom) for autocomplete. */
+    'commands:list': { args: []; result: CommandInfo[] }
   }
   events: {
     'agent:events': EventBatch
@@ -157,7 +166,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

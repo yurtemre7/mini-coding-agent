@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Settings } from 'lucide-react'
-import type { Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
+import type { CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { TodoSidebar } from './components/TodoSidebar'
 import { ChatsSidebar } from '@/components/ChatsSidebar'
@@ -24,6 +24,7 @@ export default function App() {
   const [open, setOpen] = useState(false)
   const [recent, setRecent] = useState<string[]>([])
   const [chats, setChats] = useState<SessionInfo[]>([])
+  const [commands, setCommands] = useState<CommandInfo[]>([])
   const [setupError, setSetupError] = useState<string | null>(null)
 
   const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
@@ -38,6 +39,7 @@ export default function App() {
     if (!api || busy) return
     api.invoke('workspace:recent').then(setRecent, () => {})
     api.invoke('session:list').then(setChats, () => {})
+    api.invoke('commands:list').then(setCommands, () => {})
   }, [api, workspace, busy])
 
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
@@ -136,7 +138,7 @@ export default function App() {
         <div className="h-10 shrink-0" />
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         <ChatTranscript items={v.items} />
-        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
       <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} {...actions} />

@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AgentSession, type Frontend } from './agent'
-import { HELP, parseInput, runCommand, type CommandEnv } from './commands'
+import { expandCommand, HELP, loadCommands, parseInput, runCommand, type CommandEnv } from './commands'
 import { Permissions } from './permissions'
 import { FakeProvider } from './provider/fake'
 import { builtinTools } from './registry'
@@ -93,5 +93,50 @@ describe('/mode, /clear, unavailable', () => {
     await runCommand('compact', 'tests', env)
     expect(session.history).toHaveLength(1)
     expect(JSON.stringify(session.history[0])).toContain('SUM')
+  })
+})
+
+describe('custom commands', () => {
+  const mk = () => {
+    const home = mkdtempSync(join(tmpdir(), 'mca-home-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'mca-proj-'))
+    const put = (base: string, rel: string, text: string) => {
+      mkdirSync(join(base, dirname(rel)), { recursive: true })
+      writeFileSync(join(base, rel), text)
+    }
+    return { home, cwd, put }
+  }
+  it('loads commands, project beats home, built-ins are never shadowed', async () => {
+    const { home, cwd, put } = mk()
+    put(home, '.mca/commands/fix.md', '---\ndescription: from home\n---\nHome fix')
+    put(cwd, '.mca/commands/fix.md', 'Project fix $ARGUMENTS')
+    put(cwd, '.mca/commands/help.md', 'shadow')
+    const cmds = await loadCommands(cwd, { home })
+    expect(cmds.map((c) => c.name)).toEqual(['fix'])
+    expect(cmds[0].body).toBe('Project fix $ARGUMENTS')
+    expect(parseInput('/help', cmds)).toEqual({ kind: 'command', name: 'help', args: '' })
+  })
+  it('expands $ARGUMENTS and $1..$9, and appends arguments when the body uses neither', () => {
+    expect(expandCommand('Fix $ARGUMENTS now', 'a b')).toBe('Fix a b now')
+    expect(expandCommand('Swap $2 and $1', 'x y')).toBe('Swap y and x')
+    expect(expandCommand('Do it', 'extra')).toContain('Arguments: extra')
+    expect(expandCommand('Do it', '')).toBe('Do it')
+  })
+  it('a custom command becomes a prompt', () => {
+    const c = { name: 'fix', description: '', body: 'Fix $1', file: 'x' }
+    expect(parseInput('/fix bug', [c])).toEqual({ kind: 'prompt', text: 'Fix bug' })
+  })
+  it('/model and /provider show, set and reject; /help lists custom commands', async () => {
+    const { env, out } = setup([])
+    const set: string[] = []
+    env.models = { current: () => ({ provider: 'anthropic', model: 'm1' }), providers: ['anthropic', 'openrouter'], setModel: async (id) => void set.push(id), setProvider: async () => 'dflt' }
+    await runCommand('model', '', env)
+    expect(out.at(-1)).toContain('m1')
+    await runCommand('model', 'm2', env)
+    expect(set).toEqual(['m2'])
+    await runCommand('provider', 'nope', env)
+    expect(out.at(-1)).toMatch(/Unknown provider/)
+    await runCommand('provider', 'openrouter', env)
+    expect(out.at(-1)).toContain('dflt')
   })
 })

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { AgentSession, type Frontend } from '../core/agent'
-import { parseInput, runCommand } from '../core/commands'
+import { BUILTIN_INFO, loadCommands, parseInput, runCommand } from '../core/commands'
 import { getKey, keySource, setKey } from '../core/credentials'
 import { createPermissions, type Permissions } from '../core/permissions'
 import { DEFAULT_MODELS, FAST_MODEL } from '../core/provider/models'
@@ -13,7 +13,7 @@ import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
 import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -292,18 +292,34 @@ export class Controller {
 
   async command(line: string): Promise<void> {
     const s = this.session
-    const p = parseInput(line)
+    const p = parseInput(line, this.workspace ? await loadCommands(this.workspace, { home: this.d.home }) : [])
     if (p.kind === 'prompt') return this.send(p.text)
     if (p.kind === 'unknown' || !Controller.COMMANDS.includes(p.name)) return this.notice('error', `Unknown command /${p.name}.`)
     if (!s || !this.perms || !this.workspace) return this.notice('error', 'Open a workspace first.')
     if (p.name === 'trust') return this.trust()
     const out: string[] = []
     const before = s.history.length
-    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp })
+    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp, models: this.modelEnv() })
     if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
     if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
     this.announce() // mode may have changed
     for (const m of out) this.notice('info', m)
+  }
+
+  private modelEnv() {
+    return {
+      current: () => ({ provider: this.provider as string, model: this.model }),
+      providers: PROVIDER_IDS as readonly string[],
+      setModel: async (model: string) => void (await this.update({ model })),
+      setProvider: async (id: string) => (await this.update({ provider: id as ProviderId }), this.model)
+    }
+  }
+
+  /** What slash autocomplete offers: the commands the window may run plus the workspace's custom ones. */
+  async commandList(): Promise<CommandInfo[]> {
+    const builtin = Controller.COMMANDS.map((name) => ({ name, description: BUILTIN_INFO[name as keyof typeof BUILTIN_INFO], custom: false }))
+    const custom = this.workspace ? await loadCommands(this.workspace, { home: this.d.home }) : []
+    return [...builtin, ...custom.map((c) => ({ name: c.name, description: c.description, custom: true }))]
   }
 
   /** Never trusts silently: the user answers the same TrustRequest prompt as on workspace open. */

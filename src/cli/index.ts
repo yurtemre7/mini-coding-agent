@@ -26,7 +26,16 @@ Options:
   -h, --help             Show this help
   -v, --version          Print the version
 
-Piped stdin is appended to the prompt. Exit codes: 0 ok, 1 runtime error, 2 usage or missing key.`
+Piped stdin is appended to the prompt. Exit codes: 0 ok, 1 runtime error, 2 usage or missing key.
+
+Inside a session type /help. Commands: /help /clear /compact [focus] /mode [m] /model [id]
+/provider [id] /rewind /trust /mcp /exit.
+
+Customize (project files win over ~/ ones):
+  Keys        ANTHROPIC_API_KEY / OPENROUTER_API_KEY, or the macOS Keychain entry saved by the desktop app
+  Commands    <dir>/.mca/commands/<name>.md or .claude/commands (use $ARGUMENTS, $1-$9)
+  Skills      <dir>/.mca/skills/<name>/SKILL.md or .claude/skills (loaded on demand by the Skill tool)
+  Settings    .mca/settings.json (permissions, hooks); MCP servers in .mcp.json`
 
 const fail = (msg: string): never => {
   console.error(`${msg}\n\n${USAGE}`)

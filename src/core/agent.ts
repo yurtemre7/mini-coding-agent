@@ -73,7 +73,7 @@ const describeIssues = (e: { issues: { path: PropertyKey[]; message: string }[] 
 
 const warnAll = (fe: Frontend, warnings: string[]) => warnings.forEach((message) => fe.emit({ type: 'notice', level: 'warn', message }))
 
-const SUBAGENT_EXCLUDED = new Set(['Task', 'TodoWrite', 'ExitPlanMode'])
+const SUBAGENT_EXCLUDED = new Set(['Task', 'TodoWrite', 'ExitPlanMode', 'Skill'])
 const SUBAGENT_NOTE =
   'You are a subagent working for another agent. Do the task you are given, then finish with ONE message that reports exactly what was asked for. ' +
   'That message is all the other agent sees, so include concrete findings (file paths, line numbers, short quotes), not a description of your process.'
@@ -372,6 +372,13 @@ export class AgentSession {
   private context = { tokens: 0 }
   constructor(private base: Omit<TurnOptions, 'signal'>) {
     this.base = { ...base, files: base.files ?? new FileState() }
+  }
+
+  /** Switches the model (and optionally the provider) for the next turn. */
+  setModel(o: { model: string; provider?: ModelProvider; fastModel?: string }): void {
+    if (this.controller) throw new Error('A turn is running. Abort it before changing the model.')
+    this.base = { ...this.base, model: o.model, ...(o.provider && { provider: o.provider, fastModel: o.fastModel }) }
+    this.context.tokens = 0 // the window may differ
   }
 
   /** Replaces the tool set (MCP servers connected after the session started). */
