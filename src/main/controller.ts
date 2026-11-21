@@ -1,0 +1,215 @@
+import { randomUUID } from 'node:crypto'
+import { AgentSession, type Frontend } from '../core/agent'
+import { parseInput, runCommand } from '../core/commands'
+import { getKey, setKey } from '../core/credentials'
+import { createPermissions, type Permissions } from '../core/permissions'
+import { DEFAULT_MODELS } from '../core/provider/models'
+import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
+import type { ModelProvider } from '../core/provider/types'
+import { builtinTools } from '../core/registry'
+import { isTrusted, trustWorkspace } from '../core/trust'
+import { reduce, emptyView } from '../shared/reducer'
+import { type Decision, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+
+const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
+
+export interface ControllerDeps {
+  /** Every state change, in order. The ipc layer batches these. */
+  emit(e: ViewEvent): void
+  /** Show a prompt now (not batched). */
+  prompt(p: { id: string; request: PromptRequest }): void
+  home?: string
+  keys?: { get(p: ProviderId): Promise<string | null>; set(p: ProviderId, key: string): Promise<void> }
+  /** Tests swap in a FakeProvider. */
+  makeProvider?: (id: ProviderId, key: string) => ModelProvider
+}
+
+/**
+ * The desktop's Frontend + session owner (the counterpart of src/cli/ui.ts runInteractive). No electron imports.
+ * Provider and model can change between turns without losing history: the session talks to `proxy`, which reads the current choice.
+ */
+export class Controller {
+  private view = { ...emptyView() }
+  private mode: ViewState['mode'] = 'default'
+  private provider: ProviderId = 'anthropic'
+  private model: string = DEFAULT_MODELS.anthropic.main
+  private workspace: string | null = null
+  private session?: AgentSession
+  private perms?: Permissions
+  private pending: ViewState['pending'] = null
+  private resolvePending?: (d: Decision) => void
+  private cache?: { id: ProviderId; p: ModelProvider }
+  private keys: NonNullable<ControllerDeps['keys']>
+
+  constructor(private d: ControllerDeps) {
+    this.keys = d.keys ?? { get: getKey, set: setKey }
+  }
+
+  private apply(e: ViewEvent): void {
+    this.view = reduce(this.view, e)
+    if (e.type === 'turn_end') this.clearPending()
+    this.d.emit(e)
+  }
+
+  private notice(level: 'info' | 'warn' | 'error', message: string): void {
+    this.apply({ type: 'notice', level, message })
+  }
+
+  getState(): ViewState {
+    return { ...this.view, mode: this.perms?.mode ?? this.mode, provider: this.provider, model: this.model, workspace: this.workspace, pending: this.pending }
+  }
+
+  async getSettings(): Promise<SettingsInfo> {
+    const hasKey = { anthropic: false, openrouter: false }
+    for (const id of PROVIDER_IDS) hasKey[id] = !!(await this.keys.get(id))
+    return { provider: this.provider, model: this.model, hasKey }
+  }
+
+  /** On first call with no explicit choice: prefer a provider that has a key. */
+  async init(): Promise<void> {
+    const s = await this.getSettings()
+    const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
+    this.setProvider(id)
+  }
+
+  private setProvider(id: ProviderId): void {
+    if (id !== this.provider) this.model = DEFAULT_MODELS[id].main
+    this.provider = id
+  }
+
+  async setKey(id: ProviderId, key: string): Promise<SettingsInfo> {
+    if (!PROVIDER_IDS.includes(id) || !key.trim()) throw new Error('Enter an API key.')
+    await this.keys.set(id, key.trim())
+    if (this.cache?.id === id) this.cache = undefined
+    return this.getSettings()
+  }
+
+  async update(patch: { provider?: ProviderId; model?: string }): Promise<SettingsInfo> {
+    this.assertIdle('change the model')
+    if (patch.provider) {
+      if (!PROVIDER_IDS.includes(patch.provider)) throw new Error(`Unknown provider "${patch.provider}".`)
+      this.setProvider(patch.provider)
+    }
+    if (patch.model?.trim()) this.model = patch.model.trim()
+    return this.getSettings()
+  }
+
+  /** Same shape as the CLI's provider, but resolved lazily from the credential store so a key saved mid-session just works. */
+  private proxy: ModelProvider = {
+    id: 'anthropic',
+    contextWindow: async () => (await this.current()).contextWindow(this.model),
+    stream: (req) => this.stream(req)
+  }
+  private async current(): Promise<ModelProvider> {
+    if (this.cache?.id === this.provider) return this.cache.p
+    const key = await this.keys.get(this.provider)
+    if (!key) throw new Error(`No API key for ${this.provider}. Add one in Settings.`)
+    const p = (this.d.makeProvider ?? createProvider)(this.provider, key)
+    this.cache = { id: this.provider, p }
+    return p
+  }
+  private async *stream(req: Parameters<ModelProvider['stream']>[0]) {
+    yield* (await this.current()).stream({ ...req, model: this.model })
+  }
+
+  private frontend: Frontend = {
+    emit: (e) => this.apply(e),
+    ask: (request) =>
+      new Promise<Decision>((resolve) => {
+        const id = randomUUID()
+        this.resolvePending = resolve
+        this.pending = { id, request }
+        this.d.prompt(this.pending)
+      })
+  }
+
+  private clearPending(): void {
+    const r = this.resolvePending
+    this.pending = null
+    this.resolvePending = undefined
+    r?.({ allow: false, feedback: 'Aborted' })
+  }
+
+  answer(id: string, d: Decision): void {
+    if (this.pending?.id !== id) return // stale or duplicate answer
+    const r = this.resolvePending
+    this.pending = null
+    this.resolvePending = undefined
+    r?.(d)
+  }
+
+  private assertIdle(what: string): void {
+    if (this.session?.busy || this.pending) throw new Error(`Cannot ${what} while a turn is running.`)
+  }
+
+  /** Opens a workspace: loads its settings, asks about trust (same flow as the CLI), and starts a fresh session. */
+  async selectWorkspace(dir: string): Promise<void> {
+    this.assertIdle('switch workspace')
+    const make = (trusted: boolean) => createPermissions({ cwd: dir, mode: this.perms?.mode, trusted, canAsk: true, home: this.d.home })
+    let built = await make(await isTrusted(dir, this.d.home))
+    if (built.ignoredAllow.length) {
+      if ((await this.frontend.ask({ kind: 'trust', workspace: dir, rules: built.ignoredAllow })).allow) {
+        try {
+          await trustWorkspace(dir, this.d.home)
+          built = await make(true)
+        } catch (e) {
+          this.notice('warn', (e as Error).message)
+        }
+      }
+      this.pending = null // a trust prompt is answered here, not by a turn
+    }
+    this.perms = built.perms
+    this.workspace = dir
+    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide })
+    this.apply({ type: 'clear' })
+    for (const w of built.warnings) this.notice('warn', w)
+  }
+
+  /** Starts a turn and returns at once; progress arrives as events. */
+  send(text: string): ViewState {
+    const s = this.session
+    if (!s || !this.workspace) throw new Error('Open a workspace first.')
+    if (s.busy) throw new Error('A turn is already running.')
+    this.apply({ type: 'user_message', text })
+    void s.send(text).catch((e: Error) => this.notice('error', e.message))
+    return this.getState()
+  }
+
+  abort(): void {
+    this.session?.abort()
+    this.clearPending() // a prompt still on screen is a denial; the turn then unwinds
+  }
+
+  async command(line: string): Promise<ViewState> {
+    const s = this.session
+    const p = parseInput(line)
+    if (p.kind === 'prompt') return this.send(p.text)
+    if (p.kind === 'unknown') this.notice('error', `Unknown command /${p.name}.`)
+    else if (!s || !this.perms || !this.workspace) this.notice('error', 'Open a workspace first.')
+    else {
+      const out: string[] = []
+      const before = s.history.length
+      await runCommand(p.name, p.args, {
+        session: s,
+        perms: this.perms,
+        workspace: this.workspace,
+        print: (m) => void out.push(m),
+        exit: () => {},
+        trustWorkspace: async () => {
+          await trustWorkspace(this.workspace!, this.d.home)
+          const fresh = await createPermissions({ cwd: this.workspace!, trusted: true, canAsk: true, home: this.d.home })
+          for (const r of fresh.perms.rules.allow) if (!this.perms!.rules.allow.includes(r)) this.perms!.rules.allow.push(r)
+        }
+      })
+      if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
+      if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
+      for (const m of out) this.notice('info', m)
+    }
+    return this.getState()
+  }
+
+  /** Window closed or app quitting: abort the turn (denies pending asks, kills children). */
+  dispose(): void {
+    this.abort()
+  }
+}

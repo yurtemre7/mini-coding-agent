@@ -1,8 +1,4 @@
-import type { AppInfo } from '../shared/types'
-
-export interface McaApi {
-  getAppInfo: () => Promise<AppInfo>
-}
+import type { McaApi } from '../shared/types'
 
 declare global {
   interface Window {

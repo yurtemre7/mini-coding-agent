@@ -4,7 +4,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
-export type ProviderId = 'anthropic' | 'openrouter'
+import type { ProviderId } from '../shared/types'
+export type { ProviderId }
 export const ENV_VARS: Record<ProviderId, string> = { anthropic: 'ANTHROPIC_API_KEY', openrouter: 'OPENROUTER_API_KEY' }
 
 export interface Keychain {
