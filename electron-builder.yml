@@ -18,4 +18,7 @@ mac:
   artifactName: '${productName}-${version}-${arch}.${ext}'
 dmg:
   title: '${productName}'
+asarUnpack:
+  - node_modules/@vscode/ripgrep/bin/**
+  - node_modules/@vscode/ripgrep-*/bin/**
 npmRebuild: false
