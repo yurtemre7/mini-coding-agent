@@ -69,6 +69,8 @@ export type AgentEvent =
   | { type: 'usage'; contextTokens: number; contextWindow: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
+  /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
+  | { type: 'changes'; turn: ChangeSummary[]; total: ChangeSummary[] }
 
 // ---------- Desktop view state and IPC ----------
 
@@ -96,6 +98,7 @@ export type Item =
 export interface ViewState {
   items: Item[]
   todos: Todo[]
+  changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
   usage?: { contextTokens: number; contextWindow: number }
   mode: PermissionMode
   provider: ProviderId

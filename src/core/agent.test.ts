@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '../shared/types'
@@ -39,7 +42,7 @@ describe('runTurn', () => {
     const s = setup([[text('a'), use('1', 'Echo', { msg: 'pong' }), { type: 'usage', contextTokens: 5, outputTokens: 1 }, stop('tool_use')], [text('bye'), stop('end_turn')]])
     expect(await s.go()).toBe('done')
     expect(results(s.history)).toEqual([{ type: 'tool_result', tool_use_id: '1', content: 'pong' }])
-    expect(events.map((e) => e.type)).toEqual(['turn_start', 'text_delta', 'usage', 'tool_start', 'tool_end', 'text_delta', 'turn_end'])
+    expect(events.map((e) => e.type)).toEqual(['turn_start', 'text_delta', 'usage', 'tool_start', 'tool_end', 'text_delta', 'changes', 'turn_end'])
     expect(events[0].type).toBe('turn_start')
     expect(events.at(-1)).toEqual({ type: 'turn_end', reason: 'done' })
     expect(events).toContainEqual({ type: 'usage', contextTokens: 5, contextWindow: 200_000 })
@@ -212,6 +215,43 @@ describe('checkpoints', () => {
     expect(await files.rewind()).toEqual([])
     expect(await files.rewind()).toEqual([])
     expect(await files.rewind()).toBeUndefined()
+  })
+})
+
+describe('changes event', () => {
+  const touch = (dir: string): Tool => ({
+    name: 'Touch',
+    description: 't',
+    schema: z.object({ name: z.string() }),
+    readOnly: false,
+    async run(input: any, ctx: any) {
+      const p = join(dir, input.name)
+      await ctx.files.record(p)
+      writeFileSync(p, 'content\n')
+      return 'ok'
+    }
+  })
+  it('a turn that writes a file emits changes (as added) right before turn_end', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mca-chg-'))
+    const s = setup([[use('1', 'Touch', { name: 'n.txt' }), stop('tool_use')], [stop('end_turn')]], [touch(dir)], { cwd: dir, files: new FileState() })
+    await s.go()
+    const types = events.map((e: any) => e.type)
+    expect(types.at(-2)).toBe('changes')
+    expect(types.at(-1)).toBe('turn_end')
+    expect(events.find((e: any) => e.type === 'changes')).toMatchObject({ turn: [{ path: 'n.txt', status: 'added', additions: 1 }], total: [{ path: 'n.txt' }] })
+  })
+  it('an aborted turn still emits changes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mca-chg-'))
+    const s = setup([[use('1', 'Touch', { name: 'n.txt' }), stop('tool_use')], [stop('end_turn')]], [touch(dir)], { cwd: dir, files: new FileState() })
+    s.ctl.abort()
+    await s.go()
+    expect(events.some((e: any) => e.type === 'changes')).toBe(true)
+  })
+  it('a subagent turn emits no changes (its edits belong to the parent turn)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mca-chg-'))
+    const s = setup([[stop('end_turn')]], [touch(dir)], { cwd: dir, files: new FileState(), parentId: 'p' })
+    await s.go()
+    expect(events.some((e: any) => e.type === 'changes')).toBe(false)
   })
 })
 

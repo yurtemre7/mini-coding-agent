@@ -1,6 +1,7 @@
 import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { buildSummary, estimateTokens, isOverflow, shouldCompact } from './compact'
 import { CheckpointStore } from './checkpoints'
+import { summarizeChanges } from './changes'
 import { FileState } from './filestate'
 import { Hooks, MAX_STOP_BLOCKS } from './hooks'
 import type { Block, Message, ModelProvider } from './provider/types'
@@ -343,7 +344,20 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   } finally {
     sealHistory(history)
     save()
+    if (!opts.parentId) await reportChanges(opts)
     fe.emit({ type: 'turn_end', reason })
+  }
+}
+
+/** Tells the frontend which files this turn (and the whole chat) changed. A failure here is a warning, never a failed turn. */
+async function reportChanges(opts: TurnOptions): Promise<void> {
+  try {
+    const files = opts.files
+    if (!files) return
+    const [turn, total] = await Promise.all([summarizeChanges(files.beforeImages('turn'), opts.cwd), summarizeChanges(files.beforeImages('all'), opts.cwd)])
+    opts.frontend.emit({ type: 'changes', turn, total })
+  } catch (e) {
+    opts.frontend.emit({ type: 'notice', level: 'warn', message: `Could not list changed files: ${(e as Error).message}` })
   }
 }
 

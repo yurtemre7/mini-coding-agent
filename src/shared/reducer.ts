@@ -1,9 +1,9 @@
 import { field, isTodo } from './guards'
 import { isReminder, type EventBatch, type Item, type ViewEvent, type ViewState } from './types'
 
-type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode' | 'mcp'>
+type Reduced = Pick<ViewState, 'items' | 'todos' | 'changes' | 'usage' | 'busy' | 'workspace' | 'mode' | 'mcp'>
 
-export const emptyView = (): Reduced => ({ items: [], todos: [], busy: false, workspace: null, mode: 'default', mcp: [] })
+export const emptyView = (): Reduced => ({ items: [], todos: [], changes: { turn: [], total: [] }, busy: false, workspace: null, mode: 'default', mcp: [] })
 
 /** Pure: turns the event stream into what the transcript shows. Main and the renderer both run exactly this. */
 export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
@@ -26,6 +26,8 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
       return { ...s, items: s.items.map((i) => (i.kind === 'tool' && i.id === e.id ? { ...i, done: true, result: e.result, isError: e.isError } : i)) }
     case 'todos':
       return { ...s, todos: e.todos }
+    case 'changes':
+      return { ...s, changes: { turn: e.turn, total: e.total } }
     case 'usage':
       return { ...s, usage: { contextTokens: e.contextTokens, contextWindow: e.contextWindow } }
     case 'notice':
@@ -33,10 +35,10 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
     case 'rewind': {
       // drop the newest turn: everything from the last user message on (notices from commands before it stay)
       const at = s.items.map((i) => i.kind).lastIndexOf('user')
-      return at < 0 ? s : { ...s, items: s.items.slice(0, at) }
+      return at < 0 ? s : { ...s, items: s.items.slice(0, at), changes: { turn: [], total: [] } }
     }
     case 'clear':
-      return { ...s, items: [], todos: [], usage: undefined, busy: false }
+      return { ...s, items: [], todos: [], changes: { turn: [], total: [] }, usage: undefined, busy: false }
     case 'session':
       return { ...s, workspace: e.workspace, mode: e.mode, mcp: e.mcp ?? s.mcp }
   }
