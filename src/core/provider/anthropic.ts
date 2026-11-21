@@ -31,12 +31,13 @@ function toProviderError(e: any): Error {
 
 // Cache breakpoints: system prompt + last block of the last message.
 function withCache(messages: Message[]): Message[] {
-  const last = messages.at(-1)
-  if (!last?.content.length) return messages
+  const wire = messages.map((m) => ({ ...m, content: m.content.map((b): any => (b.type === 'image' ? { type: 'image', source: { type: 'base64', media_type: b.mime, data: b.data } } : b)) }))
+  const last = wire.at(-1)
+  if (!last?.content.length) return wire as Message[]
   const content: any[] = last.content.map((b, i) =>
     i === last.content.length - 1 ? { ...b, cache_control: { type: 'ephemeral' } } : b
   )
-  return [...messages.slice(0, -1), { ...last, content }]
+  return [...wire.slice(0, -1), { ...last, content }]
 }
 
 export class AnthropicProvider implements ModelProvider {

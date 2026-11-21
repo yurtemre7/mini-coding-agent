@@ -13,7 +13,7 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
     case 'turn_end':
       return { ...s, busy: false }
     case 'user_message':
-      return add({ kind: 'user', text: e.text })
+      return add({ kind: 'user', text: e.text, ...(e.attachments?.length && { attachments: e.attachments }) })
     case 'text_delta': {
       const last = s.items.at(-1)
       if (last?.kind === 'text' && last.parentId === e.parentId) return { ...s, items: [...s.items.slice(0, -1), { ...last, text: last.text + e.text }] }
@@ -48,13 +48,14 @@ export function applyBatch(s: ViewState, b: EventBatch): ViewState {
   return { ...next, seq: b.seq, ...(b.events.some((e) => e.type === 'turn_end') && { pending: null }) }
 }
 
-type Msg = { role: 'user' | 'assistant'; content: ({ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: unknown } | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean })[] }
+type Msg = { role: 'user' | 'assistant'; content: ({ type: 'text'; text: string } | { type: 'image'; mime: string; data: string } | { type: 'tool_use'; id: string; name: string; input: unknown } | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean })[] }
 
 /** A saved transcript as the events that would have produced it, so a resumed chat goes through the same reducer as a live one. */
 export function messagesToEvents(messages: Msg[]): ViewEvent[] {
   return messages.flatMap((m): ViewEvent[] =>
     m.content.flatMap((b): ViewEvent[] => {
       if (b.type === 'text') return [m.role === 'user' ? { type: 'user_message', text: b.text } : { type: 'text_delta', text: b.text }]
+      if (b.type === 'image') return []
       if (b.type === 'tool_use') return [{ type: 'tool_start', id: b.id, name: b.name, input: b.input }]
       return [{ type: 'tool_end', id: b.tool_use_id, result: b.content, isError: !!b.is_error }]
     })

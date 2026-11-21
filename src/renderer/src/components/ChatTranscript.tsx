@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
+import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Paperclip, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
@@ -55,7 +55,15 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
   if (item.kind === 'user')
     return (
       <div className="ml-auto flex w-fit max-w-[80%] items-start justify-end gap-2">
-        <div className="min-w-0 rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-primary-foreground">{item.text}</div>
+        <div className="min-w-0 rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-primary-foreground">{item.text}
+          {item.attachments && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {item.attachments.map((n, i) => (
+                <span key={i} className="inline-flex items-center gap-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-xs"><Paperclip className="h-3 w-3" aria-hidden />{n}</span>
+              ))}
+            </div>
+          )}
+        </div>
         <User className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       </div>
     )

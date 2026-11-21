@@ -6,12 +6,12 @@ import { createPermissions, type Permissions } from '../core/permissions'
 import { DEFAULT_MODELS } from '../core/provider/models'
 import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
-import type { ModelProvider } from '../core/provider/types'
+import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
 import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -251,12 +251,18 @@ export class Controller {
   }
 
   /** Starts a turn and returns at once; progress arrives as events. */
-  send(text: string): void {
+  send(text: string, files: Attachment[] = []): void {
     const s = this.session
     if (!s || !this.workspace) throw new Error('Open a workspace first.')
     if (s.busy) throw new Error('A turn is already running.')
-    this.apply({ type: 'user_message', text })
-    void s.send(text).catch((e: Error) => this.notice('error', e.message))
+    const blocks: Block[] = files.map((f) => {
+      if (IMAGE_MIMES.includes(f.mime)) return { type: 'image', mime: f.mime, data: f.data }
+      const body = Buffer.from(f.data, 'base64').toString('utf8')
+      if (body.includes('\0')) throw new Error(`${f.name} looks like a binary file; only text files and images can be attached.`)
+      return { type: 'text', text: `<attached_file name=${JSON.stringify(f.name)}>\n${body}\n</attached_file>` }
+    })
+    this.apply({ type: 'user_message', text, ...(files.length && { attachments: files.map((f) => f.name) }) })
+    void s.send(text, blocks).catch((e: Error) => this.notice('error', e.message))
   }
 
   abort(): void {

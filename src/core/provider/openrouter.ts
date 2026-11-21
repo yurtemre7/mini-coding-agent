@@ -23,7 +23,9 @@ export function toOpenAI(system: string, messages: Message[]): unknown[] {
       // tool results first, each its own message, immediately after the assistant message
       for (const b of m.content) if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.tool_use_id, content: b.is_error ? `Error: ${b.content}` : b.content })
       const text = m.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n')
-      if (text) out.push({ role: 'user', content: text })
+      const images = m.content.flatMap((b) => (b.type === 'image' ? [{ type: 'image_url', image_url: { url: `data:${b.mime};base64,${b.data}` } }] : []))
+      if (images.length) out.push({ role: 'user', content: [...(text ? [{ type: 'text', text }] : []), ...images] })
+      else if (text) out.push({ role: 'user', content: text })
     }
   }
   return out

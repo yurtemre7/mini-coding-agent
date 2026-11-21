@@ -18,6 +18,8 @@ export interface TurnOptions {
   frontend: Frontend
   signal: AbortSignal
   maxTokens?: number
+  /** Extra blocks (images, inlined files) sent with the user's text. */
+  attachments?: Block[]
   effort?: Effort // passed on every stream call; subagents inherit it
   /** Called once per complete message, in history order (the transcript file). */
   persist?: (m: Message) => void
@@ -136,7 +138,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   const toolDefs = opts.tools.map(toToolDef)
   let reason: TurnReason = 'done'
   fe.emit({ type: 'turn_start' })
-  history.push({ role: 'user', content: [{ type: 'text', text: userText }] })
+  history.push({ role: 'user', content: [{ type: 'text', text: userText }, ...(opts.attachments ?? [])] })
   let saved = history.length - 1
   const save = () => {
     for (; saved < history.length; saved++) if (history[saved].content.length) opts.persist?.(history[saved])
@@ -256,13 +258,13 @@ export class AgentSession {
     }
   }
 
-  async send(text: string): Promise<TurnReason> {
+  async send(text: string, attachments?: Block[]): Promise<TurnReason> {
     if (this.controller) throw new Error('A turn is already running. Wait for it to finish or abort it.')
     this.controller = new AbortController()
     const store = this.store
     this.starts.push(this.history.length)
     try {
-      return await runTurn(this.history, text, { ...this.base, persist: (m) => this.persist(() => store?.append(m)), signal: this.controller.signal })
+      return await runTurn(this.history, text, { ...this.base, attachments, persist: (m) => this.persist(() => store?.append(m)), signal: this.controller.signal })
     } finally {
       this.controller = undefined
     }

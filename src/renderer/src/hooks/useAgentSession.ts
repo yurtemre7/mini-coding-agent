@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { applyBatch } from '../../../shared/reducer'
-import type { Decision, McaApi, ViewState } from '../../../shared/types'
+import type { Attachment, Decision, McaApi, ViewState } from '../../../shared/types'
 
 /** Main owns the conversation: mount asks for a snapshot, then the batched event stream is folded in with the same reducer main uses. */
 export function useAgentSession(api: McaApi | undefined = window.mca) {
@@ -32,7 +32,7 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
   return {
     state,
     error,
-    send: (text: string) => call((a) => a.invoke('session:send', text)),
+    send: (text: string, files?: Attachment[]) => call((a) => a.invoke('session:send', text, files)),
     command: (line: string) => call((a) => a.invoke('session:command', line)),
     abort: () => call((a) => a.invoke('session:abort')),
     selectWorkspace: () => call((a) => a.invoke('workspace:select')),

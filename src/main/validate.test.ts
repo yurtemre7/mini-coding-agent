@@ -34,7 +34,7 @@ describe('IPC validation', () => {
     expect(() => v[ch](args as unknown[])).toThrow(/Invalid request/)
   })
   it('accepts good input and strips unknown fields', () => {
-    expect(v['session:send'](['hi'])).toEqual(['hi'])
+    expect(v['session:send'](['hi'])).toEqual(['hi', []])
     expect(v['settings:setKey'](['openrouter', 'k'])).toEqual(['openrouter', 'k'])
     expect(v['settings:models'](['openrouter', 'x'])).toEqual(['openrouter'])
     expect(v['settings:update']([{ provider: 'anthropic', model: 'm', effort: 'max', extra: 1 }])).toEqual([{ provider: 'anthropic', model: 'm', effort: 'max' }])

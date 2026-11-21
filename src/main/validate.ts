@@ -1,6 +1,6 @@
 import { isSessionId } from '../core/session'
 import { PROVIDER_IDS } from '../core/provider/factory'
-import { EFFORT_LEVELS, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
+import { EFFORT_LEVELS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
 
 const bad = (m: string): never => {
   throw new Error(`Invalid request: ${m}`)
@@ -10,10 +10,21 @@ const provider = (v: unknown): ProviderId => (PROVIDER_IDS.includes(v as Provide
 const effort = (v: unknown): Effort => (EFFORT_LEVELS.includes(v as Effort) ? (v as Effort) : bad('unknown effort'))
 const obj = (v: unknown, name: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : bad(`${name} must be an object`))
 
+const attachments = (v: unknown): Attachment[] => {
+  if (v === undefined) return []
+  if (!Array.isArray(v) || v.length > MAX_ATTACHMENTS) return bad(`at most ${MAX_ATTACHMENTS} attachments`)
+  return v.map((a) => {
+    const o = obj(a, 'attachment')
+    const data = str(o.data, 'attachment.data')
+    if (data.length > MAX_ATTACHMENT_BYTES * 1.4) bad('attachment too large')
+    return { name: str(o.name, 'attachment.name').slice(0, 200), mime: str(o.mime, 'attachment.mime'), data }
+  })
+}
+
 /** Every invoke channel's arguments are checked in main, whatever the renderer sends. Returns the sanitized tuple. */
 export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[]) => IpcContract['invoke'][K]['args'] } = {
   'app:getInfo': () => [],
-  'session:send': ([t]) => [str(t, 'text')],
+  'session:send': ([t, a]) => [str(t, 'text'), attachments(a)],
   'session:abort': () => [],
   'session:getState': () => [],
   'session:command': ([l]) => [str(l, 'command')],

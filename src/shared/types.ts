@@ -63,11 +63,21 @@ export type AgentEvent =
 
 export type ProviderId = 'anthropic' | 'openrouter'
 export type KeySource = 'env' | 'keychain' | 'file' | 'dotenv'
+/** A file or pasted image sent with a prompt. `data` is base64. */
+export interface Attachment {
+  name: string
+  mime: string
+  data: string
+}
+export const MAX_ATTACHMENTS = 10
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
+export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+
 export type PromptRequest = PermissionRequest | PlanRequest | TrustRequest
 
 /** What the renderer shows. Events reduce into it (src/shared/reducer.ts); main owns the truth, the renderer rebuilds from a snapshot. */
 export type Item =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; attachments?: string[] }
   | { kind: 'text'; text: string; parentId?: string }
   | { kind: 'tool'; id: string; name: string; input: unknown; parentId?: string; done: boolean; result?: string; isError?: boolean }
   | { kind: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
@@ -87,7 +97,7 @@ export interface ViewState {
 }
 
 /** Everything the reducer understands: agent events plus the events main adds for things only it knows. */
-export type ViewEvent = AgentEvent | { type: 'user_message'; text: string } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode }
+export type ViewEvent = AgentEvent | { type: 'user_message'; text: string; attachments?: string[] } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode }
 
 /** One IPC message: consecutive events, `seq` = the seq of the last one. */
 export interface EventBatch {
@@ -115,7 +125,7 @@ export interface SettingsInfo {
 export interface IpcContract {
   invoke: {
     'app:getInfo': { args: []; result: AppInfo }
-    'session:send': { args: [text: string]; result: void }
+    'session:send': { args: [text: string, attachments?: Attachment[]]; result: void }
     'session:abort': { args: []; result: void }
     'session:getState': { args: []; result: ViewState }
     /** A slash command line such as "/rewind" or "/mode plan"; its output arrives as notice events. */

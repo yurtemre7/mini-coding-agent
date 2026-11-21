@@ -24,7 +24,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
 
   const handlers: Handlers = {
     'app:getInfo': getAppInfo,
-    'session:send': (text) => c.send(text),
+    'session:send': (text, files) => c.send(text, files),
     'session:abort': () => c.abort(),
     'session:getState': () => (batcher.flush(), c.getState()),
     'session:command': (line) => c.command(line),
