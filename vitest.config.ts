@@ -11,6 +11,7 @@ export default defineConfig({
           name: 'core',
           globals: true,
           environment: 'node',
+          setupFiles: ['./src/core/test-home.ts'],
           include: ['src/{core,cli,main,shared}/**/*.test.ts']
         }
       },
