@@ -49,6 +49,24 @@ Project files win over `~/` ones; a built-in command name always wins over a fil
 | Skills | `{~/,<project>/}{.claude,.mca}/skills/<name>/SKILL.md` with `name:` / `description:` frontmatter. The model sees only name + description (200 chars max) and loads the body with the `Skill` tool |
 | Trust | Project allow rules, hooks and MCP servers only run after you trust the workspace (`/trust`) |
 
+## Installing on macOS
+
+Download the build for your Mac from the [Releases page](https://github.com/yurtemre7/mini-coding-agent/releases): `arm64` for Apple Silicon (M1 and later), `x64` for Intel (check  > About This Mac).
+
+1. Open `mini-coding-agent-<version>-<arch>.dmg` and drag **mini-coding-agent** into **Applications**.
+2. The app is **not signed or notarized**, so Gatekeeper blocks it ("is damaged" or "cannot be opened"). Remove the quarantine flag once in Terminal:
+
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"
+   ```
+
+   Add `sudo` in front if you get "Operation not permitted" (for example when the app was copied by another user or sits in a protected folder).
+3. Open the app. Without the command above you can instead right-click the app, choose **Open**, then **Open** again; on macOS 15 use **System Settings > Privacy & Security > Open Anyway**.
+4. Optional: verify the download with `shasum -a 256 -c SHA256SUMS.txt` (the file is attached to each release).
+5. Add an API key in the app's Settings (stored in the macOS Keychain), or export `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` before launching from a terminal.
+
+The flag comes back only when you download a new build, so repeat step 2 after each update.
+
 ## Releasing (unsigned macOS app)
 
 Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tags`. The release workflow builds arm64 and x64 `.dmg`/`.zip` and publishes a GitHub release with checksums. The app is **not signed or notarized**: on first launch right-click the app and choose Open (or run `xattr -dr com.apple.quarantine /Applications/mini-coding-agent.app`).
