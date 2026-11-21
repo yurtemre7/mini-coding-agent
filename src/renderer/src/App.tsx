@@ -93,13 +93,13 @@ export default function App() {
       <aside className="flex w-60 shrink-0 flex-col gap-3 border-r p-3 pt-12">
         <Button variant="outline" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
           <FolderOpen className="mr-2 h-4 w-4" />
-          <span className="truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
+          <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
         </Button>
         <div className="flex-1 space-y-1 overflow-y-auto text-sm">
           <h2 className="text-xs font-medium uppercase text-muted-foreground">Todos</h2>
           {todos.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
           {todos.map((t, i) => (
-            <p key={i} className={t.status === 'completed' ? 'text-muted-foreground line-through' : t.status === 'in_progress' ? 'font-medium' : ''}>
+            <p key={i} className={'[overflow-wrap:anywhere] ' + (t.status === 'completed' ? 'text-muted-foreground line-through' : t.status === 'in_progress' ? 'font-medium' : '')}>
               {t.content}
             </p>
           ))}
@@ -116,7 +116,7 @@ export default function App() {
       </aside>
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="h-10 shrink-0" />
-        {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{s.error}</p>}
+        {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         <ChatTranscript items={v.items} />
         <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>

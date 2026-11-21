@@ -26,14 +26,19 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
         </AlertDialogTitle>
         <AlertDialogDescription>{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
-      <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap">{subject(request.input).slice(0, 2000)}</pre>
+      <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{subject(request.input).slice(0, 2000)}</pre>
       <Textarea placeholder="Optional: tell the model what to do instead (sent with No)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
-      <AlertDialogFooter>
+      {request.suggestion && (
+        <p className="text-xs text-muted-foreground">
+          &quot;Yes, for this session&quot; allows: <code className="font-mono break-all">{request.suggestion}</code>
+        </p>
+      )}
+      <AlertDialogFooter className="flex-wrap">
         <Button variant="outline" onClick={() => onDecision({ allow: false, ...(text && { feedback: text }) })}>
           No
         </Button>
         <Button variant="secondary" onClick={() => onDecision({ allow: true, scope: 'session' })} title={request.suggestion}>
-          Yes, for this session{request.suggestion ? ` (${request.suggestion})` : ''}
+          Yes, for this session
         </Button>
         <Button onClick={() => onDecision({ allow: true, scope: 'once' })}>Yes</Button>
       </AlertDialogFooter>
@@ -45,7 +50,7 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
 export function PromptDialog({ request, onDecision }: { request: PromptRequest | null; onDecision: (d: Decision) => void }) {
   return (
     <AlertDialog open={!!request}>
-      <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
+      <AlertDialogContent className="[&>*]:min-w-0" onEscapeKeyDown={(e) => e.preventDefault()}>
         {request?.kind === 'permission' && <PermissionBody key={JSON.stringify(request)} request={request} onDecision={onDecision} />}
         {request?.kind === 'trust' && (
           <>
@@ -54,11 +59,11 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
                 <ShieldAlert className="h-4 w-4" aria-hidden />
                 Trust this workspace?
               </AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogDescription className="break-all">
                 {request.workspace} defines allow rules that run without asking. Only trust projects you wrote or reviewed.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs">{(request.rules ?? []).join('\n')}</pre>
+            <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(request.rules ?? []).join('\n')}</pre>
             <AlertDialogFooter>
               <Button variant="outline" onClick={() => onDecision({ allow: false })}>
                 Don&apos;t trust
@@ -75,7 +80,7 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
                 Approve this plan?
               </AlertDialogTitle>
             </AlertDialogHeader>
-            <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap">{request.plan}</pre>
+            <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap break-words">{request.plan}</pre>
             <AlertDialogFooter>
               <Button variant="outline" onClick={() => onDecision({ allow: false })}>
                 Reject

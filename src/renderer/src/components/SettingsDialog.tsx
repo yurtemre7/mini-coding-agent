@@ -20,7 +20,7 @@ function KeyStatus({ settings, models }: { settings: SettingsInfo; models: Model
   const p = settings.provider
   const src = settings.keySource[p]
   const row = (icon: React.ReactNode, text: string, tone = 'text-muted-foreground') => (
-    <p className={`flex items-center gap-2 text-xs ${tone}`} role="status">
+    <p className={`flex items-center gap-2 text-xs [overflow-wrap:anywhere] ${tone}`} role="status">
       {icon}
       {text}
     </p>

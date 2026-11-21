@@ -17,7 +17,7 @@ const subject = (i: any): string => String(i?.command ?? i?.file_path ?? i?.patt
 /** Raw HTML is not rendered (no rehype-raw); links open in the system browser through the window-open handler in main. */
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="space-y-2 break-words text-sm [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-xs [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5">
+    <div className="space-y-2 [overflow-wrap:anywhere] text-sm [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-xs [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_th]:border [&_th]:px-2 [&_ul]:list-disc [&_ul]:pl-5">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node: _n, ...p }) => <a {...p} target="_blank" rel="noreferrer" /> }}>
         {children}
       </ReactMarkdown>
@@ -29,20 +29,20 @@ function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNod
   const Icon = TOOL_ICONS[tool.name] ?? Wrench
   const Status = !tool.done ? Loader2 : tool.isError ? CircleX : CircleCheck
   return (
-    <Collapsible className="rounded-md border bg-card text-sm">
+    <Collapsible className="min-w-0 rounded-md border bg-card text-sm">
       <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left">
         <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="h-4 w-4 shrink-0" aria-hidden />
         <span className="font-medium">{tool.name}</span>
-        <span className="truncate font-mono text-xs text-muted-foreground">{subject(tool.input)}</span>
-        <Badge variant={tool.isError ? 'destructive' : 'secondary'} className="ml-auto">
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={subject(tool.input)}>{subject(tool.input)}</span>
+        <Badge variant={tool.isError ? 'destructive' : 'secondary'} className="ml-auto shrink-0">
           <Status className={`mr-1 h-4 w-4 ${tool.done ? '' : 'animate-spin'}`} aria-hidden />
           {!tool.done ? 'running' : tool.isError ? 'error' : 'done'}
         </Badge>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-2 border-t px-3 py-2">
-        <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap">{clip(JSON.stringify(tool.input, null, 2) ?? '')}</pre>
-        {tool.done && <pre className="overflow-x-auto border-t pt-2 font-mono text-xs whitespace-pre-wrap">{clip(tool.result ?? '')}</pre>}
+        <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">{clip(JSON.stringify(tool.input, null, 2) ?? '')}</pre>
+        {tool.done && <pre className="overflow-x-auto border-t pt-2 font-mono text-xs whitespace-pre-wrap break-all">{clip(tool.result ?? '')}</pre>}
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -55,7 +55,7 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
   if (item.kind === 'user')
     return (
       <div className="ml-auto flex max-w-[80%] items-start gap-2">
-        <div className="rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">{item.text}</div>
+        <div className="min-w-0 rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-primary-foreground">{item.text}</div>
         <User className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       </div>
     )
@@ -68,7 +68,7 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
         </div>
       </div>
     )
-  if (item.kind === 'notice') return <p className={`text-xs ${item.level === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{item.message}</p>
+  if (item.kind === 'notice') return <p className={`text-xs [overflow-wrap:anywhere] ${item.level === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{item.message}</p>
   // subagent activity (parentId = the Task tool-use id) is nested under its parent card
   return (
     <ToolCard tool={item}>
