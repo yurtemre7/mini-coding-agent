@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Check, CircleAlert, CircleCheck, KeyRound } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
-import { EFFORT_LABELS, PROVIDER_LABELS } from '@/lib/providers'
+import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
 import { EFFORT_LEVELS, type Effort, type KeySource, type ProviderId, type SettingsInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -82,6 +82,15 @@ export function ProviderForm({ settings, models = { models: [] }, disabled, onUp
       </div>
       <div className="space-y-2">
         <Label htmlFor="api-key">API key</Label>
+        {!saved && (
+          <p className="text-xs text-muted-foreground" data-testid="key-help">
+            {KEY_HELP[settings.provider].steps}{' '}
+            <a className="underline" href={KEY_HELP[settings.provider].url} target="_blank" rel="noreferrer">
+              Open the key page
+            </a>
+            . You pay the provider directly for what you use.
+          </p>
+        )}
         <div className="flex gap-2">
           <Input id="api-key" type="password" autoComplete="off" value={key} placeholder={saved ? 'Key saved' : 'Paste your API key'} onChange={(e) => setKey(e.target.value)} />
           <Button
@@ -95,7 +104,7 @@ export function ProviderForm({ settings, models = { models: [] }, disabled, onUp
           </Button>
         </div>
         <KeyStatus settings={settings} models={models} />
-        <p className="text-xs text-muted-foreground">{saved ? 'Paste a new key to replace the saved one.' : 'Saved to the macOS Keychain; never shown again.'}</p>
+        <p className="text-xs text-muted-foreground">{saved ? 'Paste a new key to replace the saved one.' : 'Stored in the macOS Keychain when available, otherwise in a file only you can read. Never shown again, and sent only to the provider.'}</p>
       </div>
     </div>
   )

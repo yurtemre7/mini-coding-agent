@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { FileDiff, FolderOpen, Settings } from 'lucide-react'
 import type { CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { UsageMeter } from './components/UsageMeter'
 import { DiffPanel } from './components/DiffPanel'
 import { TodoSidebar } from './components/TodoSidebar'
 import { ChatsSidebar } from '@/components/ChatsSidebar'
@@ -122,14 +123,10 @@ export default function App() {
           <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
         </Button>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
-          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onChat={s.openChat} onNew={s.newChat} />
+          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} />
           <TodoSidebar todos={todos} />
         </div>
-        {v.usage && (
-          <p className="text-xs text-muted-foreground">
-            Context {Math.round(v.usage.contextTokens / 1000)}k / {Math.round(v.usage.contextWindow / 1000)}k
-          </p>
-        )}
+        {v.usage && <UsageMeter usage={v.usage} />}
         <ThemeToggle pref={theme.pref} onChange={theme.setPref} />
         <Button variant="ghost" onClick={() => setOpen(true)}>
           <Settings className="mr-2 h-4 w-4" />

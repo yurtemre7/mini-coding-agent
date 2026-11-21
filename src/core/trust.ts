@@ -58,6 +58,9 @@ export async function recentWorkspaces(home?: string): Promise<string[]> {
 export const rememberWorkspace = (dir: string, home?: string) =>
   updateState((s) => void (s.recent = [dir, ...(Array.isArray(s.recent) ? s.recent : []).filter((p) => p !== dir && isDir(p))].slice(0, MAX_RECENT)), home)
 
+/** Removes a workspace from the recent list only; its files, saved chats and trust decision are left alone. */
+export const forgetWorkspace = (dir: string, home?: string) => updateState((s) => void (s.recent = (Array.isArray(s.recent) ? s.recent : []).filter((p) => p !== dir)), home)
+
 export interface Prefs {
   provider?: string
   model?: string

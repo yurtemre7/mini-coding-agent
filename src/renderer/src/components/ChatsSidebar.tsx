@@ -1,4 +1,4 @@
-import { FolderClock, History, MessageSquare, Plus } from 'lucide-react'
+import { FolderClock, History, MessageSquare, Plus, X } from 'lucide-react'
 import type { SessionInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { ago } from '@/lib/ago'
@@ -12,16 +12,21 @@ const Head = ({ icon: Icon, children }: { icon: typeof History; children: string
 )
 
 /** Recent workspaces and the current workspace's saved chats. Everything is disabled while a turn runs. */
-export function ChatsSidebar(p: { workspace: string | null; recent: string[]; chats: SessionInfo[]; disabled: boolean; onWorkspace(path: string): void; onChat(id: string): void; onNew(): void }) {
+export function ChatsSidebar(p: { workspace: string | null; recent: string[]; chats: SessionInfo[]; disabled: boolean; onWorkspace(path: string): void; onForget(path: string): void; onChat(id: string): void; onNew(): void }) {
   return (
     <>
       <div className="space-y-1">
         <Head icon={FolderClock}>Recent workspaces</Head>
         {p.recent.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
         {p.recent.map((w) => (
-          <Button key={w} variant="ghost" size="sm" className="w-full justify-start" disabled={p.disabled || w === p.workspace} title={w} onClick={() => p.onWorkspace(w)}>
-            <span className="min-w-0 truncate">{base(w)}</span>
-          </Button>
+          <div key={w} className="flex items-center">
+            <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start" disabled={p.disabled || w === p.workspace} title={w} onClick={() => p.onWorkspace(w)}>
+              <span className="min-w-0 truncate">{base(w)}</span>
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={`Remove ${base(w)} from the list`} title="Remove from the list (files and chats are kept)" disabled={p.disabled || w === p.workspace} onClick={() => p.onForget(w)}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
         ))}
       </div>
       {p.workspace && (

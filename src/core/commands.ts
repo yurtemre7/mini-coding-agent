@@ -6,7 +6,7 @@ import type { AgentSession } from './agent'
 import { parseFrontmatter } from './frontmatter'
 import { MODES, parseMode, type Permissions } from './permissions'
 
-export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp', 'exit'] as const
+export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'resume', 'mcp', 'exit'] as const
 
 export type Parsed = { kind: 'prompt'; text: string } | { kind: 'command'; name: string; args: string } | { kind: 'unknown'; name: string }
 
@@ -76,6 +76,8 @@ export interface CommandEnv {
   print(msg: string): void
   exit(): void
   trustWorkspace(): Promise<void>
+  /** Lists saved chats (no argument) or opens one by number or id; absent where the frontend resumes another way. */
+  resume?(arg: string): Promise<string>
   /** Status line per MCP server. */
   mcpStatus?(): string[]
   /** Model and provider switching; absent where the frontend has no way to do it. */
@@ -98,6 +100,7 @@ export const BUILTIN_INFO: Record<(typeof BUILTINS)[number], string> = {
   rewind: 'Undo the last turn and its file changes',
   diff: 'Show the files the agent changed (this turn, or all)',
   trust: 'Trust this workspace',
+  resume: 'List saved chats, or open one by number',
   mcp: 'List MCP servers and their status',
   exit: 'Quit'
 }
@@ -110,6 +113,7 @@ export const HELP = `Commands:
   /rewind          Undo the last turn: restore its files and drop it from the conversation (repeat to go further back)
   /diff [all]      Show the files the agent changed in the last turn (or in the whole chat) with their diffs
   /trust           Trust this workspace so its project allow rules apply
+  /resume [n|id]   List this workspace's saved chats, or open one (CLI: start with --continue or --resume <id>)
   /model [id]      Show or set the model for the next turn
   /provider [id]   Show or switch the provider (needs its API key)
   /compact [focus] Summarize the conversation to free context (also happens automatically at 80% of the window)
@@ -189,6 +193,8 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
       const patches = await Promise.all(changes.map((c) => diffFor(images, env.workspace, join(env.workspace, c.path))))
       return print([...lines, '', ...patches.filter((p): p is string => !!p)].join('\n'))
     }
+    case 'resume':
+      return print(env.resume ? await env.resume(args.trim()) : 'Start MCA with --continue or --resume <id> to pick up a saved session.')
     case 'trust':
       try {
         await env.trustWorkspace()

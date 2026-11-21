@@ -17,7 +17,7 @@ type WireBlock = Record<string, unknown>
 // The slice of the SDK we use, so tests can inject a fake.
 export interface AnthropicLike {
   messages: { create(body: Record<string, unknown>, opts: { signal: AbortSignal }): Promise<AsyncIterable<WireEvent>> }
-  models: { list(): AsyncIterable<{ id: string }> }
+  models: { list(): AsyncIterable<{ id: string; max_input_tokens?: number | null }> }
 }
 
 const parseJson = (s: string): unknown => {
@@ -76,8 +76,20 @@ export class AnthropicProvider implements ModelProvider {
     this.client = opts.client ?? sdkClient(apiKey)
   }
 
+  private windows?: Promise<Map<string, number>>
+
+  /** The API's own max_input_tokens when it reports one (so a 1M model is used in full), else the built-in table. */
   async contextWindow(model: string): Promise<number> {
-    return anthropicContextWindow(model)
+    this.windows ??= (async () => {
+      const m = new Map<string, number>()
+      try {
+        for await (const x of this.client.models.list()) if (typeof x.max_input_tokens === 'number' && x.max_input_tokens > 0) m.set(x.id, x.max_input_tokens)
+      } catch {
+        // offline or key rejected: the table below applies
+      }
+      return m
+    })()
+    return (await this.windows).get(model) ?? anthropicContextWindow(model)
   }
 
   async listModels(): Promise<ModelInfo[]> {

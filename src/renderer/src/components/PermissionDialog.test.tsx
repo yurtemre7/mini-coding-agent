@@ -5,6 +5,14 @@ import { PromptDialog } from './PermissionDialog'
 const req = { kind: 'permission' as const, toolName: 'Bash', input: { command: 'npm test' }, suggestion: 'Bash(npm test:*)' }
 
 describe('PromptDialog (permission)', () => {
+  it('a very long command and rule are clipped, scrollable and wrapped so the dialog keeps its size', () => {
+    const long = 'x'.repeat(5000)
+    render(<PromptDialog request={{ ...req, input: { command: long }, suggestion: `Bash(${long}:*)` }} onDecision={vi.fn()} />)
+    const rule = screen.getByTestId('suggestion')
+    expect(rule.textContent!.length).toBeLessThan(400)
+    expect(rule).toHaveClass('max-h-20', 'overflow-auto')
+    expect(screen.getByTestId('subject').textContent!.length).toBeLessThanOrEqual(2001)
+  })
   it('Yes -> once', () => {
     const f = vi.fn()
     render(<PromptDialog request={req} onDecision={f} />)

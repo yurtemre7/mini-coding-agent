@@ -13,7 +13,7 @@ import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
-import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
+import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
@@ -24,6 +24,10 @@ export interface ControllerDeps {
   emit(e: ViewEvent, seq: number): void
   /** Show a prompt now (not batched). */
   prompt(p: { id: string; request: PromptRequest }): void
+  /** The user may be away: a prompt waits, the model looks stuck, or a turn runs long. The frontend decides how to tell them. */
+  notify?(message: string): void
+  /** Test hooks: how long a prompt waits, and how long a turn runs, before notifying. */
+  timings?: { promptMs?: number; longTurnMs?: number }
   home?: string
   keys?: { get(p: ProviderId): Promise<string | null>; set(p: ProviderId, key: string): Promise<void>; source?(p: ProviderId): Promise<KeySource | null> }
   /** Tests swap in a FakeProvider. */
@@ -158,6 +162,8 @@ export class Controller {
   private frontend: Frontend = {
     emit: (e) => {
       this.apply(e)
+      if (e.type === 'attention') this.d.notify?.(e.message)
+      if (e.type === 'turn_end') this.stopTimer('long')
       if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
     },
     ask: (request) =>
@@ -165,11 +171,23 @@ export class Controller {
         const id = randomUUID()
         this.resolvePending = resolve
         this.pending = { id, request }
+        this.startTimer('prompt', this.d.timings?.promptMs ?? 60_000, 'MCA is waiting for your approval.')
         this.d.prompt(this.pending)
       })
   }
 
+  private timers: Partial<Record<'prompt' | 'long', ReturnType<typeof setTimeout>>> = {}
+  private startTimer(k: 'prompt' | 'long', ms: number, message: string): void {
+    this.stopTimer(k)
+    if (this.d.notify) this.timers[k] = setTimeout(() => this.d.notify?.(message), ms)
+  }
+  private stopTimer(k: 'prompt' | 'long'): void {
+    clearTimeout(this.timers[k])
+    delete this.timers[k]
+  }
+
   private clearPending(): void {
+    this.stopTimer('prompt')
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
@@ -178,6 +196,7 @@ export class Controller {
 
   answer(id: string, d: Decision): void {
     if (this.pending?.id !== id) throw new Error('No matching prompt is waiting for an answer.')
+    this.stopTimer('prompt')
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
@@ -212,6 +231,8 @@ export class Controller {
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
     this.announce()
+    const [latest] = this.chats()
+    if (latest) this.openChat(latest.id) // a workspace switch continues where that workspace left off
     for (const w of built.warnings) this.notice('warn', w)
   }
 
@@ -241,6 +262,13 @@ export class Controller {
   async openRecent(dir: string): Promise<void> {
     if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace. Open it with the folder picker.')
     await this.selectWorkspace(dir)
+  }
+
+  /** Drops a workspace from the recent list. The open workspace stays; files and saved chats are untouched. */
+  async forgetRecent(dir: string): Promise<void> {
+    if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace.')
+    if (dir === this.workspace) throw new Error('Open another workspace first; this one is in use.')
+    await forgetWorkspace(dir, this.d.home)
   }
 
   chats(): SessionInfo[] {
@@ -282,7 +310,8 @@ export class Controller {
       return { type: 'text', text: `<attached_file name=${JSON.stringify(f.name)}>\n${body}\n</attached_file>` }
     })
     this.apply({ type: 'user_message', text, ...(files.length && { attachments: files.map((f) => f.name) }) })
-    void s.send(text, blocks).catch((e: Error) => this.notice('error', e.message))
+    this.startTimer('long', this.d.timings?.longTurnMs ?? 10 * 60_000, 'MCA is still working on your request.')
+    void s.send(text, blocks).catch((e: Error) => (this.stopTimer('long'), this.notice('error', e.message)))
   }
 
   abort(): void {
@@ -291,7 +320,7 @@ export class Controller {
   }
 
   /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
-  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp']
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'resume', 'mcp']
 
   async command(line: string): Promise<void> {
     const s = this.session
@@ -302,12 +331,25 @@ export class Controller {
     if (p.name === 'trust') return this.trust()
     const out: string[] = []
     const before = s.history.length
-    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp, models: this.modelEnv() })
+    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, resume: (a) => this.resume(a), mcpStatus: () => this.view.mcp, models: this.modelEnv() })
     if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
     if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
     if (p.name === 'rewind') await this.refreshChanges() // the previous turn's changes are now the newest
     this.announce() // mode may have changed
     for (const m of out) this.notice('info', m)
+  }
+
+  /** `/resume`: no argument lists this workspace's chats (newest first); a number or id opens one. */
+  private async resume(arg: string): Promise<string> {
+    const chats = this.chats()
+    if (!arg) {
+      if (!chats.length) return 'No saved chats in this workspace yet.'
+      return ['Saved chats (newest first):', ...chats.slice(0, 20).map((c, i) => `  ${i + 1}. ${c.title} (${c.messageCount} messages)`), 'Open one with /resume <number>.'].join('\n')
+    }
+    const chat = /^\d+$/.test(arg) ? chats[Number(arg) - 1] : chats.find((c) => c.id === arg)
+    if (!chat) return `No chat matches "${arg.slice(0, 40)}". Run /resume to list them.`
+    this.openChat(chat.id)
+    return `Opened "${chat.title}".`
   }
 
   private modelEnv() {

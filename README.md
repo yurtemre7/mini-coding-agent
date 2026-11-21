@@ -36,7 +36,7 @@ mca --continue                                    # resume the newest saved sess
 
 `mca --help` lists every flag. Exit codes: 0 ok, 1 runtime error, 2 usage error or missing key. Headless runs treat the workspace as untrusted unless you pass `--trust`.
 
-Slash commands (CLI and desktop prompt): `/help`, `/clear`, `/compact [focus]`, `/mode [mode]`, `/model [id]`, `/provider [id]`, `/rewind`, `/diff [all]`, `/trust`, `/mcp`, `/exit`. Typing `/` in the desktop prompt opens an autocomplete list.
+Slash commands (CLI and desktop prompt): `/help`, `/clear`, `/compact [focus]`, `/mode [mode]`, `/model [id]`, `/provider [id]`, `/rewind`, `/diff [all]`, `/resume [n|id]` (desktop), `/trust`, `/mcp`, `/exit`. Typing `/` in the desktop prompt opens an autocomplete list.
 
 ## Configuration
 
@@ -85,3 +85,7 @@ Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tag
 - `npm run typecheck` — Run TypeScript typechecking for Node and Web targets
 - `npm test` — Run unit and component tests with Vitest
 - `npm run package:mac` — Build and package macOS `.dmg` and `.zip` artifacts via `electron-builder`
+
+## Notifications
+
+The desktop app shows a system notification (while the window is in the background) when the model looks stuck repeating the same tool calls, when a permission prompt has waited a minute, and when a turn has run for ten minutes. Phone push is not supported yet.

@@ -4,7 +4,7 @@ import { ago } from '@/lib/ago'
 import { ChatsSidebar } from './ChatsSidebar'
 
 describe('ChatsSidebar', () => {
-  const props = { workspace: '/w/app', recent: ['/w/app', '/w/other'], chats: [{ id: 'c1', title: 'Fix the bug', updated: Date.now() - 3 * 3_600_000, messageCount: 4 }], disabled: false, onWorkspace: vi.fn(), onChat: vi.fn(), onNew: vi.fn() }
+  const props = { workspace: '/w/app', recent: ['/w/app', '/w/other'], chats: [{ id: 'c1', title: 'Fix the bug', updated: Date.now() - 3 * 3_600_000, messageCount: 4 }], disabled: false, onWorkspace: vi.fn(), onForget: vi.fn(), onChat: vi.fn(), onNew: vi.fn() }
   it('lists recent workspaces and chats; clicks resume, switch and start a new chat', () => {
     render(<ChatsSidebar {...props} />)
     fireEvent.click(screen.getByText('other'))
@@ -14,6 +14,12 @@ describe('ChatsSidebar', () => {
     expect(props.onChat).toHaveBeenCalledWith('c1')
     expect(props.onNew).toHaveBeenCalled()
     expect(screen.getByText('3h ago')).toBeTruthy()
+  })
+  it('removes another workspace from the list, but never the open one', () => {
+    render(<ChatsSidebar {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove other from the list' }))
+    expect(props.onForget).toHaveBeenCalledWith('/w/other')
+    expect(screen.getByRole('button', { name: 'Remove app from the list' })).toBeDisabled()
   })
   it('is inert during a turn', () => {
     render(<ChatsSidebar {...props} disabled />)

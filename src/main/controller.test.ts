@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -13,7 +13,7 @@ import { Controller } from './controller'
 const write = (p: string): StreamEvent[] => [{ type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: p, content: 'hi' } }, { type: 'stop', reason: 'tool_use' }]
 const say: StreamEvent[] = [{ type: 'text_delta', text: 'done' }, { type: 'stop', reason: 'end_turn' }]
 
-async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKey = true) {
+async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKey = true, extra: Partial<ConstructorParameters<typeof Controller>[0]> = {}) {
   const home = await mkdtemp(join(tmpdir(), 'mca-home-'))
   const ws = await mkdtemp(join(tmpdir(), 'mca-ws-'))
   const events: ViewEvent[] = []
@@ -24,7 +24,8 @@ async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKe
     emit: (e) => void events.push(e),
     prompt: (p) => prompts.push(p),
     keys: { get: async (p) => store[p] ?? null, set: async (p, k) => void (store[p] = k) },
-    makeProvider: () => new FakeProvider(turns)
+    makeProvider: () => new FakeProvider(turns),
+    ...extra
   })
   await c.selectWorkspace(ws)
   const idle = async () => { while (c.getState().busy || events.at(-1)?.type !== 'turn_end') await new Promise((r) => setTimeout(r, 5)) }
@@ -124,7 +125,78 @@ describe('Controller', () => {
     await expect(c.openRecent('/etc')).rejects.toThrow(/Unknown workspace/)
     expect(await c.recent()).toContain(ws)
     await c.openRecent(ws)
-    expect(c.getState().items).toEqual([]) // a workspace switch starts a new chat
+    expect(c.getState().items).toEqual([{ kind: 'user', text: 'second' }, { kind: 'text', text: 'done' }]) // a workspace switch continues the newest saved chat
+  })
+  it('forgetting a recent workspace removes only the list entry; the open one and unknown paths are refused', async () => {
+    const { c, ws } = await setup([[]])
+    const other = await mkdtemp(join(tmpdir(), 'mca-ws2-'))
+    await c.selectWorkspace(other)
+    expect(await c.recent()).toEqual(expect.arrayContaining([ws, other]))
+    await expect(c.forgetRecent(other)).rejects.toThrow(/in use/)
+    await expect(c.forgetRecent('/etc')).rejects.toThrow(/Unknown workspace/)
+    await c.forgetRecent(ws)
+    expect(await c.recent()).toEqual([other])
+    expect((await stat(ws)).isDirectory()).toBe(true) // the folder itself is still there
+  })
+  describe('notifications', () => {
+    const loopTurns = () => { const same: StreamEvent[] = [{ type: 'tool_use', id: 'g', name: 'Glob', input: { pattern: '*.nothing' } }, { type: 'stop', reason: 'tool_use' }]; return [same, same, same, say] }
+    it('tells the user when the model looks stuck in a loop', async () => {
+      const sent: string[] = []
+      const { c, idle } = await setup([[]], true, { notify: (m) => void sent.push(m) })
+      ;(c as any).d.makeProvider = () => new FakeProvider(loopTurns())
+      await c.command('/mode bypassPermissions')
+      c.send('go')
+      await idle()
+      expect(sent).toEqual(['MCA may be stuck in a loop.'])
+    })
+    it('notifies when a prompt waits too long, but not when it is answered in time', async () => {
+      const sent: string[] = []
+      const { c, ws, prompts, idle } = await setup([[]], true, { notify: (m) => void sent.push(m), timings: { promptMs: 30 } })
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'n.txt')), say, write(join(ws, 'm.txt')), say])
+      c.send('one')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      c.answer(prompts[0].id, { allow: true, scope: 'once' }) // in time
+      await idle()
+      await new Promise((r) => setTimeout(r, 60))
+      expect(sent).toEqual([])
+      c.send('two')
+      while (prompts.length < 2) await new Promise((r) => setTimeout(r, 5))
+      await new Promise((r) => setTimeout(r, 60)) // left waiting
+      expect(sent).toEqual(['MCA is waiting for your approval.'])
+      c.abort()
+      await idle()
+    })
+    it('notifies once when a turn runs long, and never after it ended', async () => {
+      const sent: string[] = []
+      const { c, ws, prompts, idle } = await setup([[]], true, { notify: (m) => void sent.push(m), timings: { longTurnMs: 30, promptMs: 10_000 } })
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'l.txt')), say])
+      c.send('slow')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      await new Promise((r) => setTimeout(r, 60))
+      expect(sent).toEqual(['MCA is still working on your request.'])
+      c.answer(prompts[0].id, { allow: true, scope: 'once' })
+      await idle()
+      await new Promise((r) => setTimeout(r, 60))
+      expect(sent).toHaveLength(1)
+    })
+  })
+  it('/resume lists saved chats newest first and opens one by number or id; bad arguments say so', async () => {
+    const { c, idle } = await setup([[]])
+    ;(c as any).d.makeProvider = () => new FakeProvider([say, say])
+    await c.command('/resume')
+    expect(c.getState().items.at(-1)).toMatchObject({ message: 'No saved chats in this workspace yet.' })
+    c.send('first chat')
+    await idle()
+    c.newChat()
+    c.send('second chat')
+    await idle()
+    await c.command('/resume')
+    const list = (c.getState().items.at(-1) as any).message as string
+    expect(list.indexOf('second chat')).toBeLessThan(list.indexOf('first chat'))
+    await c.command('/resume 2')
+    expect(c.getState().items[0]).toEqual({ kind: 'user', text: 'first chat' })
+    await c.command('/resume 9')
+    expect(c.getState().items.at(-1)).toMatchObject({ message: expect.stringMatching(/No chat matches/) })
   })
   it('remembers provider, model and effort and reopens the last workspace on launch', async () => {
     const { c, ws, store } = await setup([[]])

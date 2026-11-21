@@ -37,6 +37,21 @@ function setup(turns: ConstructorParameters<typeof FakeProvider>[0], tools: Tool
 const results = (h: Message[]) => h.flatMap((m) => m.content).filter((b) => b.type === 'tool_result') as any[]
 const reason = () => (events.find((e) => e.type === 'turn_end') as any).reason
 
+describe('runTurn loop detection', () => {
+  it('warns and signals attention when the same tool call repeats three times, once per streak', async () => {
+    const same = [use('1', 'Echo', { msg: 'x' }), stop('tool_use')]
+    const s = setup([same, same, same, [text('done'), stop('end_turn')]])
+    await s.go()
+    expect(events.filter((e) => e.type === 'attention')).toEqual([{ type: 'attention', reason: 'loop', message: 'MCA may be stuck in a loop.' }])
+    expect(events.filter((e) => e.type === 'notice' && /same tool calls 3 times/.test((e as any).message))).toHaveLength(1)
+  })
+  it('varied calls never trigger it', async () => {
+    const s = setup([[use('1', 'Echo', { msg: 'a' }), stop('tool_use')], [use('2', 'Echo', { msg: 'b' }), stop('tool_use')], [use('3', 'Echo', { msg: 'a' }), stop('tool_use')], [text('ok'), stop('end_turn')]])
+    await s.go()
+    expect(events.some((e) => e.type === 'attention')).toBe(false)
+  })
+})
+
 describe('runTurn', () => {
   it('streams text, runs a tool, feeds the result back, ends done', async () => {
     const s = setup([[text('a'), use('1', 'Echo', { msg: 'pong' }), { type: 'usage', contextTokens: 5, outputTokens: 1 }, stop('tool_use')], [text('bye'), stop('end_turn')]])
@@ -45,7 +60,7 @@ describe('runTurn', () => {
     expect(events.map((e) => e.type)).toEqual(['turn_start', 'text_delta', 'usage', 'tool_start', 'tool_end', 'text_delta', 'changes', 'turn_end'])
     expect(events[0].type).toBe('turn_start')
     expect(events.at(-1)).toEqual({ type: 'turn_end', reason: 'done' })
-    expect(events).toContainEqual({ type: 'usage', contextTokens: 5, contextWindow: 200_000 })
+    expect(events).toContainEqual({ type: 'usage', contextTokens: 5, contextWindow: 200_000, inputTokens: 5, outputTokens: 1 })
     expect(s.provider.requests[1].messages.at(-1)!.role).toBe('user') // second request carries the tool result
   })
 

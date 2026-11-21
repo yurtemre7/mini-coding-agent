@@ -66,7 +66,8 @@ export type AgentEvent =
   | { type: 'tool_start'; id: string; name: string; input: unknown; parentId?: string }
   | { type: 'tool_end'; id: string; result: string; isError: boolean }
   | { type: 'todos'; todos: Todo[] }
-  | { type: 'usage'; contextTokens: number; contextWindow: number }
+  | { type: 'attention'; reason: 'loop' | 'long' | 'prompt'; message: string } // the user may be away: a frontend can notify them
+  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
   /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
@@ -99,7 +100,8 @@ export interface ViewState {
   items: Item[]
   todos: Todo[]
   changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
-  usage?: { contextTokens: number; contextWindow: number }
+  /** totalIn/totalOut: tokens sent and received by this chat's requests since it was opened (subagent requests are not counted) */
+  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number }
   mode: PermissionMode
   provider: ProviderId
   model: string
@@ -162,6 +164,7 @@ export interface IpcContract {
     'workspace:recent': { args: []; result: string[] }
     /** Only a path from the recent list is opened; anything else is refused. */
     'workspace:open': { args: [path: string]; result: void }
+    'workspace:forget': { args: [path: string]; result: void }
     /** Saved chats of the current workspace, newest first. */
     'session:list': { args: []; result: SessionInfo[] }
     /** Resume a listed chat: main rebuilds the view and keeps appending to its file. */
@@ -183,7 +186,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

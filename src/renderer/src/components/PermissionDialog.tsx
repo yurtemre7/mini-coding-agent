@@ -24,13 +24,13 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
           <ShieldQuestion className="h-4 w-4" aria-hidden />
           {request.toolName} wants to run
         </AlertDialogTitle>
-        <AlertDialogDescription>{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
+        <AlertDialogDescription className="[overflow-wrap:anywhere]">{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
-      <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(toolSubject(request.input) || JSON.stringify(request.input) || '').slice(0, 2000)}</pre>
+      <pre data-testid="subject" className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(toolSubject(request.input) || JSON.stringify(request.input) || '').slice(0, 2000)}</pre>
       <Textarea placeholder="Optional: tell the model what to do instead (sent with No)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
       {request.suggestion && (
         <p className="text-xs text-muted-foreground">
-          &quot;Yes, for this session&quot; allows: <code className="font-mono break-all">{request.suggestion}</code>
+          &quot;Yes, for this session&quot; allows: <code data-testid="suggestion" className="block max-h-20 overflow-auto font-mono break-all">{request.suggestion.length > 300 ? `${request.suggestion.slice(0, 300)}…` : request.suggestion}</code>
         </p>
       )}
       <AlertDialogFooter className="flex-wrap">
@@ -87,7 +87,7 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
                 {request.workspace} defines {[request.rules?.length ? 'allow rules that run without asking' : '', request.hooks?.length ? 'hooks that run shell commands' : '', request.mcp?.length ? 'MCP servers that would be started' : ''].filter(Boolean).join(' and ')}. Only trust projects you wrote or reviewed.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{[...(request.rules ?? []), ...(request.hooks ?? []), ...(request.mcp ?? [])].join('\n')}</pre>
+            <pre data-testid="subject" className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{[...(request.rules ?? []), ...(request.hooks ?? []), ...(request.mcp ?? [])].join('\n')}</pre>
             <AlertDialogFooter>
               <Button variant="outline" onClick={() => onDecision({ allow: false })}>
                 Don&apos;t trust
