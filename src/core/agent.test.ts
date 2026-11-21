@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentEvent } from '../shared/types'
 import { AgentSession, runTurn, sealHistory, type Frontend, type TurnOptions } from './agent'
 import { FileState } from './filestate'
+import { Hooks } from './hooks'
 import { FakeProvider } from './provider/fake'
 import type { Message, StreamEvent } from './provider/types'
 import type { Tool } from './tool'
@@ -211,5 +212,42 @@ describe('checkpoints', () => {
     expect(await files.rewind()).toEqual([])
     expect(await files.rewind()).toEqual([])
     expect(await files.rewind()).toBeUndefined()
+  })
+})
+
+describe('hooks and context in the loop', () => {
+  const hooks = (c: any) => new Hooks(c, process.cwd())
+  it('a PreToolUse hook that exits 2 blocks the tool and feeds stderr to the model', async () => {
+    const s = setup([[use('1', 'Echo', { msg: 'rm' }), stop('tool_use')], [stop('end_turn')]], [echo()], { hooks: hooks({ PreToolUse: [{ matcher: 'Echo', command: 'echo nope >&2; exit 2' }] }) })
+    await s.go()
+    expect(results(s.history)[0]).toMatchObject({ is_error: true })
+    expect(results(s.history)[0].content).toContain('nope')
+  })
+  it('the reminder goes into the first user message only; the system prompt is untouched', async () => {
+    const s = setup([[text('a'), stop('end_turn')], [text('b'), stop('end_turn')]], [echo()], { reminder: async () => '<system-reminder>ctx</system-reminder>' })
+    await s.go('one')
+    await runTurn(s.history, 'two', s.opts)
+    expect(s.history[0].content[0]).toEqual({ type: 'text', text: '<system-reminder>ctx</system-reminder>' })
+    expect(JSON.stringify(s.history[2])).not.toContain('ctx')
+    expect(s.provider.requests.every((r) => r.system === 's')).toBe(true)
+  })
+  it('a UserPromptSubmit block ends the turn without calling the model', async () => {
+    const s = setup([], [echo()], { hooks: hooks({ UserPromptSubmit: [{ command: 'echo banned >&2; exit 2' }] }) })
+    expect(await s.go()).toBe('done')
+    expect(s.provider.requests).toHaveLength(0)
+    expect(s.history).toHaveLength(0)
+    expect(events.some((e) => e.type === 'notice' && e.message.includes('banned'))).toBe(true)
+  })
+  it('a blocking Stop hook continues the turn, sets stop_hook_active, and is capped at 3 blocks', async () => {
+    const turns = Array.from({ length: 6 }, () => [text('x'), stop('end_turn')] as StreamEvent[])
+    const s = setup(turns, [echo()], { hooks: hooks({ Stop: [{ command: 'echo again >&2; exit 2' }] }) })
+    await s.go()
+    expect(s.provider.requests).toHaveLength(4) // first answer + 3 forced continuations
+    expect(events.some((e) => e.type === 'notice' && e.message.includes('3 times'))).toBe(true)
+  })
+  it('a broken hook never bricks the turn', async () => {
+    const s = setup([[stop('end_turn')]], [echo()], { hooks: hooks({ UserPromptSubmit: [{ command: 'exit 7' }] }) })
+    expect(await s.go()).toBe('done')
+    expect(events.some((e) => e.type === 'notice' && e.level === 'warn')).toBe(true)
   })
 })

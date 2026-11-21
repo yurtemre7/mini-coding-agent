@@ -9,6 +9,7 @@ import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
+import { buildReminder } from '../core/context'
 import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
@@ -185,8 +186,8 @@ export class Controller {
     this.assertIdle('switch workspace')
     const make = (trusted: boolean) => createPermissions({ cwd: dir, mode: this.perms?.mode, trusted, canAsk: true, home: this.d.home })
     let built = await make(await isTrusted(dir, this.d.home))
-    if (built.ignoredAllow.length) {
-      if ((await this.frontend.ask({ kind: 'trust', workspace: dir, rules: built.ignoredAllow })).allow) {
+    if (built.ignoredAllow.length || built.ignoredHooks.length) {
+      if ((await this.frontend.ask({ kind: 'trust', workspace: dir, rules: built.ignoredAllow, hooks: built.ignoredHooks })).allow) {
         try {
           await trustWorkspace(dir, this.d.home)
           built = await make(true)
@@ -198,7 +199,7 @@ export class Controller {
     }
     this.perms = built.perms
     this.workspace = dir
-    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide })
+    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
     this.session.store = new Transcript(dir, this.meta, { home: this.d.home })
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
@@ -294,7 +295,7 @@ export class Controller {
     const dir = this.workspace!
     this.assertIdle('change trust')
     const fresh = await createPermissions({ cwd: dir, trusted: false, canAsk: true, home: this.d.home })
-    if (!(await this.frontend.ask({ kind: 'trust', workspace: dir, rules: fresh.ignoredAllow })).allow) return this.notice('info', 'Workspace not trusted.')
+    if (!(await this.frontend.ask({ kind: 'trust', workspace: dir, rules: fresh.ignoredAllow, hooks: fresh.ignoredHooks })).allow) return this.notice('info', 'Workspace not trusted.')
     try {
       await trustWorkspace(dir, this.d.home)
     } catch (e) {
@@ -302,7 +303,8 @@ export class Controller {
     }
     const trusted = await createPermissions({ cwd: dir, trusted: true, canAsk: true, home: this.d.home })
     for (const r of trusted.perms.rules.allow) if (!this.perms!.rules.allow.includes(r)) this.perms!.rules.allow.push(r)
-    this.notice('info', `Trusted ${dir}. Its project allow rules are now active.`)
+    this.session?.setHooks(trusted.hooks)
+    this.notice('info', `Trusted ${dir}. Its project allow rules and hooks are now active.`)
   }
 
   /** Window closed or app quitting: abort the turn (denies pending asks, kills children). */

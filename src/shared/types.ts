@@ -42,6 +42,7 @@ export interface TrustRequest {
   kind: 'trust'
   workspace: string
   rules?: string[] // project allow rules that trusting would enable
+  hooks?: string[] // project hooks that trusting would enable
 }
 export interface Decision {
   allow: boolean
@@ -164,3 +165,6 @@ export type McaApi = {
   /** Returns an unsubscribe function. */
   on<K extends keyof IpcContract['events']>(channel: K, cb: (payload: IpcContract['events'][K]) => void): () => void
 }
+
+/** Context the agent injects into a user message (date, git, instruction files, hook output). Never shown as something the user typed. */
+export const isReminder = (text: string): boolean => text.startsWith('<system-reminder>')

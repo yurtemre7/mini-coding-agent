@@ -1,5 +1,6 @@
 import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { FileState } from './filestate'
+import { Hooks, MAX_STOP_BLOCKS } from './hooks'
 import type { Block, Message, ModelProvider } from './provider/types'
 import type { Transcript } from './session'
 import { isZod, toToolDef, truncate, type Tool, type ToolContext } from './tool'
@@ -27,6 +28,9 @@ export interface TurnOptions {
   maxIterations?: number // 50 per turn (25 for subagents)
   /** Permission seam (filled in Milestone 3). Return a denial reason to block the call; undefined allows it. */
   decide?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<string | undefined>
+  hooks?: Hooks
+  /** Builds the <system-reminder> block (date, git snapshot, instruction files) sent with the first user message of a session. */
+  reminder?: () => Promise<string>
 }
 
 type ToolCall = Extract<Block, { type: 'tool_use' }>
@@ -55,6 +59,8 @@ export function sealHistory(history: Message[]): void {
 
 const describeIssues = (e: { issues: { path: PropertyKey[]; message: string }[] }): string =>
   e.issues.map((i) => `${i.path.map(String).join('.') || '(input)'}: ${i.message}`).join('; ')
+
+const warnAll = (fe: Frontend, warnings: string[]) => warnings.forEach((message) => fe.emit({ type: 'notice', level: 'warn', message }))
 
 export async function runOne(call: ToolCall, opts: TurnOptions): Promise<ToolResult> {
   const { frontend: fe } = opts
@@ -87,9 +93,16 @@ export async function runOne(call: ToolCall, opts: TurnOptions): Promise<ToolRes
         return Promise.race([fe.ask(req), aborted]).finally(() => opts.signal.removeEventListener('abort', onAbort))
       }
     }
+    const hooks = opts.hooks ?? Hooks.none
+    const pre = await hooks.run('PreToolUse', { tool_name: call.name, tool_input: input }, { toolName: call.name, signal: opts.signal })
+    warnAll(fe, pre.warnings)
+    if (pre.block !== undefined) throw new Error(`Blocked by a PreToolUse hook: ${pre.block}`)
     const denied = await opts.decide?.(tool, input, ctx)
     if (denied !== undefined) throw new Error(`Permission denied: ${denied}`)
     content = await tool.run(input, ctx)
+    const post = await hooks.run('PostToolUse', { tool_name: call.name, tool_input: input, tool_response: truncate(content, 10_000) }, { toolName: call.name, signal: opts.signal })
+    warnAll(fe, post.warnings)
+    if (post.block !== undefined) content = `${content}\n\nA PostToolUse hook reported: ${post.block}`
   } catch (e) {
     isError = true
     content = e instanceof Error ? e.message : String(e)
@@ -137,8 +150,26 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   const maxIterations = opts.maxIterations ?? 50
   const toolDefs = opts.tools.map(toToolDef)
   let reason: TurnReason = 'done'
+  const hooks = opts.hooks ?? Hooks.none
   fe.emit({ type: 'turn_start' })
-  history.push({ role: 'user', content: [{ type: 'text', text: userText }, ...(opts.attachments ?? [])] })
+  const extra: Block[] = []
+  if (history.length === 0) {
+    // first message of a session: volatile context goes here, so the system prompt stays byte-stable
+    const start = await hooks.run('SessionStart', { source: 'startup' }, { signal })
+    warnAll(fe, start.warnings)
+    let reminder = (await opts.reminder?.().catch(() => undefined)) ?? ''
+    if (start.output.length) reminder = reminder.replace(/\n?<\/system-reminder>$/, '') + `\n\nSessionStart hook output:\n${start.output.join('\n')}\n</system-reminder>`
+    if (reminder) extra.push({ type: 'text', text: reminder })
+  }
+  const submit = await hooks.run('UserPromptSubmit', { prompt: userText }, { signal })
+  warnAll(fe, submit.warnings)
+  if (submit.block !== undefined) {
+    fe.emit({ type: 'notice', level: 'warn', message: `Prompt blocked by a UserPromptSubmit hook: ${submit.block}` })
+    fe.emit({ type: 'turn_end', reason })
+    return reason
+  }
+  if (submit.output.length) extra.push({ type: 'text', text: `<system-reminder>\nUserPromptSubmit hook output:\n${submit.output.join('\n')}\n</system-reminder>` })
+  history.push({ role: 'user', content: [...extra, { type: 'text', text: userText }, ...(opts.attachments ?? [])] })
   let saved = history.length - 1
   const save = () => {
     for (; saved < history.length; saved++) if (history[saved].content.length) opts.persist?.(history[saved])
@@ -148,6 +179,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   try {
     const contextWindow = await provider.contextWindow(opts.model)
     let iteration = 0
+    let stopBlocks = 0 // consecutive Stop-hook blocks
     for (; ; iteration++) {
       if (signal.aborted) return (reason = 'aborted')
       if (iteration >= maxIterations) {
@@ -183,7 +215,19 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
       }
       const calls = content.filter((b): b is ToolCall => b.type === 'tool_use')
       save() // the finished assistant message; a crash during the tools leaves a dangling tool_use that loading repairs
-      if (!calls.length) return reason
+      if (!calls.length) {
+        const stop = await hooks.run('Stop', { stop_hook_active: stopBlocks > 0 }, { signal })
+        warnAll(fe, stop.warnings)
+        if (stop.block === undefined || stopBlocks >= MAX_STOP_BLOCKS) {
+          if (stop.block !== undefined) fe.emit({ type: 'notice', level: 'warn', message: `A Stop hook blocked ${MAX_STOP_BLOCKS} times in a row; stopping anyway.` })
+          return reason
+        }
+        stopBlocks++
+        history.push({ role: 'user', content: [{ type: 'text', text: `A Stop hook asks you to continue: ${stop.block}` }] })
+        save()
+        continue
+      }
+      stopBlocks = 0
       history.push({ role: 'user', content: await runTools(calls, opts) })
       save()
     }
@@ -211,6 +255,10 @@ export class AgentSession {
   private saveFailed = false
   constructor(private base: Omit<TurnOptions, 'signal'>) {
     this.base = { ...base, files: base.files ?? new FileState() }
+  }
+
+  setHooks(hooks: Hooks): void {
+    this.base = { ...this.base, hooks }
   }
 
   get busy(): boolean {

@@ -1,4 +1,4 @@
-import type { EventBatch, Item, ViewEvent, ViewState } from './types'
+import { isReminder, type EventBatch, type Item, type ViewEvent, type ViewState } from './types'
 
 type Reduced = Pick<ViewState, 'items' | 'todos' | 'usage' | 'busy' | 'workspace' | 'mode'>
 
@@ -54,7 +54,7 @@ type Msg = { role: 'user' | 'assistant'; content: ({ type: 'text'; text: string 
 export function messagesToEvents(messages: Msg[]): ViewEvent[] {
   return messages.flatMap((m): ViewEvent[] =>
     m.content.flatMap((b): ViewEvent[] => {
-      if (b.type === 'text') return [m.role === 'user' ? { type: 'user_message', text: b.text } : { type: 'text_delta', text: b.text }]
+      if (b.type === 'text') return m.role === 'user' && isReminder(b.text) ? [] : [m.role === 'user' ? { type: 'user_message', text: b.text } : { type: 'text_delta', text: b.text }]
       if (b.type === 'image') return []
       if (b.type === 'tool_use') return [{ type: 'tool_start', id: b.id, name: b.name, input: b.input }]
       return [{ type: 'tool_end', id: b.tool_use_id, result: b.content, isError: !!b.is_error }]

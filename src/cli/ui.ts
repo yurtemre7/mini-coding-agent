@@ -7,6 +7,7 @@ import type { ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { startSession } from '../core/session'
 import { isTrusted, trustWorkspace } from '../core/trust'
+import { buildReminder } from '../core/context'
 import { SYSTEM_PROMPT } from './headless'
 
 export interface Term {
@@ -82,7 +83,8 @@ export function terminalFrontend(t: Term): Frontend {
           return { allow: await yesNo('Approve this plan?') }
         }
         if (req.kind === 'trust') {
-          t.write(`${req.workspace}\nThis workspace's settings define allow rules that run without asking:\n${(req.rules ?? []).map((r) => `  ${r}`).join('\n')}\n`)
+          const list = (title: string, xs?: string[]) => (xs?.length ? `${title}\n${xs.map((r) => `  ${r}`).join('\n')}\n` : '')
+          t.write(`${req.workspace}\n${list("This workspace's settings define allow rules that run without asking:", req.rules)}${list("This workspace's settings define hooks that run shell commands:", req.hooks)}`)
           return { allow: await yesNo('Trust this workspace?') }
         }
         t.write(formatPermission(req) + '\n')
@@ -149,9 +151,9 @@ export async function runInteractive(o: {
   let trusted = !!o.trust || (await isTrusted(o.cwd, o.home))
   let built = await make(trusted)
   for (const w of built.warnings) term.write(`warn: ${w}\n`)
-  if (!trusted && built.ignoredAllow.length) {
+  if (!trusted && (built.ignoredAllow.length || built.ignoredHooks.length)) {
     // ask once; only a yes is recorded
-    if ((await fe.ask({ kind: 'trust', workspace: o.cwd, rules: built.ignoredAllow })).allow) {
+    if ((await fe.ask({ kind: 'trust', workspace: o.cwd, rules: built.ignoredAllow, hooks: built.ignoredHooks })).allow) {
       try {
         await trustWorkspace(o.cwd, o.home)
         built = await make((trusted = true))
@@ -161,7 +163,7 @@ export async function runInteractive(o: {
     }
   }
   const perms: Permissions = built.perms
-  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide })
+  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide, hooks: built.hooks, reminder: () => buildReminder(o.cwd, { home: o.home }) })
 
   const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
   session.load(saved.messages, saved.transcript)
@@ -186,6 +188,7 @@ export async function runInteractive(o: {
       await trustWorkspace(o.cwd, o.home)
       const fresh = await make(true)
       for (const r of fresh.perms.rules.allow) if (!perms.rules.allow.includes(r)) perms.rules.allow.push(r)
+      session.setHooks(fresh.hooks)
     }
   }
   term.write(`mca (${o.model}) - mode: ${perms.mode}. Type /help for commands.\n`)

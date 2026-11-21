@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { sealHistory } from './agent'
 import type { Message } from './provider/types'
+import { isReminder } from '../shared/types'
 
 const VERSION = 1
 export interface SessionMeta {
@@ -29,7 +30,7 @@ export function sessionDir(cwd: string, home = homedir()): string {
 }
 
 const titleOf = (m: Message): string =>
-  m.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  m.content.flatMap((b) => (b.type === 'text' && !isReminder(b.text) ? [b.text] : [])).join(' ').replace(/\s+/g, ' ').trim().slice(0, 80)
 
 /** Tolerant parse: unparseable lines (a crash mid-write) are skipped, an unknown version is refused. `damaged` = something was skipped or repaired. */
 export function parseTranscript(text: string): { meta: Meta; messages: Message[]; damaged: boolean } {
