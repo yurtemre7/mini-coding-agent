@@ -1,13 +1,13 @@
 # Design: single-session workbench (post-v0.1.0 roadmap, phase 1)
 
-Status: **draft for approval**. Interpretation note: "B)" was taken to mean approach B ("single-session workbench first") from the roadmap discussion. Local and client only; no backend services.
+Status: approved to proceed by the owner ("keep going with the other plans"); subscription providers deferred. P1.1+P1.2 plan: `docs/superpowers/plans/2026-11-21-workbench-p1-1-p1-2.md`. Interpretation note: "B)" was taken to mean approach B ("single-session workbench first") from the roadmap discussion. Local and client only; no backend services.
 
 ## Intent
 MCA v0.1.0 can run an agent but gives little help *supervising* it. Comparable tools (Claude Code desktop, Antigravity, Paseo, T3 Code) all let you see what changed, comment on it, and watch cost. Phase 1 makes one chat much easier to review and trust, and lays the foundations (a change set per turn, persistent checkpoints, a session id on events) that parallel agents need in phase 2.
 
 ## Goals
 1. **Diff panel**: per turn and cumulative, per-file unified diffs of what the agent changed (Write/Edit; Bash changes via a git-based snapshot when the workspace is a git repo). Per-line comments that are sent back to the agent as the next prompt. Per-file "revert this file".
-2. **Persistent checkpoints**: rewind survives restart and resume; bounded storage (size cap, oldest dropped, user told).
+2. **Persistent checkpoints**: rewind survives restart and resume; bounded storage (200 MB cap per chat, oldest turns dropped).
 3. **Usage meter**: tokens in/out and estimated cost per turn and per chat (price table per model; "unknown" when no price), plus the existing context-window bar.
 4. **Files and preview**: workspace file tree and a read-only viewer; clicking a path in a tool card opens it. Image attachments rendered in the transcript (already accepted on input).
 5. **Integrated terminal**: a user-driven shell pane in the workspace (separate from the agent's Bash).
@@ -33,7 +33,7 @@ Anything that lets the renderer read arbitrary files or run commands without mai
 Diff source, within B: (1) snapshot files in FileState checkpoints (covers only Write/Edit); (2) `git diff` against a per-turn shadow commit (covers Bash, needs git); (3) both: checkpoint data is the source of truth, git snapshot is added when available. **Chosen: 3**, because it never misses tool edits and also catches Bash changes when possible.
 
 ## Design sketch
-- `core/checkpoints.ts` persists per-turn before-images under `~/.mca/projects/<ws>/checkpoints/<session>/<turn>/` with a size cap (default 200 MB per workspace); `FileState` reads/writes through it. Resume rebuilds the stack from disk.
+- `core/checkpoints.ts` persists per-turn before-images under `~/.mca/projects/<ws>/checkpoints/<session>/<turn>/` with a size cap (default 200 MB per chat); `FileState` reads/writes through it. Resume rebuilds the stack from disk.
 - `core/changes.ts` computes `Change[]` (path, status, hunks) for a turn range from before-images vs current files; emits a `changes` AgentEvent after each turn.
 - Reducer gains `changes` and `usage` totals; renderer adds `DiffPanel`, `FileTree`, `FileViewer`, `UsagePill`, `TerminalPane`.
 - New channels: `changes:get`, `changes:revert`, `files:list`, `files:read`, `terminal:*`. Comments are plain text prompts built from selected lines: no new agent protocol.
