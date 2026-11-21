@@ -63,7 +63,11 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
       return print(files.length ? `Rewound the last turn. Restored: ${files.join(', ')}` : 'Rewound the last turn (it changed no files).')
     }
     case 'trust':
-      await env.trustWorkspace()
+      try {
+        await env.trustWorkspace()
+      } catch (e) {
+        return print((e as Error).message)
+      }
       return print(`Trusted ${env.workspace}. Its project allow rules are now active.`)
     default:
       return print(`/${name} is not available yet.`)

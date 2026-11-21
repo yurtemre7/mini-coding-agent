@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { readFileSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -80,12 +80,43 @@ const cases: [string, PermissionMode, any, unknown, any, Outcome][] = [
   ['bash deny exact', 'default', { deny: ['Bash(git push:*)'] }, Bash, { command: 'git push origin main' }, 'deny'],
   ['bash bare Bash allow', 'default', { allow: ['Bash'] }, Bash, { command: 'make' }, 'allow'],
   ['bash exact-string rule (session style)', 'default', { allow: ['Bash(make && make test)'] }, Bash, { command: 'make && make test' }, 'allow'],
-  ['backgrounded read-only is not read-only', 'plan', {}, Bash, { command: 'ls &' }, 'deny']
+  ['backgrounded read-only is not read-only', 'plan', {}, Bash, { command: 'ls &' }, 'deny'],
+  ['protected write in bypass -> allow (ruling)', 'bypassPermissions', {}, Write, { file_path: protectedFile, content: '' }, 'allow'],
+  ['explicit ask rule in bypass -> prompt', 'bypassPermissions', { ask: ['Write(**/*.lock)'] }, Write, { file_path: join(root, 'x.lock'), content: '' }, 'prompt'],
+  // deny-rule bypass attempts (all under bypassPermissions + deny Bash(rm:*))
+  ...['rm\t-rf x', 'echo $(rm x)', 'FOO=1 rm x', '(rm x)', '(rm)', '{ rm x; }', 'rm${IFS}x', "echo $'\\'' ; rm x ; echo $'\\''", 'echo `rm x`', 'eval rm x', 'bash -c "rm x"', '! rm x', 'A=1 B=2 rm x', 'echo "$(rm x)"'].map(
+    (command): [string, PermissionMode, any, unknown, any, Outcome] => [`deny evasion: ${command}`, 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command }, 'deny']
+  ),
+  ['deny does not over-match a different program', 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command: 'echo remove' }, 'allow'],
+  ['env-prefix strip lets allow match', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: 'CI=1 npm test' }, 'allow'],
+  ['allow never applies to opaque commands', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: "npm test $'x'" }, 'prompt'],
+  ['allow never applies to ${', 'default', { allow: ['Bash(echo:*)'] }, Bash, { command: 'echo ${HOME}' }, 'prompt'],
+  ['allow never applies to eval', 'default', { allow: ['Bash(eval:*)'] }, Bash, { command: 'eval ls' }, 'prompt'],
+  // read-only auto-allow leaks
+  ...['cat $HOME/.ssh/id_rsa', 'cat ~root/.ssh/x', 'cat .e*', 'cat .en[v]', 'cat .en?', 'cat {.env,x}', 'rg --file=/etc/x', 'rg -f/etc/x', 'rg --pre=./x foo', 'rg --hostname-bin=./x foo', 'rg --file /etc/x', 'tree -o out.txt'].map(
+    (command): [string, PermissionMode, any, unknown, any, Outcome] => [`read-only leak: ${command}`, 'default', {}, Bash, { command }, 'prompt']
+  ),
+  ['WebFetch domain rule allows host and subdomain', 'default', { allow: ['WebFetch(domain:example.com)'] }, { name: 'WebFetch', readOnly: true }, { url: 'https://docs.example.com/a' }, 'allow'],
+  ['WebFetch domain rule rejects lookalike', 'default', { allow: ['WebFetch(domain:example.com)'] }, { name: 'WebFetch', readOnly: false }, { url: 'https://evilexample.com/a' }, 'prompt'],
+  ['WebFetch deny domain', 'bypassPermissions', { deny: ['WebFetch(domain:evil.com)'] }, { name: 'WebFetch', readOnly: false }, { url: 'https://evil.com/' }, 'deny'],
+  ['mcp tool allow by exact name', 'default', { allow: ['mcp__srv__do'] }, { name: 'mcp__srv__do', readOnly: false }, {}, 'allow'],
+  ['mcp tool other name prompts', 'default', { allow: ['mcp__srv__do'] }, { name: 'mcp__srv__other', readOnly: false }, {}, 'prompt'],
+  ['mcp tool deny', 'bypassPermissions', { deny: ['mcp__srv__do'] }, { name: 'mcp__srv__do', readOnly: false }, {}, 'deny']
 ]
 
 describe('decide() mode x rule x tool matrix', () => {
   it.each(cases)('%s', async (_l, mode, rules, tool, input, expected) => {
     expect(await outcome(mk(mode, rules), tool, input)).toBe(expected)
+  })
+
+  it('allow rules need the real path: a symlink inside the workspace cannot borrow Edit(src/**)', async () => {
+    const out = tmp()
+    mkdirSync(join(root, 'src'), { recursive: true })
+    symlinkSync(out, join(root, 'src/link'))
+    const target = join(root, 'src/link/x.txt')
+    expect(await outcome(mk('default', { allow: ['Edit(src/**)'] }), Write, { file_path: target, content: '' })).toBe('prompt')
+    expect(await outcome(mk('default', { allow: ['Edit(src/**)'] }), Write, { file_path: join(root, 'src/ok.txt'), content: '' })).toBe('allow')
+    expect(await outcome(mk('bypassPermissions', { deny: ['Edit(src/**)'] }), Write, { file_path: target, content: '' })).toBe('deny') // deny keeps lexical match
   })
 
   it('plan-mode denial names ExitPlanMode', async () => {
@@ -147,6 +178,18 @@ describe('prompting', () => {
     const r = await p.decide(Bash, { command: 'npm test' }, ctxFor())
     expect(r).toContain('--permission-mode')
     expect(r).toContain('--allowed-tools')
+  })
+
+  it('an aborted queued prompt reports Aborted, not a user decline', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    expect(await mk('default').decide(Bash, { command: 'a1' }, { ...ctxFor(), signal: ac.signal })).toBe('Aborted.')
+  })
+
+  it('session prefix with a quote falls back to the exact string', async () => {
+    const p = mk('default')
+    await p.decide(Bash, { command: `git "commit" -m x` }, ctxFor(async () => ({ allow: true, scope: 'session' })))
+    expect(p.session).toEqual([`Bash(git "commit" -m x)`])
   })
 
   it('denial feedback is returned to the model', async () => {
@@ -215,7 +258,7 @@ describe('prompting', () => {
     const second = p.decide(Bash, { command: 'b1' }, queued)
     ac.abort()
     await first
-    expect(await second).toContain('declined')
+    expect(await second).toBe('Aborted.')
     expect(shown).toBe(0)
   })
 })
@@ -267,6 +310,21 @@ describe('settings and trust', () => {
     expect(await isTrusted(ws, home)).toBe(false)
     await trustWorkspace(ws, home)
     expect(await isTrusted(ws, home)).toBe(true)
+  })
+
+  it('untrusted project keys do not pass through; trusted ones do', async () => {
+    const { home, ws } = setup()
+    writeFileSync(join(ws, '.mca/settings.json'), JSON.stringify({ hooks: { x: 1 } }))
+    expect((await loadSettings(ws, { trusted: false, home })).rest).toEqual({ model: 'x' })
+    expect((await loadSettings(ws, { trusted: true, home })).rest).toEqual({ model: 'x', hooks: { x: 1 } })
+  })
+
+  it('corrupt state.json is kept: trust is refused, not overwritten', async () => {
+    const { home, ws } = setup()
+    writeFileSync(join(home, '.mca/state.json'), '{ broken')
+    await expect(trustWorkspace(ws, home)).rejects.toThrow(/corrupt/)
+    expect(readFileSync(join(home, '.mca/state.json'), 'utf8')).toBe('{ broken')
+    expect(await isTrusted(ws, home)).toBe(false)
   })
 
   it('--allowed-tools rules are session allow rules', async () => {

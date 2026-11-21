@@ -87,7 +87,10 @@ export function terminalFrontend(t: Term): Frontend {
         t.write(formatPermission(req) + '\n')
         for (;;) {
           const c = parseChoice(await t.readLine('> '))
-          if (!c) continue
+          if (!c) {
+            t.write('Enter 1, 2 or 3.\n')
+            continue
+          }
           if (c.allow) return c
           const feedback = (await t.readLine('What should the model do instead? (Enter to skip) ')).trim()
           return { allow: false, ...(feedback && { feedback }) }
@@ -145,8 +148,12 @@ export async function runInteractive(o: {
   if (!trusted && built.ignoredAllow.length) {
     // ask once; only a yes is recorded
     if ((await fe.ask({ kind: 'trust', workspace: o.cwd, rules: built.ignoredAllow })).allow) {
-      await trustWorkspace(o.cwd, o.home)
-      built = await make((trusted = true))
+      try {
+        await trustWorkspace(o.cwd, o.home)
+        built = await make((trusted = true))
+      } catch (e) {
+        term.write(`warn: ${(e as Error).message}\n`)
+      }
     }
   }
   const perms: Permissions = built.perms
@@ -158,7 +165,7 @@ export async function runInteractive(o: {
     const act = ctrl.press({ busy: session.busy, hasInput: rl.line.length > 0 })
     if (act === 'abort') (session.abort(), question?.abort(), term.write('\n(interrupted)\n'))
     else if (act === 'clear') rl.write(null as any, { ctrl: true, name: 'u' })
-    else if (act === 'warn') term.write('\n(Press Ctrl+C again within 2 s to exit)\n')
+    else if (act === 'warn') (term.write('\n(Press Ctrl+C again within 2 s to exit)\n'), rl.prompt(true))
     else (exiting = true, rl.close())
   })
 

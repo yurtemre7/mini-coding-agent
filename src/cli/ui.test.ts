@@ -26,6 +26,11 @@ describe('permission prompt', () => {
     expect(await terminalFrontend(term(['3', 'use Edit'])).ask(req)).toEqual({ allow: false, feedback: 'use Edit' })
     expect(await terminalFrontend(term(['3', ''])).ask(req)).toEqual({ allow: false })
   })
+  it('ask(): invalid answer says what to enter', async () => {
+    const t = term(['x', '1'])
+    await terminalFrontend(t).ask(req)
+    expect(t.out).toContain('Enter 1, 2 or 3.')
+  })
   it('ask(): closed input is a denial', async () => {
     expect(await terminalFrontend(term([])).ask(req)).toMatchObject({ allow: false })
   })
@@ -88,9 +93,11 @@ describe('runInteractive demo (piped streams)', () => {
     output.on('data', (d) => (out += d))
     const done = runInteractive({ provider, model: 'm', cwd: dir, input, output, home })
     let seen = 0 // everything before `seen` was already handled
+    const waiters: (() => void)[] = []
+    output.on('data', () => waiters.splice(0).forEach((w) => w()))
+    // wait until `marker` was printed AND the output ends with a fresh "> " prompt, so input is never typed ahead of a question
     const reply = async (marker: string, line: string) => {
-      for (let i = 0; i < 300 && !out.slice(seen).includes(marker); i++) await new Promise((r) => setTimeout(r, 10))
-      expect(out.slice(seen)).toContain(marker)
+      while (!(out.slice(seen).includes(marker) && out.endsWith('> '))) await new Promise<void>((r) => waiters.push(r))
       seen = out.length
       input.write(line + '\n')
     }

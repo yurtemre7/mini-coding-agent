@@ -7,7 +7,8 @@ export interface AppInfo {
 }
 
 // Minimal versions: later milestones (permissions, plan mode, trust, todos) extend these.
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions'
+export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'] as const
+export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
 export interface Todo {
   content: string

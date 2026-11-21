@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { PermissionMode } from '../shared/types'
+import { PERMISSION_MODES, type PermissionMode } from '../shared/types'
 
 export interface Rules {
   allow: string[]
@@ -14,10 +14,9 @@ export interface Settings {
   defaultMode?: PermissionMode
   projectAllow: string[] // project-level allow rules (applied only when the workspace is trusted)
   warnings: string[]
-  rest: Record<string, unknown> // other keys pass through (hooks, MCP, model: later milestones)
+  rest: Record<string, unknown> // other keys pass through (hooks, MCP, model: later milestones); project keys only when trusted
 }
 
-const MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions']
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 
 async function readJson(file: string, warnings: string[]): Promise<Record<string, any> | undefined> {
@@ -52,9 +51,9 @@ export async function loadSettings(cwd: string, o: { trusted: boolean; home?: st
   const layers = [...(user ? [{ j: user, project: false }] : []), ...project.map((j) => ({ j, project: true }))]
   for (const { j, project: isProject } of layers) {
     for (const k of ['allow', 'deny', 'ask'] as const) if (k !== 'allow' || !isProject || o.trusted) out.permissions[k].push(...perm(j, k))
-    if (MODES.includes(j.permissions?.defaultMode) && (!isProject || o.trusted)) out.defaultMode = j.permissions.defaultMode
+    if ((PERMISSION_MODES as readonly string[]).includes(j.permissions?.defaultMode) && (!isProject || o.trusted)) out.defaultMode = j.permissions.defaultMode
     const { permissions: _p, ...others } = j
-    Object.assign(out.rest, others)
+    if (!isProject || o.trusted) Object.assign(out.rest, others) // untrusted project keys (future hooks/MCP) must not skip the trust gate
   }
   return out
 }
