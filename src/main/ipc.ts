@@ -18,8 +18,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     desktop: (title, body) => {
       if (Notification.isSupported()) new Notification({ title, body }).show()
     },
-    focused: () => !!getWindow()?.isFocused(),
-    url: process.env.MCA_NOTIFY_URL // opt-in: an ntfy.sh topic or similar push endpoint, to get these on a phone
+    focused: () => !!getWindow()?.isFocused()
   })
   const c = new Controller({
     notify,

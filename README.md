@@ -88,4 +88,4 @@ Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tag
 
 ## Notifications
 
-The desktop app shows a system notification (while the window is in the background) when the model looks stuck repeating the same tool calls, when a permission prompt has waited a minute, and when a turn has run for ten minutes. To get the same messages on your phone, set `MCA_NOTIFY_URL` to a push endpoint you control, for example an [ntfy](https://ntfy.sh) topic URL (`MCA_NOTIFY_URL=https://ntfy.sh/<your-secret-topic> npm run dev`). MCA sends only the short message, never code, paths or prompts. Treat the topic name like a password.
+The desktop app shows a system notification (while the window is in the background) when the model looks stuck repeating the same tool calls, when a permission prompt has waited a minute, and when a turn has run for ten minutes. Phone push is not supported yet.
