@@ -41,7 +41,7 @@ const happy = [
 describe('AnthropicProvider.listModels', () => {
   it('collects ids and maps 401 to an error naming the env var', async () => {
     const ok = { messages: {}, models: { list: () => gen([{ id: 'a' }, { id: 'b' }]) } } as unknown as AnthropicLike
-    expect(await new AnthropicProvider('k', { client: ok }).listModels()).toEqual(['a', 'b'])
+    expect(await new AnthropicProvider('k', { client: ok }).listModels()).toEqual([{ id: 'a' }, { id: 'b' }])
     const bad = { messages: {}, models: { list: () => gen([], apiError(401)) } } as unknown as AnthropicLike
     await expect(new AnthropicProvider('k', { client: bad }).listModels()).rejects.toThrow(/ANTHROPIC_API_KEY/)
   })

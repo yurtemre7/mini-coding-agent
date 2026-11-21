@@ -121,9 +121,9 @@ describe('OpenRouterProvider', () => {
   })
 
   it('listModels returns sorted ids from the same cached fetch; 401 names the env var', async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'b', context_length: 1 }, { id: 'a', context_length: 2 }] })))
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'b:free', context_length: 1 }, { id: 'a', context_length: 2 }] })))
     const p = new OpenRouterProvider('k', { fetch })
-    expect(await p.listModels()).toEqual(['a', 'b'])
+    expect(await p.listModels()).toEqual([{ id: 'a' }, { id: 'b:free', free: true }])
     expect(await p.contextWindow('a')).toBe(2)
     expect(fetch).toHaveBeenCalledTimes(1)
     const denied = new OpenRouterProvider('k', { fetch: vi.fn().mockResolvedValue(new Response('no', { status: 401 })) })

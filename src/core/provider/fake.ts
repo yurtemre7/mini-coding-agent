@@ -1,4 +1,4 @@
-import type { ModelProvider, StreamEvent, StreamRequest } from './types'
+import type { ModelInfo, ModelProvider, StreamEvent, StreamRequest } from './types'
 
 type Turn = StreamEvent[] | ((req: StreamRequest) => StreamEvent[] | AsyncIterable<StreamEvent>)
 
@@ -15,7 +15,7 @@ export class FakeProvider implements ModelProvider {
     return this.window
   }
 
-  async listModels(): Promise<string[]> {
+  async listModels(): Promise<ModelInfo[]> {
     return []
   }
 

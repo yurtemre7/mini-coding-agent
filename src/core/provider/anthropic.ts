@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { anthropicContextWindow } from './models'
 import { authMessage, ProviderError, withRetry } from './retry'
-import type { Message, ModelProvider, StopReason, StreamEvent, StreamRequest } from './types'
+import type { Message, ModelInfo, ModelProvider, StopReason, StreamEvent, StreamRequest } from './types'
 
 // The slice of the SDK we use, so tests can inject a fake.
 export interface AnthropicLike {
@@ -55,10 +55,10 @@ export class AnthropicProvider implements ModelProvider {
     return anthropicContextWindow(model)
   }
 
-  async listModels(): Promise<string[]> {
+  async listModels(): Promise<ModelInfo[]> {
     try {
-      const ids: string[] = []
-      for await (const m of this.client.models.list()) ids.push(m.id) // the SDK pages automatically
+      const ids: ModelInfo[] = []
+      for await (const m of this.client.models.list()) ids.push({ id: m.id }) // the SDK pages automatically
       return ids
     } catch (e) {
       throw toProviderError(e)

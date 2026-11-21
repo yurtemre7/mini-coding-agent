@@ -24,10 +24,13 @@ export interface StreamRequest {
   signal: AbortSignal
 }
 
+import type { ModelInfo } from '../../shared/types'
+export type { ModelInfo }
+
 export interface ModelProvider {
   id: 'anthropic' | 'openrouter' | 'fake'
   contextWindow(model: string): Promise<number>
-  /** Model ids this provider offers; throws ProviderError (401/403 = bad key). */
-  listModels?(): Promise<string[]>
+  /** Models this provider offers; throws ProviderError (401/403 = bad key). */
+  listModels?(): Promise<ModelInfo[]>
   stream(req: StreamRequest): AsyncIterable<StreamEvent>
 }

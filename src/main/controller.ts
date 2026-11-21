@@ -11,7 +11,7 @@ import { builtinTools } from '../core/registry'
 import { listSessions, loadSession, Transcript } from '../core/session'
 import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -42,7 +42,7 @@ export class Controller {
   private pending: ViewState['pending'] = null
   private resolvePending?: (d: Decision) => void
   private cache?: { id: ProviderId; p: ModelProvider }
-  private modelLists = new Map<ProviderId, string[]>()
+  private modelLists = new Map<ProviderId, ModelInfo[]>()
   private keys: NonNullable<ControllerDeps['keys']>
 
   constructor(private d: ControllerDeps) {
@@ -82,7 +82,7 @@ export class Controller {
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
-  async models(id: ProviderId): Promise<{ models: string[]; error?: string; rejected?: boolean }> {
+  async models(id: ProviderId): Promise<{ models: ModelInfo[]; error?: string; rejected?: boolean }> {
     const hit = this.modelLists.get(id)
     if (hit) return { models: hit }
     try {
@@ -93,7 +93,7 @@ export class Controller {
       return { models }
     } catch (e) {
       const status = e instanceof ProviderError ? e.status : undefined
-      return { models: [DEFAULT_MODELS[id].main, DEFAULT_MODELS[id].fast], error: (e as Error).message, ...(status === 401 || status === 403 ? { rejected: true } : {}) }
+      return { models: [{ id: DEFAULT_MODELS[id].main }, { id: DEFAULT_MODELS[id].fast }], error: (e as Error).message, ...(status === 401 || status === 403 ? { rejected: true } : {}) }
     }
   }
 

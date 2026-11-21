@@ -74,9 +74,9 @@ describe('Controller', () => {
     let calls = 0
     const home = await mkdtemp(join(tmpdir(), 'mca-home-'))
     const listed = new FakeProvider([])
-    listed.listModels = async () => (calls++, ['m1', 'm2'])
+    listed.listModels = async () => (calls++, [{ id: 'm1' }, { id: 'm2', free: true }])
     const c = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async (p) => (p === 'anthropic' ? 'k' : null), set: async () => {}, source: async () => 'env' }, makeProvider: () => listed })
-    expect(await c.models('anthropic')).toEqual({ models: ['m1', 'm2'] })
+    expect(await c.models('anthropic')).toEqual({ models: [{ id: 'm1' }, { id: 'm2', free: true }] })
     await c.models('anthropic')
     expect(calls).toBe(1)
     expect((await c.getSettings()).keySource).toEqual({ anthropic: 'env', openrouter: null })
@@ -87,7 +87,7 @@ describe('Controller', () => {
     const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, makeProvider: () => denied })
     const r = await c2.models('anthropic')
     expect(r).toMatchObject({ rejected: true, error: 'Authentication failed' })
-    expect(r.models).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5'])
+    expect(r.models).toEqual([{ id: 'claude-sonnet-5-5' }, { id: 'claude-haiku-5-5' }])
   })
   it('/mode and unknown commands report through notices', async () => {
     const { c } = await setup([[]])

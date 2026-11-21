@@ -1,8 +1,11 @@
 import { OPENROUTER_DEFAULT_CONTEXT_WINDOW } from './models'
 import { authMessage, ProviderError, withRetry } from './retry'
-import type { Message, ModelProvider, StopReason, StreamEvent, StreamRequest } from './types'
+import type { Message, ModelInfo, ModelProvider, StopReason, StreamEvent, StreamRequest } from './types'
 
 const BASE = 'https://openrouter.ai/api/v1'
+
+/** OpenRouter marks a zero-cost model with a `:free` suffix on its id (e.g. `baidu/ernie-5.5-flash-preview:free`). */
+export const isFreeModel = (id: string): boolean => /:free$/.test(id)
 
 /** Canonical messages -> OpenAI chat format. */
 export function toOpenAI(system: string, messages: Message[]): unknown[] {
@@ -131,9 +134,11 @@ export class OpenRouterProvider implements ModelProvider {
     return m.find((x) => x.id === model)?.context_length ?? OPENROUTER_DEFAULT_CONTEXT_WINDOW
   }
 
-  async listModels(): Promise<string[]> {
+  async listModels(): Promise<ModelInfo[]> {
     try {
-      return (await this.catalog()).map((m) => m.id).sort()
+      return (await this.catalog())
+        .map((m) => ({ id: m.id, ...(isFreeModel(m.id) && { free: true }) }))
+        .sort((a, b) => a.id.localeCompare(b.id))
     } catch (e) {
       this.windows = undefined // let the next attempt retry
       throw e instanceof ProviderError ? e : new ProviderError(`Could not list OpenRouter models: ${(e as Error).message}`, 502)

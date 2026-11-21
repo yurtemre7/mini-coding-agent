@@ -1,3 +1,9 @@
+/** One entry of a provider's model list. `free` marks a model that costs nothing (OpenRouter's `:free` variants). */
+export interface ModelInfo {
+  id: string
+  free?: boolean
+}
+
 export interface AppInfo {
   name: string
   shortName: string
@@ -128,7 +134,7 @@ export interface IpcContract {
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
     'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
-    'settings:models': { args: [provider: ProviderId]; result: { models: string[]; error?: string; rejected?: boolean } }
+    'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
   }
   events: {
