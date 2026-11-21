@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { sealHistory } from './agent'
@@ -107,6 +107,7 @@ export function loadSession(cwd: string, id: string, meta: () => SessionMeta, ho
     // fold skipped lines, rewinds and repairs into a clean file, so later appends never land after a half-written line
     const tmp = `${path}.${process.pid}.tmp`
     writeFileSync(tmp, [m, ...messages.map((x) => ({ type: 'message', ...x }))].map((r) => JSON.stringify(r)).join('\n') + '\n', { mode: 0o600 })
+    copyFileSync(path, `${path}.bak`) // keep the damaged original next to it; nothing unreadable is lost for good
     renameSync(tmp, path)
   }
   return { transcript: new Transcript(cwd, meta, { home, id, started: true }), messages }
