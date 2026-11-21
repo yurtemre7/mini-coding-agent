@@ -124,7 +124,25 @@ describe('Controller', () => {
     await expect(c.openRecent('/etc')).rejects.toThrow(/Unknown workspace/)
     expect(await c.recent()).toContain(ws)
     await c.openRecent(ws)
-    expect(c.getState().items).toEqual([]) // a workspace switch starts a new chat
+    expect(c.getState().items).toEqual([{ kind: 'user', text: 'second' }, { kind: 'text', text: 'done' }]) // a workspace switch continues the newest saved chat
+  })
+  it('/resume lists saved chats newest first and opens one by number or id; bad arguments say so', async () => {
+    const { c, idle } = await setup([[]])
+    ;(c as any).d.makeProvider = () => new FakeProvider([say, say])
+    await c.command('/resume')
+    expect(c.getState().items.at(-1)).toMatchObject({ message: 'No saved chats in this workspace yet.' })
+    c.send('first chat')
+    await idle()
+    c.newChat()
+    c.send('second chat')
+    await idle()
+    await c.command('/resume')
+    const list = (c.getState().items.at(-1) as any).message as string
+    expect(list.indexOf('second chat')).toBeLessThan(list.indexOf('first chat'))
+    await c.command('/resume 2')
+    expect(c.getState().items[0]).toEqual({ kind: 'user', text: 'first chat' })
+    await c.command('/resume 9')
+    expect(c.getState().items.at(-1)).toMatchObject({ message: expect.stringMatching(/No chat matches/) })
   })
   it('remembers provider, model and effort and reopens the last workspace on launch', async () => {
     const { c, ws, store } = await setup([[]])

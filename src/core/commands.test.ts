@@ -169,3 +169,14 @@ describe('custom commands', () => {
     expect(out.at(-1)).toContain('dflt')
   })
 })
+
+describe('/resume', () => {
+  it('delegates to the frontend, and explains the CLI flags where there is none', async () => {
+    const { env, out } = setup([])
+    await runCommand('resume', ' 2 ', env)
+    expect(out.at(-1)).toMatch(/--continue/)
+    await runCommand('resume', ' 2 ', { ...env, resume: async (a) => `opened ${a}` })
+    expect(out.at(-1)).toBe('opened 2')
+    expect(BUILTINS).toContain('resume')
+  })
+})

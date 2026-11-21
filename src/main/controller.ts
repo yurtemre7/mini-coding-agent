@@ -212,6 +212,8 @@ export class Controller {
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
     this.announce()
+    const [latest] = this.chats()
+    if (latest) this.openChat(latest.id) // a workspace switch continues where that workspace left off
     for (const w of built.warnings) this.notice('warn', w)
   }
 
@@ -291,7 +293,7 @@ export class Controller {
   }
 
   /** Slash commands the renderer may run. /exit is CLI-only; /trust goes through the trust prompt below. */
-  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'mcp']
+  static readonly COMMANDS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'resume', 'mcp']
 
   async command(line: string): Promise<void> {
     const s = this.session
@@ -302,12 +304,25 @@ export class Controller {
     if (p.name === 'trust') return this.trust()
     const out: string[] = []
     const before = s.history.length
-    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, mcpStatus: () => this.view.mcp, models: this.modelEnv() })
+    await runCommand(p.name, p.args, { session: s, perms: this.perms, workspace: this.workspace, print: (m) => void out.push(m), exit: () => {}, trustWorkspace: async () => {}, resume: (a) => this.resume(a), mcpStatus: () => this.view.mcp, models: this.modelEnv() })
     if (p.name === 'rewind' && s.history.length < before) this.apply({ type: 'rewind' })
     if (p.name === 'clear' && !s.busy) this.apply({ type: 'clear' })
     if (p.name === 'rewind') await this.refreshChanges() // the previous turn's changes are now the newest
     this.announce() // mode may have changed
     for (const m of out) this.notice('info', m)
+  }
+
+  /** `/resume`: no argument lists this workspace's chats (newest first); a number or id opens one. */
+  private async resume(arg: string): Promise<string> {
+    const chats = this.chats()
+    if (!arg) {
+      if (!chats.length) return 'No saved chats in this workspace yet.'
+      return ['Saved chats (newest first):', ...chats.slice(0, 20).map((c, i) => `  ${i + 1}. ${c.title} (${c.messageCount} messages)`), 'Open one with /resume <number>.'].join('\n')
+    }
+    const chat = /^\d+$/.test(arg) ? chats[Number(arg) - 1] : chats.find((c) => c.id === arg)
+    if (!chat) return `No chat matches "${arg.slice(0, 40)}". Run /resume to list them.`
+    this.openChat(chat.id)
+    return `Opened "${chat.title}".`
   }
 
   private modelEnv() {
