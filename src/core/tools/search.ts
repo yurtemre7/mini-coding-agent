@@ -4,6 +4,7 @@ import { basename, dirname } from 'node:path'
 import { rgPath } from '@vscode/ripgrep'
 import { z } from 'zod'
 import { exec } from '../exec'
+import { loginEnv } from '../env'
 import { resolvePath } from '../paths'
 import { truncate, type Tool } from '../tool'
 
@@ -15,7 +16,7 @@ export function rgBinary(): string {
 }
 
 async function rg(args: string[], cwd: string, signal: AbortSignal): Promise<string> {
-  const r = await exec(rgBinary(), args, { cwd, signal, timeoutMs: 60_000, maxChars: 200_000 })
+  const r = await exec(rgBinary(), args, { cwd, signal, env: await loginEnv(), timeoutMs: 60_000, maxChars: 200_000 })
   if (r.code === 1) return 'No matches.'
   if (r.code !== 0) throw new Error(r.stderr.trim() || (r.timedOut ? 'rg timed out after 60s.' : `rg failed (${r.code}).`))
   return r.stdout.replace(/^\.\//gm, '')
@@ -41,7 +42,7 @@ export const Glob: Tool<z.infer<typeof globSchema>> = {
   async run({ pattern, path }, ctx) {
     const t = await target(ctx.cwd, path)
     if (t.arg !== '.') throw new Error(`${resolvePath(ctx.cwd, path!)} is a file, not a directory.`)
-    const out = await rg(['--files', '--hidden', '-g', pattern, '-g', '!.git', '--sortr', 'modified', '.'], t.dir, ctx.signal)
+    const out = await rg(['--files', '--hidden', '--no-require-git', '-g', pattern, '-g', '!.git', '--sortr', 'modified', '.'], t.dir, ctx.signal)
     if (out === 'No matches.') return out
     const files = out.split('\n').filter(Boolean)
     return files.slice(0, 100).join('\n') + (files.length > 100 ? `\n\n(${files.length - 100} more files omitted; narrow the pattern or path.)` : '')
@@ -64,7 +65,7 @@ export const Grep: Tool<z.infer<typeof grepSchema>> = {
   async run({ pattern, path, glob, output_mode, ignore_case }, ctx) {
     const t = await target(ctx.cwd, path)
     const content = output_mode === 'content'
-    const args = ['--hidden', '-g', '!.git', ...(content ? ['-n', '--no-heading', '--max-columns', '300'] : ['-l']), ...(ignore_case ? ['-i'] : []), ...(glob ? ['-g', glob] : []), '-e', pattern, '--', t.arg]
+    const args = ['--hidden', '--no-require-git', '-g', '!.git', ...(content ? ['-n', '--with-filename', '--no-heading', '--max-columns', '300'] : ['-l']), ...(ignore_case ? ['-i'] : []), ...(glob ? ['-g', glob] : []), '-e', pattern, '--', t.arg]
     return truncate(await rg(args, t.dir, ctx.signal), 20_000)
   }
 }

@@ -26,6 +26,11 @@ describe('paths', () => {
       expect(isProtectedPath(resolve(dir, p))).toBe(true)
     for (const p of ['src/a.ts', '.mca/notes.md', '.gitignore']) expect(isProtectedPath(join(dir, p))).toBe(false)
   })
+  it('protected check ignores case (case-insensitive APFS)', () => {
+    if (process.platform !== 'darwin') return
+    for (const p of ['.GIT/hooks/x', '.Claude/Settings.json', '.MCP.json']) expect(isProtectedPath(resolve(dir, p))).toBe(true)
+    expect(isProtectedPath(join(homedir(), '.MCA/x'))).toBe(true)
+  })
   it('protected check sees through a symlink', () => {
     mkdirSync(join(dir, '.git'))
     symlinkSync(join(dir, '.git'), join(dir, 'gitlink'))

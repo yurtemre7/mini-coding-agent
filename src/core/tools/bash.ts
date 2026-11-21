@@ -41,12 +41,17 @@ export const Bash: Tool<z.infer<typeof schema>> = {
       merge: true,
       env: { ...(await loginEnv()), MCA_CWD_FILE: cwdFile, GIT_TERMINAL_PROMPT: '0', PAGER: 'cat', GIT_PAGER: 'cat' }
     })
-    const next = (await readFile(cwdFile, 'utf8').catch(() => '')).trim()
-    await rm(cwdFile, { force: true })
+    let next = ''
+    try {
+      next = (await readFile(cwdFile, 'utf8').catch(() => '')).trim()
+    } finally {
+      await rm(cwdFile, { force: true })
+    }
     if (next && existsSync(next)) ctx.setCwd(next)
     let out = notice + r.stdout
     if (r.timedOut) out += `\n[Command timed out after ${ms / 1000}s and was killed. Output above is partial.]`
     else if (r.aborted) out += '\n[Command was interrupted.]'
+    else if (r.signal) out += `\nTerminated by signal ${r.signal}`
     else if (r.code !== 0) out += `\nExit code ${r.code}`
     return out
   }

@@ -21,20 +21,23 @@ export function realpathNearest(p: string): string {
   }
 }
 
+// APFS is case-insensitive but realpath keeps the input's case, so `.GIT/x` must still match
+const fold = (s: string): string => (process.platform === 'darwin' ? s.toLowerCase() : s)
+
 export function isInsideWorkspace(workspace: string, p: string): boolean {
-  const rel = relative(realpathNearest(workspace), realpathNearest(p))
+  const rel = relative(fold(realpathNearest(workspace)), fold(realpathNearest(p)))
   return rel !== '..' && !rel.startsWith('..' + sep)
 }
 
 /** Files that could grant the agent permissions or run code: always prompt for writes (except bypassPermissions). */
 export function isProtectedPath(p: string): boolean {
-  const real = realpathNearest(p)
+  const real = fold(realpathNearest(p))
   const parts = real.split(sep)
   const name = parts.at(-1) ?? ''
   const parent = parts.at(-2)
   if (parts.includes('.git')) return true
   if (name === '.mcp.json') return true
   if ((parent === '.mca' || parent === '.claude') && /^settings.*\.json$/.test(name)) return true
-  const mca = join(realpathNearest(homedir()), '.mca')
+  const mca = join(fold(realpathNearest(homedir())), '.mca')
   return real === mca || real.startsWith(mca + sep)
 }

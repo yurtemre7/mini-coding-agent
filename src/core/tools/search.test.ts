@@ -9,7 +9,7 @@ let dir: string
 const glob = (i: object) => Glob.run(i as any, testCtx(dir))
 const grep = (i: object) => Grep.run(i as any, testCtx(dir))
 
-beforeAll(async () => {
+beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'mca-search-'))
   mkdirSync(join(dir, 'src'))
   mkdirSync(join(dir, 'ignored'))
@@ -21,7 +21,6 @@ beforeAll(async () => {
   writeFileSync(join(dir, 'src/b.md'), 'Needle docs\n')
   for (let i = 0; i < 105; i++) writeFileSync(join(dir, `f${i}.txt`), 'x')
   utimesSync(join(dir, 'src/a.ts'), new Date(), new Date(Date.now() + 60_000)) // newest
-  await import('node:child_process').then((c) => c.execFileSync('git', ['init', '-q'], { cwd: dir })) // rg honours .gitignore only inside a repo
 })
 
 describe('Glob', () => {

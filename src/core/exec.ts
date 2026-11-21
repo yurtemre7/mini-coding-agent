@@ -12,6 +12,7 @@ export interface ExecResult {
   stdout: string
   stderr: string
   code: number | null
+  signal?: NodeJS.Signals | null
   timedOut: boolean
   aborted: boolean
 }
@@ -69,7 +70,7 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
     const onAbort = () => ((aborted = true), kill())
     if (o.signal?.aborted) onAbort()
     else o.signal?.addEventListener('abort', onAbort, { once: true })
-    const finish = (code: number | null) => {
+    const finish = (code: number | null, signal?: NodeJS.Signals | null) => {
       clearTimeout(timer)
       // killTimer stays armed: group members that ignored SIGTERM still get SIGKILL
       o.signal?.removeEventListener('abort', onAbort)
@@ -77,13 +78,13 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
       setTimeout(() => {
         child.stdout.destroy()
         child.stderr.destroy()
-        resolve({ stdout: out.toString().replace(ANSI, ''), stderr: o.merge ? '' : err.toString().replace(ANSI, ''), code, timedOut, aborted })
+        resolve({ stdout: out.toString().replace(ANSI, ''), stderr: o.merge ? '' : err.toString().replace(ANSI, ''), code, signal, timedOut, aborted })
       }, 100)
     }
     child.on('error', (e) => {
       err.push(e.message)
       finish(null)
     })
-    child.on('exit', (code) => finish(code))
+    child.on('exit', (code, sig) => finish(code, sig))
   })
 }

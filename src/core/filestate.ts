@@ -36,7 +36,7 @@ export class FileState {
 
   /** Undoes the newest turn's file changes. Returns the restored paths, or undefined when there is nothing to rewind. */
   async rewind(): Promise<string[] | undefined> {
-    const entry = this.stack.pop()
+    const entry = this.stack.at(-1)
     if (!entry) return undefined
     for (const [path, bytes] of entry) {
       if (bytes === null) await rm(path, { force: true })
@@ -46,6 +46,7 @@ export class FileState {
       }
       this.reads.delete(path)
     }
+    this.stack.pop() // only after every file was restored, so a failed rewind can be retried
     return [...entry.keys()]
   }
 }

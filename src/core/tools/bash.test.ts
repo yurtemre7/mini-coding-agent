@@ -25,6 +25,10 @@ describe('Bash', () => {
     expect(await run(ctx, 'echo out; echo err >&2')).toContain('out')
     expect(await run(ctx, 'echo hi; exit 3')).toBe('hi\n\nExit code 3')
   })
+  it('reports a signal-killed command', async () => {
+    const { ctx } = mk()
+    expect(await run(ctx, 'kill -9 $$')).toContain('Terminated by signal SIGKILL')
+  })
   it('cd persists across calls, even with exit 3', async () => {
     const { dir, ctx } = mk()
     mkdirSync(join(dir, 'sub'))
@@ -54,7 +58,7 @@ describe('Bash', () => {
   })
   it('timeout kills the whole process group and returns partial output', async () => {
     const { ctx } = mk()
-    const out = await run(ctx, 'echo before; (sleep 30 & echo $! > pid; wait)', 500).catch((e) => e)
+    const out = await run(ctx, 'echo before; (sleep 30 & echo $! > pid; wait)', 500)
     expect(out).toContain('before')
     expect(out).toContain('timed out')
     const pid = Number((await run(ctx, 'cat pid')).trim())
