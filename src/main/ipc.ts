@@ -34,6 +34,11 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       const r = await (w ? dialog.showOpenDialog(w, opts) : dialog.showOpenDialog(opts))
       if (!r.canceled && r.filePaths[0]) await c.selectWorkspace(r.filePaths[0])
     },
+    'workspace:recent': () => c.recent(),
+    'workspace:open': (p) => c.openRecent(p),
+    'session:list': () => c.chats(),
+    'session:open': (id) => c.openChat(id),
+    'session:new': () => c.newChat(),
     'settings:get': () => c.getSettings(),
     'settings:setKey': (p, key) => c.setKey(p, key),
     'settings:update': (patch) => c.update(patch),
@@ -43,6 +48,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
   for (const ch of Object.keys(handlers) as (keyof Handlers)[]) {
     ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...validators[ch](args)))
   }
+  void c.openLast().catch(() => {}) // not awaited: a trust prompt must not block startup; the renderer reads the result from getState
   return {
     controller: c,
     dispose() {

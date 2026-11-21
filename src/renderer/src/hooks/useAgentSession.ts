@@ -36,6 +36,9 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     command: (line: string) => call((a) => a.invoke('session:command', line)),
     abort: () => call((a) => a.invoke('session:abort')),
     selectWorkspace: () => call((a) => a.invoke('workspace:select')),
+    openWorkspace: (path: string) => call((a) => a.invoke('workspace:open', path)),
+    openChat: (id: string) => call((a) => a.invoke('session:open', id)),
+    newChat: () => call((a) => a.invoke('session:new')),
     answer: (id: string, d: Decision) => {
       setState((s) => s && { ...s, pending: null })
       return api?.invoke('prompt:answer', id, d).catch(() => {}) // an answer that lost the race with an abort is moot

@@ -107,6 +107,35 @@ describe('Controller', () => {
     await done
     expect(c.getState().items.at(-1)).toMatchObject({ message: 'Workspace not trusted.' })
   })
+  it('saves chats, lists them, reopens one with its items and rejects unknown ids; only recent workspaces reopen', async () => {
+    const { c, ws, idle } = await setup([[]])
+    ;(c as any).d.makeProvider = () => new FakeProvider([say, say])
+    c.send('hello world')
+    await idle()
+    c.newChat()
+    expect(c.getState().items).toEqual([])
+    c.send('second')
+    await idle()
+    const chats = c.chats()
+    expect(chats.map((x) => x.title).sort()).toEqual(['hello world', 'second'])
+    c.openChat(chats.find((x) => x.title === 'hello world')!.id)
+    expect(c.getState().items).toEqual([{ kind: 'user', text: 'hello world' }, { kind: 'text', text: 'done' }])
+    expect(() => c.openChat('nope')).toThrow(/Unknown chat/)
+    await expect(c.openRecent('/etc')).rejects.toThrow(/Unknown workspace/)
+    expect(await c.recent()).toContain(ws)
+    await c.openRecent(ws)
+    expect(c.getState().items).toEqual([]) // a workspace switch starts a new chat
+  })
+  it('remembers provider, model and effort and reopens the last workspace on launch', async () => {
+    const { c, ws, store } = await setup([[]])
+    await c.update({ model: 'my-model', effort: 'max' })
+    const home = (c as any).d.home
+    const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async (p) => store[p] ?? null, set: async () => {} } })
+    await c2.init()
+    expect(await c2.getSettings()).toMatchObject({ provider: 'anthropic', model: 'my-model', effort: 'max' })
+    await c2.openLast()
+    expect(c2.getState().workspace).toBe(ws)
+  })
   it('answering with an id that is not pending is rejected', async () => {
     const { c } = await setup([[]])
     expect(() => c.answer('nope', { allow: true })).toThrow(/No matching prompt/)

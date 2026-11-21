@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Settings } from 'lucide-react'
-import type { Effort, ProviderId, SettingsInfo } from '../../shared/types'
+import type { Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
 import { PromptInput } from '@/components/PromptInput'
@@ -17,12 +18,23 @@ export default function App() {
   const s = useAgentSession(api)
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
+  const [recent, setRecent] = useState<string[]>([])
+  const [chats, setChats] = useState<SessionInfo[]>([])
   const [setupError, setSetupError] = useState<string | null>(null)
 
   const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
   const [models, setModels] = useState<ModelList>({ models: [] })
   const loadSettings = useCallback(() => api?.invoke('settings:get').then(setSettings), [api])
   useEffect(() => void loadSettings(), [loadSettings])
+
+  // saved chats and recent workspaces: refetched when the workspace changes or a turn ends (a turn saves its messages)
+  const workspace = s.state?.workspace ?? null
+  const busy = s.state?.busy
+  useEffect(() => {
+    if (!api || busy) return
+    api.invoke('workspace:recent').then(setRecent, () => {})
+    api.invoke('session:list').then(setChats, () => {})
+  }, [api, workspace, busy])
 
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
   const provider = settings?.provider
@@ -95,14 +107,17 @@ export default function App() {
           <FolderOpen className="mr-2 h-4 w-4" />
           <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
         </Button>
-        <div className="flex-1 space-y-1 overflow-y-auto text-sm">
-          <h2 className="text-xs font-medium uppercase text-muted-foreground">Todos</h2>
-          {todos.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
-          {todos.map((t, i) => (
-            <p key={i} className={'[overflow-wrap:anywhere] ' + (t.status === 'completed' ? 'text-muted-foreground line-through' : t.status === 'in_progress' ? 'font-medium' : '')}>
-              {t.content}
-            </p>
-          ))}
+        <div className="flex-1 space-y-4 overflow-y-auto text-sm">
+          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onChat={s.openChat} onNew={s.newChat} />
+          <div className="space-y-1">
+            <h2 className="text-xs font-medium uppercase text-muted-foreground">Todos</h2>
+            {todos.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
+            {todos.map((t, i) => (
+              <p key={i} className={'[overflow-wrap:anywhere] ' + (t.status === 'completed' ? 'text-muted-foreground line-through' : t.status === 'in_progress' ? 'font-medium' : '')}>
+                {t.content}
+              </p>
+            ))}
+          </div>
         </div>
         {v.usage && (
           <p className="text-xs text-muted-foreground">

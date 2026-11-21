@@ -27,7 +27,7 @@ export interface CommandEnv {
 
 export const HELP = `Commands:
   /help            Show this help
-  /clear           Clear the conversation and checkpoints
+  /clear           Clear the conversation and checkpoints (the saved chat stays; a new one starts)
   /mode [name]     Show or set the permission mode (${MODES.join(' | ')})
   /rewind          Undo the last turn: restore its files and drop it from the conversation (repeat to go further back)
   /trust           Trust this workspace so its project allow rules apply

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyView, reduce } from './reducer'
+import { emptyView, messagesToEvents, reduce } from './reducer'
 import type { ViewEvent } from './types'
 
 const run = (events: ViewEvent[]) => events.reduce(reduce, emptyView())
@@ -50,5 +50,21 @@ describe('reduce', () => {
     const a = run([{ type: 'text_delta', text: 'a' }])
     reduce(a, { type: 'text_delta', text: 'b' })
     expect(a.items).toEqual([{ kind: 'text', text: 'a' }])
+  })
+  it('messagesToEvents rebuilds the same items a live turn produced', () => {
+    const items = run(
+      messagesToEvents([
+        { role: 'user', content: [{ type: 'text', text: 'go' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'a' }, { type: 'tool_use', id: 't', name: 'Read', input: { p: 1 } }] },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'out', is_error: true }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'b' }] }
+      ])
+    ).items
+    expect(items).toEqual([
+      { kind: 'user', text: 'go' },
+      { kind: 'text', text: 'a' },
+      { kind: 'tool', id: 't', name: 'Read', input: { p: 1 }, done: true, result: 'out', isError: true },
+      { kind: 'text', text: 'b' }
+    ])
   })
 })

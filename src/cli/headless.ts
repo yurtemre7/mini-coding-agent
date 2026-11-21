@@ -1,6 +1,7 @@
 import type { Decision, Effort, PermissionMode } from '../shared/types'
 import { AgentSession, type Frontend } from '../core/agent'
 import { createPermissions } from '../core/permissions'
+import { startSession } from '../core/session'
 import { builtinTools } from '../core/registry'
 import type { ModelProvider } from '../core/provider/types'
 
@@ -28,7 +29,7 @@ export function plainFrontend(io: Io): Frontend {
 }
 
 /** Runs one prompt to completion. Returns the process exit code (0 ok, 1 runtime error). */
-export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; effort?: Effort; cwd: string; io: Io; permissionMode?: PermissionMode; allowedTools?: string[]; trust?: boolean; home?: string }): Promise<number> {
+export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; effort?: Effort; cwd: string; io: Io; permissionMode?: PermissionMode; allowedTools?: string[]; trust?: boolean; continue?: boolean; resume?: string; home?: string }): Promise<number> {
   // headless cannot ask, so a call that needs approval is denied with a message naming the flags; untrusted unless --trust
   const { perms, warnings, ignoredAllow } = await createPermissions({ cwd: o.cwd, mode: o.permissionMode, allowedTools: o.allowedTools, trusted: !!o.trust, canAsk: false, home: o.home })
   for (const w of warnings) o.io.err(`warn: ${w}\n`)
@@ -43,6 +44,9 @@ export async function runHeadless(o: { prompt: string; provider: ModelProvider; 
     frontend: plainFrontend(o.io),
     decide: perms.decide
   })
+  const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
+  session.load(saved.messages, saved.transcript)
+  if (saved.note) o.io.err(`${saved.note}\n`)
   const reason = await session.send(o.prompt)
   o.io.out('\n')
   return reason === 'done' ? 0 : 1

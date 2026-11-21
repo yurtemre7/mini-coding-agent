@@ -20,6 +20,8 @@ Options:
                          default | acceptEdits | plan | bypassPermissions
       --allowed-tools <rules>
                          Rules that run without asking, e.g. "Bash(npm run test:*) Edit"
+      --continue         Resume the most recent saved session for this directory
+      --resume <id>      Resume a saved session by id
       --trust            Apply this workspace's project allow rules (headless is untrusted by default)
   -h, --help             Show this help
   -v, --version          Print the version
@@ -52,7 +54,9 @@ async function main(): Promise<void> {
         effort: { type: 'string' },
         'permission-mode': { type: 'string' },
         'allowed-tools': { type: 'string', multiple: true },
-        trust: { type: 'boolean' }
+        trust: { type: 'boolean' },
+        continue: { type: 'boolean' },
+        resume: { type: 'string' }
       },
       allowPositionals: true,
       strict: true
@@ -69,6 +73,7 @@ async function main(): Promise<void> {
   const modeArg = values['permission-mode']
   const permissionMode = modeArg === undefined ? undefined : parseMode(modeArg)
   if (modeArg !== undefined && !permissionMode) return fail(`Unknown permission mode "${modeArg}". Use ${MODES.join(', ')}.`)
+  if (values.continue && values.resume !== undefined) return fail('Use either --continue or --resume <id>, not both.')
   const allowedTools = splitRules(values['allowed-tools'] ?? [])
 
   let prompt = ''
@@ -91,7 +96,7 @@ async function main(): Promise<void> {
   }
 
   const model = values.model ?? DEFAULT_MODELS[id].main
-  if (!values.print) return runInteractive({ provider, model, effort, cwd: process.cwd(), mode: permissionMode, allowedTools, trust: values.trust })
+  if (!values.print) return runInteractive({ provider, model, effort, cwd: process.cwd(), mode: permissionMode, allowedTools, trust: values.trust, continue: values.continue, resume: values.resume })
 
   const code = await runHeadless({
     prompt,
@@ -102,6 +107,8 @@ async function main(): Promise<void> {
     permissionMode,
     allowedTools,
     trust: values.trust,
+    continue: values.continue,
+    resume: values.resume,
     io: { out: (s) => void process.stdout.write(s), err: (s) => void process.stderr.write(s) }
   })
   process.exitCode = code

@@ -8,9 +8,10 @@ import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
-import { isTrusted, trustWorkspace } from '../core/trust'
-import { reduce, emptyView } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { listSessions, loadSession, Transcript } from '../core/session'
+import { isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
+import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -98,6 +99,10 @@ export class Controller {
 
   /** On first call with no explicit choice: prefer a provider that has a key. */
   async init(): Promise<void> {
+    const prefs = await loadPrefs(this.d.home) // provider, model and effort come back as last left
+    if (PROVIDER_IDS.includes(prefs.provider as ProviderId)) this.provider = prefs.provider as ProviderId
+    if (prefs.model?.trim()) this.model = prefs.model
+    if (EFFORT_LEVELS.includes(prefs.effort as Effort)) this.effort = prefs.effort as Effort
     const s = await this.getSettings()
     const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
     this.setProvider(id)
@@ -127,6 +132,7 @@ export class Controller {
       if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
       this.effort = patch.effort
     }
+    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     return this.getSettings()
   }
 
@@ -193,9 +199,51 @@ export class Controller {
     this.perms = built.perms
     this.workspace = dir
     this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: builtinTools, cwd: dir, frontend: this.frontend, decide: built.perms.decide })
+    this.session.store = new Transcript(dir, this.meta, { home: this.d.home })
+    await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
     this.announce()
     for (const w of built.warnings) this.notice('warn', w)
+  }
+
+  private meta = () => ({ provider: this.provider, model: this.model })
+
+  /** Launch: reopen the last workspace (the trust prompt still applies). */
+  async openLast(): Promise<void> {
+    const [dir] = await recentWorkspaces(this.d.home)
+    if (dir) await this.selectWorkspace(dir)
+  }
+
+  recent(): Promise<string[]> {
+    return recentWorkspaces(this.d.home)
+  }
+
+  /** The renderer never supplies a path of its own: only one already in the recent list opens. */
+  async openRecent(dir: string): Promise<void> {
+    if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace. Open it with the folder picker.')
+    await this.selectWorkspace(dir)
+  }
+
+  chats(): SessionInfo[] {
+    return this.workspace ? listSessions(this.workspace, this.d.home) : []
+  }
+
+  newChat(): void {
+    this.assertIdle('start a new chat')
+    if (!this.session) throw new Error('Open a workspace first.')
+    this.session.clear() // moves to a fresh transcript file
+    this.apply({ type: 'clear' })
+  }
+
+  /** Loads a saved chat of this workspace, rebuilds the view from its messages and keeps appending to its file. */
+  openChat(id: string): void {
+    this.assertIdle('open a chat')
+    if (!this.session || !this.workspace) throw new Error('Open a workspace first.')
+    if (!this.chats().some((c) => c.id === id)) throw new Error('Unknown chat.')
+    const { transcript, messages } = loadSession(this.workspace, id, this.meta, this.d.home)
+    this.session.load(messages, transcript)
+    this.apply({ type: 'clear' })
+    for (const e of messagesToEvents(messages)) this.apply(e)
   }
 
   private announce(): void {

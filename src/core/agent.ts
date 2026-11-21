@@ -1,6 +1,7 @@
 import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { FileState } from './filestate'
 import type { Block, Message, ModelProvider } from './provider/types'
+import type { Transcript } from './session'
 import { isZod, toToolDef, truncate, type Tool, type ToolContext } from './tool'
 
 export interface Frontend {
@@ -18,6 +19,8 @@ export interface TurnOptions {
   signal: AbortSignal
   maxTokens?: number
   effort?: Effort // passed on every stream call; subagents inherit it
+  /** Called once per complete message, in history order (the transcript file). */
+  persist?: (m: Message) => void
   files?: FileState // readState + checkpoints + Bash cwd; AgentSession keeps one across turns
   maxIterations?: number // 50 per turn (25 for subagents)
   /** Permission seam (filled in Milestone 3). Return a denial reason to block the call; undefined allows it. */
@@ -134,6 +137,11 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
   let reason: TurnReason = 'done'
   fe.emit({ type: 'turn_start' })
   history.push({ role: 'user', content: [{ type: 'text', text: userText }] })
+  let saved = history.length - 1
+  const save = () => {
+    for (; saved < history.length; saved++) if (history[saved].content.length) opts.persist?.(history[saved])
+  }
+  save()
   ;(opts.files ??= new FileState()).beginTurn()
   try {
     const contextWindow = await provider.contextWindow(opts.model)
@@ -168,11 +176,14 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
         content.splice(0, content.length, ...kept)
         if (!kept.length) history.pop() // never send an empty assistant message
         history.push({ role: 'user', content: [{ type: 'text', text: 'Your response was cut off by the output limit. Continue, working in smaller steps (smaller edits, shorter output).' }] })
+        save()
         continue
       }
       const calls = content.filter((b): b is ToolCall => b.type === 'tool_use')
+      save() // the finished assistant message; a crash during the tools leaves a dangling tool_use that loading repairs
       if (!calls.length) return reason
       history.push({ role: 'user', content: await runTools(calls, opts) })
+      save()
     }
   } catch (e) {
     if (signal.aborted) reason = 'aborted'
@@ -183,6 +194,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
     return reason
   } finally {
     sealHistory(history)
+    save()
     fe.emit({ type: 'turn_end', reason })
   }
 }
@@ -192,6 +204,9 @@ export class AgentSession {
   history: Message[] = []
   private starts: number[] = [] // history index where each turn began; parallels the FileState checkpoint stack
   private controller?: AbortController
+  /** Where messages are saved; set by the frontend. clear() moves to a new file. */
+  store?: Transcript
+  private saveFailed = false
   constructor(private base: Omit<TurnOptions, 'signal'>) {
     this.base = { ...base, files: base.files ?? new FileState() }
   }
@@ -210,6 +225,7 @@ export class AgentSession {
     const restored = await this.files.rewind() // first: if it throws, history is untouched and the rewind can be retried
     if (!restored) return undefined
     this.history.length = this.starts.pop() ?? 0
+    this.persist(() => this.store?.rewind(this.history.length))
     return restored
   }
 
@@ -218,14 +234,35 @@ export class AgentSession {
     this.history.length = 0
     this.starts.length = 0
     this.base.files = new FileState()
+    this.store = this.store?.fresh()
+  }
+
+  /** Continues a saved conversation: replaces the history (rewind checkpoints of earlier runs are gone). */
+  load(messages: Message[], store: Transcript): void {
+    if (this.controller) throw new Error('A turn is running. Abort it before opening another chat.')
+    this.history.splice(0, this.history.length, ...messages)
+    this.starts.length = 0
+    this.base.files = new FileState()
+    this.store = store
+  }
+
+  /** A failing disk must not break the turn; say so once. */
+  private persist(write: () => void): void {
+    try {
+      write()
+    } catch (e) {
+      if (!this.saveFailed) this.base.frontend.emit({ type: 'notice', level: 'warn', message: `Could not save this chat: ${(e as Error).message}` })
+      this.saveFailed = true
+    }
   }
 
   async send(text: string): Promise<TurnReason> {
     if (this.controller) throw new Error('A turn is already running. Wait for it to finish or abort it.')
     this.controller = new AbortController()
+    const store = this.store
     this.starts.push(this.history.length)
     try {
-      return await runTurn(this.history, text, { ...this.base, signal: this.controller.signal })
+      return await runTurn(this.history, text, { ...this.base, persist: (m) => this.persist(() => store?.append(m)), signal: this.controller.signal })
     } finally {
       this.controller = undefined
     }

@@ -89,6 +89,14 @@ export interface EventBatch {
   events: ViewEvent[]
 }
 
+/** A saved chat of the current workspace. */
+export interface SessionInfo {
+  id: string
+  title: string
+  updated: number // ms since epoch
+  messageCount: number
+}
+
 /** Never contains a key: the renderer only learns whether one exists. */
 export interface SettingsInfo {
   provider: ProviderId
@@ -107,6 +115,15 @@ export interface IpcContract {
     /** A slash command line such as "/rewind" or "/mode plan"; its output arrives as notice events. */
     'session:command': { args: [line: string]; result: void }
     'workspace:select': { args: []; result: void }
+    /** Recently opened workspaces, newest first (folders that vanished are dropped). */
+    'workspace:recent': { args: []; result: string[] }
+    /** Only a path from the recent list is opened; anything else is refused. */
+    'workspace:open': { args: [path: string]; result: void }
+    /** Saved chats of the current workspace, newest first. */
+    'session:list': { args: []; result: SessionInfo[] }
+    /** Resume a listed chat: main rebuilds the view and keeps appending to its file. */
+    'session:open': { args: [id: string]; result: void }
+    'session:new': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
     'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort }]; result: SettingsInfo }
@@ -121,7 +138,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

@@ -1,3 +1,4 @@
+import { isSessionId } from '../core/session'
 import { PROVIDER_IDS } from '../core/provider/factory'
 import { EFFORT_LEVELS, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
 
@@ -17,6 +18,11 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'session:getState': () => [],
   'session:command': ([l]) => [str(l, 'command')],
   'workspace:select': () => [],
+  'workspace:recent': () => [],
+  'workspace:open': ([p]) => [str(p, 'path')], // the controller only accepts paths from the recent list
+  'session:list': () => [],
+  'session:open': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
+  'session:new': () => [],
   'settings:get': () => [],
   'settings:setKey': ([p, k]) => [provider(p), str(k, 'key')],
   'settings:update': ([patch]) => {

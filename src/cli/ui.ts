@@ -5,6 +5,7 @@ import { parseInput, runCommand } from '../core/commands'
 import { createPermissions, type Permissions } from '../core/permissions'
 import type { ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
+import { startSession } from '../core/session'
 import { isTrusted, trustWorkspace } from '../core/trust'
 import { SYSTEM_PROMPT } from './headless'
 
@@ -124,6 +125,8 @@ export async function runInteractive(o: {
   input?: NodeJS.ReadableStream
   output?: NodeJS.WritableStream & { isTTY?: boolean }
   trust?: boolean // --trust: apply project allow rules without asking or recording
+  continue?: boolean // --continue: resume the newest saved session for cwd
+  resume?: string // --resume <id>
   home?: string
 }): Promise<void> {
   const input = o.input ?? process.stdin
@@ -160,6 +163,9 @@ export async function runInteractive(o: {
   const perms: Permissions = built.perms
   const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide })
 
+  const saved = startSession(o.cwd, () => ({ provider: o.provider.id, model: o.model }), { continue: o.continue, resume: o.resume, home: o.home })
+  session.load(saved.messages, saved.transcript)
+
   let exiting = false
   const ctrl = new CtrlC()
   rl.on('SIGINT', () => {
@@ -183,6 +189,7 @@ export async function runInteractive(o: {
     }
   }
   term.write(`mca (${o.model}) - mode: ${perms.mode}. Type /help for commands.\n`)
+  if (saved.note) term.write(`${saved.note}\n`)
   try {
     while (!exiting) {
       let text = await term.readLine('> ')

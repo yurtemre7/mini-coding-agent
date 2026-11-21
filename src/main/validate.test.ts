@@ -26,7 +26,10 @@ describe('IPC validation', () => {
     ['prompt:answer', ['id', { allow: 'yes' }]],
     ['prompt:answer', ['id', { allow: true, scope: 'forever' }]],
     ['prompt:answer', ['id', { allow: false, feedback: 7 }]],
-    ['prompt:answer', ['id', null]]
+    ['prompt:answer', ['id', null]],
+    ['session:open', ['../x']],
+    ['session:open', [5]],
+    ['workspace:open', [{}]]
   ])('%s rejects %j', (ch, args) => {
     expect(() => v[ch](args as unknown[])).toThrow(/Invalid request/)
   })
@@ -37,6 +40,7 @@ describe('IPC validation', () => {
     expect(v['settings:update']([{ provider: 'anthropic', model: 'm', effort: 'max', extra: 1 }])).toEqual([{ provider: 'anthropic', model: 'm', effort: 'max' }])
     expect(v['prompt:answer'](['id', { allow: true, scope: 'session', feedback: 'f', evil: 1 }])).toEqual(['id', { allow: true, scope: 'session', feedback: 'f' }])
     expect(v['session:abort']([1, 2])).toEqual([])
+    expect(v['session:open'](['0b9c-4e1f'])).toEqual(['0b9c-4e1f'])
   })
   it('only http(s) links leave the app', () => {
     expect(isExternalUrl('https://example.com/x')).toBe(true)
