@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isInsideWorkspace, isProtectedPath, resolvePath } from './paths'
 
@@ -20,6 +20,15 @@ describe('paths', () => {
     expect(isInsideWorkspace(dir, join(dir, '..', 'x'))).toBe(false)
     expect(isInsideWorkspace(dir, join(dir, 'escape/new.txt'))).toBe(false) // symlink escape, file not yet existing
     expect(isInsideWorkspace(dir, join(dir, 'escape'))).toBe(false)
+  })
+  it('a differently-cased sibling is outside (skipped on case-insensitive volumes)', () => {
+    const swapped = join(dirname(dir), basename(dir).replace(/[a-z]/gi, (c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase())))
+    try {
+      mkdirSync(swapped)
+    } catch {
+      return // same directory on this volume
+    }
+    expect(isInsideWorkspace(dir, join(swapped, 'f'))).toBe(false)
   })
   it('flags protected paths', () => {
     for (const p of ['.git/config', 'sub/.git/hooks/pre-commit', '.mca/settings.json', '.mca/settings.local.json', '.claude/settings.json', '.mcp.json', join(homedir(), '.mca/hooks/x')])

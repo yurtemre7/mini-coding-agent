@@ -80,6 +80,15 @@ describe('Write', () => {
 })
 
 describe('checkpoints', () => {
+  it('overlapping rewinds: the second errors instead of popping twice', async () => {
+    writeFileSync(f('a.txt'), 'orig')
+    ctx.files.beginTurn()
+    ctx.files.beginTurn()
+    await ctx.files.record(f('a.txt'))
+    const [a, b] = await Promise.allSettled([ctx.files.rewind(), ctx.files.rewind()])
+    expect([a.status, b.status]).toEqual(['fulfilled', 'rejected'])
+    expect(await ctx.files.rewind()).toEqual([]) // exactly one entry was popped by the pair
+  })
   it('rewind restores originals and removes created files; first touch per turn wins; one entry per turn', async () => {
     writeFileSync(f('a.txt'), 'orig')
     await read('a.txt')

@@ -8,6 +8,7 @@ const hash = (s: string | Buffer): string => createHash('sha1').update(s).digest
 export class FileState {
   cwd?: string // set by Bash `cd`; undefined = workspace root
   private reads = new Map<string, { mtimeMs: number; hash: string }>()
+  private rewinding = false
   private stack: Map<string, Buffer | null>[] = [] // one entry per turn: path -> original bytes (null = did not exist)
 
   markRead(path: string, content: string, mtimeMs: number): void {
@@ -36,17 +37,23 @@ export class FileState {
 
   /** Undoes the newest turn's file changes. Returns the restored paths, or undefined when there is nothing to rewind. */
   async rewind(): Promise<string[] | undefined> {
+    if (this.rewinding) throw new Error('A rewind is already in progress.')
     const entry = this.stack.at(-1)
     if (!entry) return undefined
-    for (const [path, bytes] of entry) {
-      if (bytes === null) await rm(path, { force: true })
-      else {
-        await mkdir(dirname(path), { recursive: true })
-        await writeFile(path, bytes)
+    this.rewinding = true
+    try {
+      for (const [path, bytes] of entry) {
+        if (bytes === null) await rm(path, { force: true })
+        else {
+          await mkdir(dirname(path), { recursive: true })
+          await writeFile(path, bytes)
+        }
+        this.reads.delete(path)
       }
-      this.reads.delete(path)
+      this.stack.pop() // only after every file was restored, so a failed rewind can be retried
+      return [...entry.keys()]
+    } finally {
+      this.rewinding = false
     }
-    this.stack.pop() // only after every file was restored, so a failed rewind can be retried
-    return [...entry.keys()]
   }
 }

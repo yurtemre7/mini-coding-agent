@@ -11,7 +11,7 @@ export function realpathNearest(p: string): string {
   let cur = resolve(p)
   for (;;) {
     try {
-      return join(realpathSync(cur), ...rest)
+      return join(realpathSync.native(cur), ...rest) // native: on-disk case on macOS
     } catch {
       const parent = dirname(cur)
       if (parent === cur) return resolve(p)
@@ -21,11 +21,11 @@ export function realpathNearest(p: string): string {
   }
 }
 
-// APFS is case-insensitive but realpath keeps the input's case, so `.GIT/x` must still match
+// folding only ever makes checks stricter, so it is used for protection but never for the workspace check
 const fold = (s: string): string => (process.platform === 'darwin' ? s.toLowerCase() : s)
 
 export function isInsideWorkspace(workspace: string, p: string): boolean {
-  const rel = relative(fold(realpathNearest(workspace)), fold(realpathNearest(p)))
+  const rel = relative(realpathNearest(workspace), realpathNearest(p))
   return rel !== '..' && !rel.startsWith('..' + sep)
 }
 
