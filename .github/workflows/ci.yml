@@ -1,4 +1,4 @@
-name: CI (macOS)
+name: CI
 
 on:
   push:
@@ -6,16 +6,27 @@ on:
   pull_request:
     branches: [main]
 
+# a new push to the same PR cancels the older run; runs on main are never cancelled
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
-  build-and-test:
-    runs-on: macos-latest
-
+  check:
+    name: Lint, typecheck, test, build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -25,23 +36,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Lint
-        run: npm run lint
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
 
-      - name: Typecheck
-        run: npm run typecheck
+  package-mac:
+    name: Package macOS app
+    # packaging is slow and only needed for the app we ship: skip on pull requests from forks and drafts
+    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft)
+    needs: check
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run tests
-        run: npm test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
-      - name: Build application
-        run: npm run build
+      - name: Install dependencies
+        run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package macOS app
-        run: npm run package:mac
+      - run: npm run build
+      - run: npm run package:mac
 
-      - name: Upload macOS build artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: mini-coding-agent-macos
           path: |
