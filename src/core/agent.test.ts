@@ -215,6 +215,36 @@ describe('checkpoints', () => {
   })
 })
 
+describe('resumed checkpoints', () => {
+  it('rewinding a turn from an earlier run restores files only and says so', async () => {
+    const { mkdtempSync, readFileSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { Transcript } = await import('./session')
+    const { runCommand } = await import('./commands')
+    const { Permissions } = await import('./permissions')
+    const home = mkdtempSync(join(tmpdir(), 'mca-rs-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'mca-rsw-'))
+    const file = join(cwd, 'a.txt')
+    writeFileSync(file, 'orig')
+    const meta = () => ({ provider: 'fake', model: 'm' })
+    const t1 = new Transcript(cwd, meta, { home })
+    const first = new FileState()
+    await first.attach(new (await import('./checkpoints')).CheckpointStore(t1.checkpointDir))
+    first.beginTurn()
+    await first.record(file)
+    writeFileSync(file, 'edited')
+    const out: string[] = []
+    const { opts } = setup([], [echo()])
+    const s = new AgentSession({ provider: opts.provider, model: 'm', system: 's', tools: [], cwd, frontend: opts.frontend, decide: async () => ({ allow: true }) })
+    s.load([], t1) // a new run opens the same chat
+    await s.files.attach(new (await import('./checkpoints')).CheckpointStore(t1.checkpointDir)) // wait for the load
+    await runCommand('rewind', '', { session: s, perms: new Permissions({ mode: 'default', canAsk: false }), workspace: cwd, print: (m) => void out.push(m), exit() {}, trustWorkspace: async () => {} })
+    expect(readFileSync(file, 'utf8')).toBe('orig')
+    expect(out.at(-1)).toMatch(/Restored files.*conversation is unchanged/)
+  })
+})
+
 describe('hooks and context in the loop', () => {
   const hooks = (c: any) => new Hooks(c, process.cwd())
   it('a PreToolUse hook that exits 2 blocks the tool and feeds stderr to the model', async () => {

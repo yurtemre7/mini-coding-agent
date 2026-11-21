@@ -167,10 +167,12 @@ export async function runCommand(name: string, args: string, env: CommandEnv): P
       return print(`Permission mode set to ${m}.`)
     }
     case 'rewind': {
+      const before = session.history.length
       const restored = await session.rewind().catch((e: Error) => (print(`Rewind failed: ${e.message}`), null))
       if (restored === null) return
       if (!restored) return print('Nothing to rewind.')
       const files = restored.map((p) => relative(env.workspace, p) || p)
+      if (session.history.length === before) return print(`Restored files${files.length ? `: ${files.join(', ')}` : ''}. The conversation is unchanged.`)
       return print(files.length ? `Rewound the last turn. Restored: ${files.join(', ')}` : 'Rewound the last turn (it changed no files).')
     }
     case 'trust':

@@ -1,5 +1,6 @@
 import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { buildSummary, estimateTokens, isOverflow, shouldCompact } from './compact'
+import { CheckpointStore } from './checkpoints'
 import { FileState } from './filestate'
 import { Hooks, MAX_STOP_BLOCKS } from './hooks'
 import type { Block, Message, ModelProvider } from './provider/types'
@@ -366,8 +367,18 @@ export class AgentSession {
   history: Message[] = []
   private starts: number[] = [] // history index where each turn began; parallels the FileState checkpoint stack
   private controller?: AbortController
-  /** Where messages are saved; set by the frontend. clear() moves to a new file. */
-  store?: Transcript
+  private transcript?: Transcript
+  /** Where messages are saved; set by the frontend. clear() moves to a new file. Setting it also points the rewind checkpoints at this chat. */
+  get store(): Transcript | undefined {
+    return this.transcript
+  }
+  set store(t: Transcript | undefined) {
+    this.transcript = t
+    if (!t) return
+    void this.files.attach(new CheckpointStore(t.checkpointDir)).then((ws) => {
+      for (const message of ws) this.base.frontend.emit({ type: 'notice', level: 'warn', message })
+    })
+  }
   private saveFailed = false
   private context = { tokens: 0 }
   constructor(private base: Omit<TurnOptions, 'signal'>) {
