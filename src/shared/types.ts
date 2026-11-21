@@ -1,3 +1,13 @@
+/** One file the agent changed, as the review panel and `/diff` list it. Paths are workspace-relative with forward slashes. */
+export interface ChangeSummary {
+  path: string
+  status: 'added' | 'modified' | 'deleted'
+  additions: number
+  deletions: number
+  binary: boolean
+  tooLarge: boolean
+}
+
 /** One entry of a provider's model list. `free` marks a model that costs nothing (OpenRouter's `:free` variants). */
 export interface ModelInfo {
   id: string
