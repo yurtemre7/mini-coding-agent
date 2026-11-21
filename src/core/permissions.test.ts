@@ -84,10 +84,11 @@ const cases: [string, PermissionMode, any, unknown, any, Outcome][] = [
   ['protected write in bypass -> allow (ruling)', 'bypassPermissions', {}, Write, { file_path: protectedFile, content: '' }, 'allow'],
   ['explicit ask rule in bypass -> prompt', 'bypassPermissions', { ask: ['Write(**/*.lock)'] }, Write, { file_path: join(root, 'x.lock'), content: '' }, 'prompt'],
   // deny-rule bypass attempts (all under bypassPermissions + deny Bash(rm:*))
-  ...['rm\t-rf x', 'echo $(rm x)', 'FOO=1 rm x', '(rm x)', '(rm)', '{ rm x; }', 'rm${IFS}x', "echo $'\\'' ; rm x ; echo $'\\''", 'echo `rm x`', 'eval rm x', 'bash -c "rm x"', '! rm x', 'A=1 B=2 rm x', 'echo "$(rm x)"'].map(
+  ...['rm\t-rf x', 'echo $(rm x)', 'FOO=1 rm x', '(rm x)', '(rm)', '{ rm x; }', 'rm${IFS}x', "echo $'\\'' ; rm x ; echo $'\\''", 'echo `rm x`', 'eval rm x', 'bash -c "rm x"', '! rm x', 'A=1 B=2 rm x', 'echo "$(rm x)"', 'env rm x', 'xargs rm', 'nice -n5 rm x', 'nohup rm x', 'time rm x', 'command rm x', 'builtin rm x', 'sudo rm x', 'doas rm x', 'timeout 5 rm x', 'watch rm x', 'ls | xargs rm', 'find . -exec rm {} \\;', 'find . -execdir rm {} +', 'find . -ok rm {} \\;'].map(
     (command): [string, PermissionMode, any, unknown, any, Outcome] => [`deny evasion: ${command}`, 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command }, 'deny']
   ),
   ['deny does not over-match a different program', 'bypassPermissions', { deny: ['Bash(rm:*)'] }, Bash, { command: 'echo remove' }, 'allow'],
+  ['wrapper is never auto-allowed', 'default', { allow: ['Bash(env:*)'] }, Bash, { command: 'env ls' }, 'prompt'],
   ['env-prefix strip lets allow match', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: 'CI=1 npm test' }, 'allow'],
   ['allow never applies to opaque commands', 'default', { allow: ['Bash(npm test:*)'] }, Bash, { command: "npm test $'x'" }, 'prompt'],
   ['allow never applies to ${', 'default', { allow: ['Bash(echo:*)'] }, Bash, { command: 'echo ${HOME}' }, 'prompt'],

@@ -35,7 +35,7 @@ export function splitRules(list: string[]): string[] {
 
 export interface ParsedCommand {
   segments: string[]
-  /** `$(`, `$'`, `${`, backticks, `<(`, `>(`, eval/exec/sh -c or an unterminated quote: the real command cannot be known statically. */
+  /** `$(`, `$'`, `${`, backticks, `<(`, `>(`, eval/exec/sh -c, a wrapper (env, xargs, sudo, find -exec ...) or an unterminated quote: the real command cannot be known statically. */
   subst: boolean
   redirect: boolean
   background: boolean
@@ -84,8 +84,11 @@ export function parseCommand(cmd: string): ParsedCommand {
   }
   if (quote || /(^|[\s;&|(])(eval|exec)(\s|$)|(^|[\s;&|(])(ba|z|da|k)?sh\s+-\w*c/.test(cmd)) r.subst = true
   cut()
+  if (r.segments.some((g) => WRAPPERS.has(normalizeSegment(g).split(' ')[0]) || (/^find\b/.test(normalizeSegment(g)) && /\s-(exec|execdir|ok|okdir)\b/.test(g)))) r.subst = true // wrappers run another program
   return r
 }
+
+const WRAPPERS = new Set(['env', 'xargs', 'nice', 'nohup', 'time', 'command', 'builtin', 'sudo', 'doas', 'exec', 'timeout', 'watch'])
 
 const READ_ONLY_PROGRAMS = new Set(['ls', 'cat', 'pwd', 'head', 'tail', 'wc', 'rg', 'echo', 'which', 'file', 'stat', 'du', 'df', 'basename', 'dirname', 'realpath', 'uname', 'whoami', 'date', 'true'])
 const GIT_READ = new Set(['status', 'log', 'diff', 'show', 'branch'])
