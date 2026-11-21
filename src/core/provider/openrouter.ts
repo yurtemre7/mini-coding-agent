@@ -105,7 +105,7 @@ export async function* openRouterEvents(data: AsyncIterable<string>, estimateIn 
 
 export class OpenRouterProvider implements ModelProvider {
   readonly id = 'openrouter' as const
-  private windows?: Promise<Map<string, number>>
+  private windows?: Promise<{ id: string; context_length: number }[]>
 
   constructor(
     private apiKey: string,
@@ -116,16 +116,28 @@ export class OpenRouterProvider implements ModelProvider {
     return this.opts.fetch ?? fetch
   }
 
+  /** One /models fetch, cached: a failure is cached too (context windows fall back to the default; listModels reports it). */
+  private catalog(): Promise<{ id: string; context_length: number }[]> {
+    this.windows ??= this.doFetch(`${BASE}/models`, { headers: { authorization: `Bearer ${this.apiKey}` } }).then(async (r) => {
+      if (r.status === 401 || r.status === 403) throw new ProviderError(authMessage('OpenRouter', 'OPENROUTER_API_KEY'), r.status)
+      if (!r.ok) throw new ProviderError(`OpenRouter error ${r.status} listing models`, r.status)
+      return ((await r.json()) as { data: { id: string; context_length: number }[] }).data
+    })
+    return this.windows
+  }
+
   async contextWindow(model: string): Promise<number> {
-    // fetched once and cached; a failed lookup is cached too (falls back to the default)
-    this.windows ??= this.doFetch(`${BASE}/models`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(String(r.status))
-        const j = (await r.json()) as { data: { id: string; context_length: number }[] }
-        return new Map(j.data.map((m) => [m.id, m.context_length]))
-      })
-      .catch(() => new Map<string, number>())
-    return (await this.windows).get(model) ?? OPENROUTER_DEFAULT_CONTEXT_WINDOW
+    const m = await this.catalog().catch(() => [])
+    return m.find((x) => x.id === model)?.context_length ?? OPENROUTER_DEFAULT_CONTEXT_WINDOW
+  }
+
+  async listModels(): Promise<string[]> {
+    try {
+      return (await this.catalog()).map((m) => m.id).sort()
+    } catch (e) {
+      this.windows = undefined // let the next attempt retry
+      throw e instanceof ProviderError ? e : new ProviderError(`Could not list OpenRouter models: ${(e as Error).message}`, 502)
+    }
   }
 
   stream(req: StreamRequest): AsyncIterable<StreamEvent> {

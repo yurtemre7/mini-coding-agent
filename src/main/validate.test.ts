@@ -16,6 +16,8 @@ describe('IPC validation', () => {
     ['session:command', [{}]],
     ['settings:setKey', ['nope', 'k']],
     ['settings:setKey', ['anthropic', 5]],
+    ['settings:models', ['evil']],
+    ['settings:models', []],
     ['settings:update', ['x']],
     ['settings:update', [{ provider: 'evil' }]],
     ['settings:update', [{ model: 3 }]],
@@ -30,6 +32,7 @@ describe('IPC validation', () => {
   it('accepts good input and strips unknown fields', () => {
     expect(v['session:send'](['hi'])).toEqual(['hi'])
     expect(v['settings:setKey'](['openrouter', 'k'])).toEqual(['openrouter', 'k'])
+    expect(v['settings:models'](['openrouter', 'x'])).toEqual(['openrouter'])
     expect(v['settings:update']([{ provider: 'anthropic', model: 'm', extra: 1 }])).toEqual([{ provider: 'anthropic', model: 'm' }])
     expect(v['prompt:answer'](['id', { allow: true, scope: 'session', feedback: 'f', evil: 1 }])).toEqual(['id', { allow: true, scope: 'session', feedback: 'f' }])
     expect(v['session:abort']([1, 2])).toEqual([])

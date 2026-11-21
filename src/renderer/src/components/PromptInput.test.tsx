@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PromptInput } from './PromptInput'
 
-const base = { busy: false, mode: 'default' as const, onSend: vi.fn(), onStop: vi.fn(), onMode: vi.fn(), onRewind: vi.fn() }
+const base = { busy: false, mode: 'default' as const, model: 'claude-x', models: { models: [] }, onModel: vi.fn(), onSend: vi.fn(), onStop: vi.fn(), onMode: vi.fn(), onRewind: vi.fn() }
 
 describe('PromptInput', () => {
   it('Enter sends and clears; Shift+Enter does not', () => {
@@ -15,6 +15,10 @@ describe('PromptInput', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
     expect(onSend).toHaveBeenCalledWith('hello')
     expect(box).toHaveValue('')
+  })
+  it('the model picker is disabled while busy', () => {
+    render(<PromptInput {...base} busy />)
+    expect(screen.getByRole('combobox', { name: 'Model' })).toBeDisabled()
   })
   it('while busy: Stop replaces Send, Enter does nothing, Rewind is disabled', () => {
     const onSend = vi.fn()

@@ -1,21 +1,27 @@
 import { useState } from 'react'
-import { RotateCcw, Send, Square } from 'lucide-react'
+import { ArrowUp, ClipboardList, FilePen, Shield, ShieldOff, Square, Undo2, type LucideIcon } from 'lucide-react'
+import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { PERMISSION_MODES, type PermissionMode } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
+const MODE_ICONS: Record<PermissionMode, LucideIcon> = { default: Shield, acceptEdits: FilePen, plan: ClipboardList, bypassPermissions: ShieldOff }
+
 export interface PromptInputProps {
   busy: boolean
   disabled?: boolean // e.g. no workspace yet
   mode: PermissionMode
+  model: string
+  models: ModelList
+  onModel(model: string): void
   onSend(text: string): void
   onStop(): void
   onMode(mode: PermissionMode): void
   onRewind(): void
 }
 
-export function PromptInput({ busy, disabled, mode, onSend, onStop, onMode, onRewind }: PromptInputProps) {
+export function PromptInput({ busy, disabled, mode, model, models, onModel, onSend, onStop, onMode, onRewind }: PromptInputProps) {
   const [text, setText] = useState('')
   const submit = () => {
     if (busy || disabled || !text.trim()) return
@@ -41,24 +47,31 @@ export function PromptInput({ busy, disabled, mode, onSend, onStop, onMode, onRe
           <SelectContent>
             {PERMISSION_MODES.map((m) => (
               <SelectItem key={m} value={m}>
-                {m}
+                <span className="flex items-center gap-2">
+                  {(() => {
+                    const Icon = MODE_ICONS[m]
+                    return <Icon className="h-4 w-4" aria-hidden />
+                  })()}
+                  {m}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <ModelCombobox value={model} list={models} disabled={busy} onSelect={onModel} className="w-56" />
         <Button variant="outline" disabled={busy || disabled} onClick={onRewind} title="Undo the last turn: restore its files and drop it from the conversation">
-          <RotateCcw className="mr-2 h-4 w-4" />
+          <Undo2 className="mr-2 h-4 w-4" aria-hidden />
           Rewind
         </Button>
         <div className="ml-auto">
           {busy ? (
             <Button variant="destructive" onClick={onStop}>
-              <Square className="mr-2 h-4 w-4" />
+              <Square className="mr-2 h-4 w-4" aria-hidden />
               Stop
             </Button>
           ) : (
             <Button disabled={disabled || !text.trim()} onClick={submit}>
-              <Send className="mr-2 h-4 w-4" />
+              <ArrowUp className="mr-2 h-4 w-4" aria-hidden />
               Send
             </Button>
           )}

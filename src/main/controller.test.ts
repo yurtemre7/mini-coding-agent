@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FakeProvider } from '../core/provider/fake'
+import { ProviderError } from '../core/provider/retry'
 import type { StreamEvent } from '../core/provider/types'
 import { applyBatch } from '../shared/reducer'
 import type { EventBatch, ProviderId, ViewEvent, ViewState } from '../shared/types'
@@ -66,6 +67,25 @@ describe('Controller', () => {
     expect(after.hasKey.anthropic).toBe(true)
     await expect(c.setKey('anthropic', '  ')).rejects.toThrow()
     expect((await c.update({ provider: 'openrouter' })).model).toMatch(/\//)
+  })
+  it('models: caches the list per provider; a rejected key falls back to defaults with the reason', async () => {
+    let calls = 0
+    const home = await mkdtemp(join(tmpdir(), 'mca-home-'))
+    const listed = new FakeProvider([])
+    listed.listModels = async () => (calls++, ['m1', 'm2'])
+    const c = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async (p) => (p === 'anthropic' ? 'k' : null), set: async () => {}, source: async () => 'env' }, makeProvider: () => listed })
+    expect(await c.models('anthropic')).toEqual({ models: ['m1', 'm2'] })
+    await c.models('anthropic')
+    expect(calls).toBe(1)
+    expect((await c.getSettings()).keySource).toEqual({ anthropic: 'env', openrouter: null })
+    const none = await c.models('openrouter')
+    expect(none.error).toMatch(/No API key/)
+    const denied = new FakeProvider([])
+    denied.listModels = async () => { throw new ProviderError('Authentication failed', 401) }
+    const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, makeProvider: () => denied })
+    const r = await c2.models('anthropic')
+    expect(r).toMatchObject({ rejected: true, error: 'Authentication failed' })
+    expect(r.models).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5'])
   })
   it('/mode and unknown commands report through notices', async () => {
     const { c } = await setup([[]])

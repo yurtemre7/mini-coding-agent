@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
@@ -8,6 +8,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 
 export const PREVIEW_CHARS = 2000
 type ToolItem = Extract<Item, { kind: 'tool' }>
+
+const TOOL_ICONS: Record<string, LucideIcon> = { Read: FileText, Write: FilePlus, Edit: FilePen, Glob: FolderSearch, Grep: Search, Bash: SquareTerminal }
 
 const clip = (s: string) => (s.length > PREVIEW_CHARS ? `${s.slice(0, PREVIEW_CHARS)}\n… (${s.length - PREVIEW_CHARS} more characters)` : s)
 const subject = (i: any): string => String(i?.command ?? i?.file_path ?? i?.pattern ?? i?.url ?? i?.path ?? '')
@@ -24,13 +26,17 @@ export function Markdown({ children }: { children: string }) {
 }
 
 function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNode }) {
+  const Icon = TOOL_ICONS[tool.name] ?? Wrench
+  const Status = !tool.done ? Loader2 : tool.isError ? CircleX : CircleCheck
   return (
     <Collapsible className="rounded-md border bg-card text-sm">
       <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left">
         <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+        <Icon className="h-4 w-4 shrink-0" aria-hidden />
         <span className="font-medium">{tool.name}</span>
         <span className="truncate font-mono text-xs text-muted-foreground">{subject(tool.input)}</span>
         <Badge variant={tool.isError ? 'destructive' : 'secondary'} className="ml-auto">
+          <Status className={`mr-1 h-4 w-4 ${tool.done ? '' : 'animate-spin'}`} aria-hidden />
           {!tool.done ? 'running' : tool.isError ? 'error' : 'done'}
         </Badge>
       </CollapsibleTrigger>
@@ -46,8 +52,22 @@ function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNod
 const keyOf = (i: Item, n: number) => (i.kind === 'tool' ? `tool-${i.id}` : `${i.kind}-${n}`)
 
 function Row({ item, items }: { item: Item; items: Item[] }) {
-  if (item.kind === 'user') return <div className="ml-auto max-w-[80%] rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">{item.text}</div>
-  if (item.kind === 'text') return <Markdown>{item.text}</Markdown>
+  if (item.kind === 'user')
+    return (
+      <div className="ml-auto flex max-w-[80%] items-start gap-2">
+        <div className="rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground">{item.text}</div>
+        <User className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+      </div>
+    )
+  if (item.kind === 'text')
+    return (
+      <div className="flex items-start gap-2">
+        <Bot className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <Markdown>{item.text}</Markdown>
+        </div>
+      </div>
+    )
   if (item.kind === 'notice') return <p className={`text-xs ${item.level === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{item.message}</p>
   // subagent activity (parentId = the Task tool-use id) is nested under its parent card
   return (

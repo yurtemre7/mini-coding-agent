@@ -15,6 +15,10 @@ export class FakeProvider implements ModelProvider {
     return this.window
   }
 
+  async listModels(): Promise<string[]> {
+    return []
+  }
+
   async *stream(req: StreamRequest): AsyncGenerator<StreamEvent> {
     this.requests.push({ ...req, messages: structuredClone(req.messages) })
     const turn = this.turns.shift()

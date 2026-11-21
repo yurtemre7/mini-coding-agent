@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { AgentSession, type Frontend } from '../core/agent'
 import { parseInput, runCommand } from '../core/commands'
-import { getKey, setKey } from '../core/credentials'
+import { getKey, keySource, setKey } from '../core/credentials'
 import { createPermissions, type Permissions } from '../core/permissions'
 import { DEFAULT_MODELS } from '../core/provider/models'
 import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
+import { ProviderError } from '../core/provider/retry'
 import type { ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { isTrusted, trustWorkspace } from '../core/trust'
 import { reduce, emptyView } from '../shared/reducer'
-import { type Decision, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { type Decision, type KeySource, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -19,7 +20,7 @@ export interface ControllerDeps {
   /** Show a prompt now (not batched). */
   prompt(p: { id: string; request: PromptRequest }): void
   home?: string
-  keys?: { get(p: ProviderId): Promise<string | null>; set(p: ProviderId, key: string): Promise<void> }
+  keys?: { get(p: ProviderId): Promise<string | null>; set(p: ProviderId, key: string): Promise<void>; source?(p: ProviderId): Promise<KeySource | null> }
   /** Tests swap in a FakeProvider. */
   makeProvider?: (id: ProviderId, key: string) => ModelProvider
 }
@@ -39,10 +40,11 @@ export class Controller {
   private pending: ViewState['pending'] = null
   private resolvePending?: (d: Decision) => void
   private cache?: { id: ProviderId; p: ModelProvider }
+  private modelLists = new Map<ProviderId, string[]>()
   private keys: NonNullable<ControllerDeps['keys']>
 
   constructor(private d: ControllerDeps) {
-    this.keys = d.keys ?? { get: getKey, set: setKey }
+    this.keys = d.keys ?? { get: getKey, set: setKey, source: keySource }
     const outer = this
     this.proxy = {
       get id() {
@@ -69,8 +71,28 @@ export class Controller {
 
   async getSettings(): Promise<SettingsInfo> {
     const hasKey = { anthropic: false, openrouter: false }
-    for (const id of PROVIDER_IDS) hasKey[id] = !!(await this.keys.get(id))
-    return { provider: this.provider, model: this.model, hasKey }
+    const source: SettingsInfo['keySource'] = { anthropic: null, openrouter: null }
+    for (const id of PROVIDER_IDS) {
+      hasKey[id] = !!(await this.keys.get(id))
+      source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
+    }
+    return { provider: this.provider, model: this.model, hasKey, keySource: source }
+  }
+
+  /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
+  async models(id: ProviderId): Promise<{ models: string[]; error?: string; rejected?: boolean }> {
+    const hit = this.modelLists.get(id)
+    if (hit) return { models: hit }
+    try {
+      const key = await this.keys.get(id)
+      if (!key) throw new Error(`No API key for ${id}. Add one in Settings.`)
+      const models = (await (this.d.makeProvider ?? createProvider)(id, key).listModels?.()) ?? []
+      if (models.length) this.modelLists.set(id, models)
+      return { models }
+    } catch (e) {
+      const status = e instanceof ProviderError ? e.status : undefined
+      return { models: [DEFAULT_MODELS[id].main, DEFAULT_MODELS[id].fast], error: (e as Error).message, ...(status === 401 || status === 403 ? { rejected: true } : {}) }
+    }
   }
 
   /** On first call with no explicit choice: prefer a provider that has a key. */
@@ -89,6 +111,7 @@ export class Controller {
     if (!PROVIDER_IDS.includes(id) || !key.trim()) throw new Error('Enter an API key.')
     await this.keys.set(id, key.trim())
     if (this.cache?.id === id) this.cache = undefined
+    this.modelLists.delete(id) // the new key may see a different list
     return this.getSettings()
   }
 

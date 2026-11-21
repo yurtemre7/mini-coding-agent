@@ -6,7 +6,7 @@ import type { McaApi, ViewState } from '../../shared/types'
 const view: ViewState = { items: [], todos: [], mode: 'default', provider: 'anthropic', model: 'm', workspace: null, busy: false, pending: null, seq: 0 }
 
 const api = (hasKey: boolean): McaApi => ({
-  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false } } : view)) as any,
+  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false }, keySource: { anthropic: hasKey ? 'env' : null, openrouter: null } } : ch === 'settings:models' ? { models: ['m'] } : view)) as any,
   on: vi.fn(() => () => {})
 })
 

@@ -25,5 +25,7 @@ export interface StreamRequest {
 export interface ModelProvider {
   id: 'anthropic' | 'openrouter' | 'fake'
   contextWindow(model: string): Promise<number>
+  /** Model ids this provider offers; throws ProviderError (401/403 = bad key). */
+  listModels?(): Promise<string[]>
   stream(req: StreamRequest): AsyncIterable<StreamEvent>
 }

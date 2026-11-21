@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ShieldAlert, ShieldQuestion } from 'lucide-react'
 import type { Decision, PermissionRequest, PromptRequest } from '../../../shared/types'
 import {
   AlertDialog,
@@ -19,7 +20,10 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
   return (
     <>
       <AlertDialogHeader>
-        <AlertDialogTitle>{request.toolName} wants to run</AlertDialogTitle>
+        <AlertDialogTitle className="flex items-center gap-2">
+          <ShieldQuestion className="h-4 w-4" aria-hidden />
+          {request.toolName} wants to run
+        </AlertDialogTitle>
         <AlertDialogDescription>{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
       <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap">{subject(request.input).slice(0, 2000)}</pre>
@@ -46,7 +50,10 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
         {request?.kind === 'trust' && (
           <>
             <AlertDialogHeader>
-              <AlertDialogTitle>Trust this workspace?</AlertDialogTitle>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4" aria-hidden />
+                Trust this workspace?
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 {request.workspace} defines allow rules that run without asking. Only trust projects you wrote or reviewed.
               </AlertDialogDescription>
@@ -63,7 +70,10 @@ export function PromptDialog({ request, onDecision }: { request: PromptRequest |
         {request?.kind === 'plan' && (
           <>
             <AlertDialogHeader>
-              <AlertDialogTitle>Approve this plan?</AlertDialogTitle>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <ShieldQuestion className="h-4 w-4" aria-hidden />
+                Approve this plan?
+              </AlertDialogTitle>
             </AlertDialogHeader>
             <pre className="max-h-72 overflow-auto rounded-md border bg-muted p-3 text-xs whitespace-pre-wrap">{request.plan}</pre>
             <AlertDialogFooter>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Settings } from 'lucide-react'
-import type { SettingsInfo } from '../../shared/types'
+import type { ProviderId, SettingsInfo } from '../../shared/types'
+import type { ModelList } from '@/components/ModelCombobox'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
 import { PromptInput } from '@/components/PromptInput'
@@ -18,11 +19,25 @@ export default function App() {
   const [open, setOpen] = useState(false)
   const [setupError, setSetupError] = useState<string | null>(null)
 
+  const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
+  const [models, setModels] = useState<ModelList>({ models: [] })
   const loadSettings = useCallback(() => api?.invoke('settings:get').then(setSettings), [api])
   useEffect(() => void loadSettings(), [loadSettings])
 
+  // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
+  const provider = settings?.provider
+  const source = provider && settings?.keySource[provider]
+  useEffect(() => {
+    if (!api || !provider || !settings.hasKey[provider]) return setModels({ models: [] })
+    let live = true
+    setModels((m) => ({ ...m, loading: true }))
+    api.invoke('settings:models', provider).then((r) => live && setModels(r), () => live && setModels({ models: [] }))
+    return () => void (live = false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, provider, source, keyN])
+
   const actions = {
-    onUpdate: async (patch: { provider?: 'anthropic' | 'openrouter'; model?: string }) => {
+    onUpdate: async (patch: { provider?: ProviderId; model?: string }) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:update', patch))
@@ -31,10 +46,11 @@ export default function App() {
         setSetupError((e as Error).message)
       }
     },
-    onSaveKey: async (p: 'anthropic' | 'openrouter', key: string) => {
+    onSaveKey: async (p: ProviderId, key: string) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:setKey', p, key))
+        setKeyN((n) => n + 1)
       } catch (e) {
         setSetupError((e as Error).message)
       }
@@ -61,7 +77,7 @@ export default function App() {
             <CardDescription>MCA uses your own API key. Choose a provider and paste its key to begin.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <ProviderForm key={settings.provider} settings={settings} {...actions} />
+            <ProviderForm key={settings.provider} settings={settings} models={models} {...actions} />
             {setupError && <p className="text-sm text-destructive">{setupError}</p>}
           </CardContent>
         </Card>
@@ -102,10 +118,10 @@ export default function App() {
         <div className="h-10 shrink-0" />
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{s.error}</p>}
         <ChatTranscript items={v.items} />
-        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} disabled={v.busy} {...actions} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} {...actions} />
     </main>
   )
 }

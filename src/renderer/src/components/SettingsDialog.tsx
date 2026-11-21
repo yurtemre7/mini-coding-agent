@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { Check, CircleAlert, CircleCheck, KeyRound } from 'lucide-react'
+import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { PROVIDER_LABELS } from '@/lib/providers'
-import type { ProviderId, SettingsInfo } from '../../../shared/types'
+import type { KeySource, ProviderId, SettingsInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -12,10 +14,25 @@ export interface SettingsActions {
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
+const SOURCE_LABELS: Record<KeySource, string> = { env: 'environment', dotenv: '.env', keychain: 'Keychain', file: '~/.mca/credentials.json' }
+
+function KeyStatus({ settings, models }: { settings: SettingsInfo; models: ModelList }) {
+  const p = settings.provider
+  const src = settings.keySource[p]
+  const row = (icon: React.ReactNode, text: string, tone = 'text-muted-foreground') => (
+    <p className={`flex items-center gap-2 text-xs ${tone}`} role="status">
+      {icon}
+      {text}
+    </p>
+  )
+  if (!settings.hasKey[p]) return row(<KeyRound className="h-4 w-4" aria-hidden />, 'No key yet')
+  if (models.rejected) return row(<CircleAlert className="h-4 w-4" aria-hidden />, `Key rejected by ${PROVIDER_LABELS[p]}`, 'text-destructive')
+  return row(<CircleCheck className="h-4 w-4" aria-hidden />, `Key found in ${src ? SOURCE_LABELS[src] : 'the credential store'}`)
+}
+
 /** Provider, model and key form. A stored key is never shown: the input stays empty and only says whether one exists. */
-export function ProviderForm({ settings, disabled, onUpdate, onSaveKey }: { settings: SettingsInfo; disabled?: boolean } & SettingsActions) {
+export function ProviderForm({ settings, models = { models: [] }, disabled, onUpdate, onSaveKey }: { settings: SettingsInfo; models?: ModelList; disabled?: boolean } & SettingsActions) {
   const [key, setKey] = useState('')
-  const [model, setModel] = useState(settings.model)
   const saved = settings.hasKey[settings.provider]
   return (
     <div className="space-y-4">
@@ -35,7 +52,10 @@ export function ProviderForm({ settings, disabled, onUpdate, onSaveKey }: { sett
           <SelectContent>
             {(Object.keys(PROVIDER_LABELS) as ProviderId[]).map((p) => (
               <SelectItem key={p} value={p}>
-                {PROVIDER_LABELS[p]}
+                <span className="flex items-center gap-2">
+                  {PROVIDER_LABELS[p]}
+                  {settings.hasKey[p] && <Check className="h-4 w-4 text-muted-foreground" aria-label="Key found" />}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -43,7 +63,7 @@ export function ProviderForm({ settings, disabled, onUpdate, onSaveKey }: { sett
       </div>
       <div className="space-y-2">
         <Label htmlFor="model">Model</Label>
-        <Input id="model" value={model} disabled={disabled} onChange={(e) => setModel(e.target.value)} onBlur={() => model.trim() && model !== settings.model && void onUpdate({ model })} />
+        <ModelCombobox id="model" className="w-full" value={settings.model} list={models} disabled={disabled} onSelect={(model) => void onUpdate({ model })} />
       </div>
       <div className="space-y-2">
         <Label htmlFor="api-key">API key</Label>
@@ -59,13 +79,14 @@ export function ProviderForm({ settings, disabled, onUpdate, onSaveKey }: { sett
             Save key
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">{saved ? 'Key saved (stored in the macOS Keychain, shared with the mca CLI). Paste a new one to replace it.' : 'Stored in the macOS Keychain; never shown again.'}</p>
+        <KeyStatus settings={settings} models={models} />
+        <p className="text-xs text-muted-foreground">{saved ? 'Paste a new key to replace the saved one.' : 'Saved to the macOS Keychain; never shown again.'}</p>
       </div>
     </div>
   )
 }
 
-export function SettingsDialog({ open, onOpenChange, settings, disabled, ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; disabled?: boolean } & SettingsActions) {
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -73,7 +94,7 @@ export function SettingsDialog({ open, onOpenChange, settings, disabled, ...acti
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>{disabled ? 'Provider and model cannot change while a turn is running.' : 'Choose a provider and model, and save its API key.'}</DialogDescription>
         </DialogHeader>
-        <ProviderForm settings={settings} disabled={disabled} {...actions} />
+        <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
       </DialogContent>
     </Dialog>
   )

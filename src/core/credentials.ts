@@ -4,8 +4,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { parseEnv, promisify } from 'node:util'
 
-import type { ProviderId } from '../shared/types'
-export type { ProviderId }
+import type { KeySource, ProviderId } from '../shared/types'
+export type { KeySource, ProviderId }
 export const ENV_VARS: Record<ProviderId, string> = { anthropic: 'ANTHROPIC_API_KEY', openrouter: 'OPENROUTER_API_KEY' }
 
 export interface Keychain {
@@ -54,12 +54,23 @@ async function readDotEnv(dir: string): Promise<Record<string, string>> {
   }
 }
 
-/** env -> Keychain -> ~/.mca/credentials.json -> .env in the launch directory (last, so a cloned repo's .env never overrides your own key) */
-export async function getKey(p: ProviderId, keychain = defaultKeychain(), dir = process.cwd()): Promise<string | null> {
-  return (
-    process.env[ENV_VARS[p]] || (await keychain?.get(p)) || (await readFileStore())[p] || (await readDotEnv(dir))[ENV_VARS[p]] || null
-  )
+/** The one lookup chain: env -> Keychain -> ~/.mca/credentials.json -> .env in the launch directory (last, so a cloned repo's .env never overrides your own key) */
+async function find(p: ProviderId, keychain: Keychain | undefined, dir: string): Promise<{ key: string; source: KeySource } | null> {
+  const steps: [KeySource, () => Promise<string | null | undefined>][] = [
+    ['env', async () => process.env[ENV_VARS[p]]],
+    ['keychain', async () => keychain?.get(p)],
+    ['file', async () => (await readFileStore())[p]],
+    ['dotenv', async () => (await readDotEnv(dir))[ENV_VARS[p]]]
+  ]
+  for (const [source, get] of steps) {
+    const key = await get()
+    if (key) return { key, source }
+  }
+  return null
 }
+
+export const getKey = async (p: ProviderId, keychain = defaultKeychain(), dir = process.cwd()): Promise<string | null> => (await find(p, keychain, dir))?.key ?? null
+export const keySource = async (p: ProviderId, keychain = defaultKeychain(), dir = process.cwd()): Promise<KeySource | null> => (await find(p, keychain, dir))?.source ?? null
 
 export async function setKey(p: ProviderId, key: string, keychain = defaultKeychain()): Promise<void> {
   try {

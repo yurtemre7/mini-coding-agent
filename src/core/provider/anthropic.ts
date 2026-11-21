@@ -6,6 +6,7 @@ import type { Message, ModelProvider, StopReason, StreamEvent, StreamRequest } f
 // The slice of the SDK we use, so tests can inject a fake.
 export interface AnthropicLike {
   messages: { create(body: any, opts: { signal: AbortSignal }): Promise<AsyncIterable<any>> }
+  models: { list(): AsyncIterable<{ id: string }> }
 }
 
 const parseJson = (s: string): unknown => {
@@ -52,6 +53,16 @@ export class AnthropicProvider implements ModelProvider {
 
   async contextWindow(model: string): Promise<number> {
     return anthropicContextWindow(model)
+  }
+
+  async listModels(): Promise<string[]> {
+    try {
+      const ids: string[] = []
+      for await (const m of this.client.models.list()) ids.push(m.id) // the SDK pages automatically
+      return ids
+    } catch (e) {
+      throw toProviderError(e)
+    }
   }
 
   stream(req: StreamRequest): AsyncIterable<StreamEvent> {

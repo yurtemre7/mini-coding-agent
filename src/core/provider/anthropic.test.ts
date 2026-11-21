@@ -19,7 +19,7 @@ const collect = async (it: AsyncIterable<StreamEvent>) => {
 }
 const client = (...calls: (() => Promise<AsyncIterable<any>>)[]) => {
   const create = vi.fn(async () => calls.shift()!())
-  return { create, client: { messages: { create } } as AnthropicLike }
+  return { create, client: { messages: { create } } as unknown as AnthropicLike }
 }
 const apiError = (status: number, headers: Record<string, string> = {}) =>
   Object.assign(new Error('boom'), { status, headers: new Headers(headers) })
@@ -37,6 +37,15 @@ const happy = [
   { type: 'content_block_stop' },
   { type: 'message_delta', delta: { stop_reason: 'tool_use' }, usage: { output_tokens: 7 } }
 ]
+
+describe('AnthropicProvider.listModels', () => {
+  it('collects ids and maps 401 to an error naming the env var', async () => {
+    const ok = { messages: {}, models: { list: () => gen([{ id: 'a' }, { id: 'b' }]) } } as unknown as AnthropicLike
+    expect(await new AnthropicProvider('k', { client: ok }).listModels()).toEqual(['a', 'b'])
+    const bad = { messages: {}, models: { list: () => gen([], apiError(401)) } } as unknown as AnthropicLike
+    await expect(new AnthropicProvider('k', { client: bad }).listModels()).rejects.toThrow(/ANTHROPIC_API_KEY/)
+  })
+})
 
 describe('AnthropicProvider', () => {
   it('maps a stream: text, fragmented tool args, cached-token usage, stop', async () => {

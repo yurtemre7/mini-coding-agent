@@ -22,6 +22,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
     const o = obj(patch, 'patch')
     return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }) }]
   },
+  'settings:models': ([p]) => [provider(p)],
   'prompt:answer': ([id, d]) => {
     const o = obj(d, 'decision')
     if (typeof o.allow !== 'boolean') bad('decision.allow must be a boolean')
