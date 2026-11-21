@@ -79,6 +79,7 @@ export class AnthropicProvider implements ModelProvider {
           system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
           messages: withCache(req.messages),
           tools: req.tools,
+          ...(req.effort && { output_config: { effort: req.effort } }),
           stream: true
         },
         { signal: req.signal }

@@ -60,6 +60,8 @@ describe('Controller', () => {
   })
   it('settings never expose a key; provider/model changes are blocked mid-turn', async () => {
     const { c, store } = await setup([[]], false)
+    expect((await c.getSettings()).effort).toBe('medium')
+    expect((await c.update({ effort: 'high' })).effort).toBe('high')
     expect((await c.getSettings()).hasKey).toEqual({ anthropic: false, openrouter: false })
     const after = await c.setKey('anthropic', ' secret ')
     expect(store.anthropic).toBe('secret')

@@ -104,6 +104,16 @@ describe('OpenRouterProvider', () => {
     expect(events[0]).toEqual({ type: 'text_delta', text: 'yo' })
   })
 
+  it('sends reasoning.effort, mapping xhigh and max to high', async () => {
+    const sent: any[] = []
+    for (const effort of ['low', 'xhigh', 'max'] as const) {
+      const fetch = vi.fn().mockResolvedValue(ok(delta({ content: 'y' }, 'stop') + 'data: [DONE]\n\n'))
+      await collect(new OpenRouterProvider('key', { fetch, sleep }).stream({ ...req(), effort }))
+      sent.push(JSON.parse(fetch.mock.calls[0][1].body).reasoning)
+    }
+    expect(sent).toEqual([{ effort: 'low' }, { effort: 'high' }, { effort: 'high' }])
+  })
+
   it('fails 401 immediately, naming the env var', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response('no', { status: 401 }))
     await expect(collect(new OpenRouterProvider('k', { fetch, sleep }).stream(req()))).rejects.toThrow(/OPENROUTER_API_KEY/)

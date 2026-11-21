@@ -152,6 +152,7 @@ export class OpenRouterProvider implements ModelProvider {
       stream: true,
       max_tokens: req.maxTokens,
       usage: { include: true },
+      ...(req.effort && { reasoning: { effort: req.effort === 'xhigh' || req.effort === 'max' ? 'high' : req.effort } }), // OpenRouter takes low|medium|high
       ...(req.tools.length && {
         tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }))
       })

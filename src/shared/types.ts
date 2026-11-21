@@ -10,6 +10,12 @@ export interface AppInfo {
 export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'] as const
 export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+export type Effort = (typeof EFFORT_LEVELS)[number]
+export const DEFAULT_EFFORT: Effort = 'medium'
+/** CLI flag value -> Effort; undefined input means the default, an unknown string is undefined. */
+export const parseEffort = (s?: string): Effort | undefined => (s === undefined ? DEFAULT_EFFORT : EFFORT_LEVELS.find((e) => e === s))
+
 export interface Todo {
   content: string
   status: 'pending' | 'in_progress' | 'completed'
@@ -87,6 +93,7 @@ export interface EventBatch {
 export interface SettingsInfo {
   provider: ProviderId
   model: string
+  effort: Effort
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
 }
@@ -102,7 +109,7 @@ export interface IpcContract {
     'workspace:select': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
-    'settings:update': { args: [patch: { provider?: ProviderId; model?: string }]; result: SettingsInfo }
+    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
     'settings:models': { args: [provider: ProviderId]; result: { models: string[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }

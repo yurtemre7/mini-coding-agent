@@ -1,4 +1,4 @@
-import type { AgentEvent, Decision, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import type { AgentEvent, Decision, Effort, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { FileState } from './filestate'
 import type { Block, Message, ModelProvider } from './provider/types'
 import { isZod, toToolDef, truncate, type Tool, type ToolContext } from './tool'
@@ -17,6 +17,7 @@ export interface TurnOptions {
   frontend: Frontend
   signal: AbortSignal
   maxTokens?: number
+  effort?: Effort // passed on every stream call; subagents inherit it
   files?: FileState // readState + checkpoints + Bash cwd; AgentSession keeps one across turns
   maxIterations?: number // 50 per turn (25 for subagents)
   /** Permission seam (filled in Milestone 3). Return a denial reason to block the call; undefined allows it. */
@@ -146,7 +147,7 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
       const content: Block[] = []
       history.push({ role: 'assistant', content }) // filled while streaming so aborted text is kept
       let stop = 'end_turn'
-      for await (const ev of provider.stream({ model: opts.model, system: opts.system, messages: history.slice(0, -1), tools: toolDefs, maxTokens: opts.maxTokens ?? 8192, signal })) {
+      for await (const ev of provider.stream({ model: opts.model, system: opts.system, messages: history.slice(0, -1), tools: toolDefs, maxTokens: opts.maxTokens ?? 8192, effort: opts.effort, signal })) {
         if (ev.type === 'text_delta') {
           const last = content.at(-1)
           if (last?.type === 'text') last.text += ev.text

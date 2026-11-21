@@ -11,6 +11,15 @@ const io = () => {
 }
 
 describe('headless', () => {
+  it('passes the effort on every stream call', async () => {
+    const { io: i } = io()
+    const provider = new FakeProvider([
+      [{ type: 'tool_use', id: '1', name: 'Read', input: { file_path: 'package.json' } }, { type: 'stop', reason: 'tool_use' }],
+      [{ type: 'stop', reason: 'end_turn' }]
+    ])
+    await runHeadless({ prompt: 'p', provider, model: 'm', effort: 'high', cwd: process.cwd(), io: i })
+    expect(provider.requests.map((r) => r.effort)).toEqual(['high', 'high'])
+  })
   it('answer to stdout, tool activity to stderr, exit 0', async () => {
     const { o, io: i } = io()
     const provider = new FakeProvider([

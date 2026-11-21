@@ -1,4 +1,4 @@
-import type { Decision, PermissionMode } from '../shared/types'
+import type { Decision, Effort, PermissionMode } from '../shared/types'
 import { AgentSession, type Frontend } from '../core/agent'
 import { createPermissions } from '../core/permissions'
 import { builtinTools } from '../core/registry'
@@ -28,7 +28,7 @@ export function plainFrontend(io: Io): Frontend {
 }
 
 /** Runs one prompt to completion. Returns the process exit code (0 ok, 1 runtime error). */
-export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; cwd: string; io: Io; permissionMode?: PermissionMode; allowedTools?: string[]; trust?: boolean; home?: string }): Promise<number> {
+export async function runHeadless(o: { prompt: string; provider: ModelProvider; model: string; effort?: Effort; cwd: string; io: Io; permissionMode?: PermissionMode; allowedTools?: string[]; trust?: boolean; home?: string }): Promise<number> {
   // headless cannot ask, so a call that needs approval is denied with a message naming the flags; untrusted unless --trust
   const { perms, warnings, ignoredAllow } = await createPermissions({ cwd: o.cwd, mode: o.permissionMode, allowedTools: o.allowedTools, trusted: !!o.trust, canAsk: false, home: o.home })
   for (const w of warnings) o.io.err(`warn: ${w}\n`)
@@ -36,6 +36,7 @@ export async function runHeadless(o: { prompt: string; provider: ModelProvider; 
   const session = new AgentSession({
     provider: o.provider,
     model: o.model,
+    effort: o.effort,
     system: SYSTEM_PROMPT,
     tools: builtinTools,
     cwd: o.cwd,

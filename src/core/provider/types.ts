@@ -1,3 +1,4 @@
+import type { Effort } from '../../shared/types'
 import type { JsonSchema } from '../tool'
 
 export type Block =
@@ -19,6 +20,7 @@ export interface StreamRequest {
   messages: Message[]
   tools: ToolDef[]
   maxTokens: number
+  effort?: Effort
   signal: AbortSignal
 }
 

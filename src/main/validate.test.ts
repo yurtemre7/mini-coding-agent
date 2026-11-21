@@ -21,6 +21,7 @@ describe('IPC validation', () => {
     ['settings:update', ['x']],
     ['settings:update', [{ provider: 'evil' }]],
     ['settings:update', [{ model: 3 }]],
+    ['settings:update', [{ effort: 'turbo' }]],
     ['prompt:answer', [1, { allow: true }]],
     ['prompt:answer', ['id', { allow: 'yes' }]],
     ['prompt:answer', ['id', { allow: true, scope: 'forever' }]],
@@ -33,7 +34,7 @@ describe('IPC validation', () => {
     expect(v['session:send'](['hi'])).toEqual(['hi'])
     expect(v['settings:setKey'](['openrouter', 'k'])).toEqual(['openrouter', 'k'])
     expect(v['settings:models'](['openrouter', 'x'])).toEqual(['openrouter'])
-    expect(v['settings:update']([{ provider: 'anthropic', model: 'm', extra: 1 }])).toEqual([{ provider: 'anthropic', model: 'm' }])
+    expect(v['settings:update']([{ provider: 'anthropic', model: 'm', effort: 'max', extra: 1 }])).toEqual([{ provider: 'anthropic', model: 'm', effort: 'max' }])
     expect(v['prompt:answer'](['id', { allow: true, scope: 'session', feedback: 'f', evil: 1 }])).toEqual(['id', { allow: true, scope: 'session', feedback: 'f' }])
     expect(v['session:abort']([1, 2])).toEqual([])
   })

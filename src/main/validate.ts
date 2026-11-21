@@ -1,11 +1,12 @@
 import { PROVIDER_IDS } from '../core/provider/factory'
-import type { Decision, IpcContract, ProviderId } from '../shared/types'
+import { EFFORT_LEVELS, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
 
 const bad = (m: string): never => {
   throw new Error(`Invalid request: ${m}`)
 }
 const str = (v: unknown, name: string): string => (typeof v === 'string' ? v : bad(`${name} must be a string`))
 const provider = (v: unknown): ProviderId => (PROVIDER_IDS.includes(v as ProviderId) ? (v as ProviderId) : bad('unknown provider'))
+const effort = (v: unknown): Effort => (EFFORT_LEVELS.includes(v as Effort) ? (v as Effort) : bad('unknown effort'))
 const obj = (v: unknown, name: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : bad(`${name} must be an object`))
 
 /** Every invoke channel's arguments are checked in main, whatever the renderer sends. Returns the sanitized tuple. */
@@ -20,7 +21,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'settings:setKey': ([p, k]) => [provider(p), str(k, 'key')],
   'settings:update': ([patch]) => {
     const o = obj(patch, 'patch')
-    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }) }]
+    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }) }]
   },
   'settings:models': ([p]) => [provider(p)],
   'prompt:answer': ([id, d]) => {

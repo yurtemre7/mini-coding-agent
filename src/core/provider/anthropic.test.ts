@@ -141,3 +141,13 @@ describe('AnthropicProvider', () => {
     expect(await p.contextWindow('unknown')).toBe(200_000)
   })
 })
+
+describe('AnthropicProvider effort', () => {
+  it('sends output_config.effort, and omits it when unset', async () => {
+    const { create, client: c } = client(async () => gen([]), async () => gen([]))
+    await collect(new AnthropicProvider('k', { client: c, sleep }).stream(req({ effort: 'xhigh' })))
+    await collect(new AnthropicProvider('k', { client: c, sleep }).stream(req()))
+    expect((create.mock.calls[0] as any)[0].output_config).toEqual({ effort: 'xhigh' })
+    expect('output_config' in (create.mock.calls[1] as any)[0]).toBe(false)
+  })
+})

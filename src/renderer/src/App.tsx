@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FolderOpen, Settings } from 'lucide-react'
-import type { ProviderId, SettingsInfo } from '../../shared/types'
+import type { Effort, ProviderId, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
@@ -37,7 +37,7 @@ export default function App() {
   }, [api, provider, source, keyN])
 
   const actions = {
-    onUpdate: async (patch: { provider?: ProviderId; model?: string }) => {
+    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort }) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:update', patch))
@@ -118,7 +118,7 @@ export default function App() {
         <div className="h-10 shrink-0" />
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         <ChatTranscript items={v.items} />
-        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} onSend={s.send} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
       <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} {...actions} />

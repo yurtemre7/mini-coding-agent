@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowUp, ClipboardList, FilePen, Shield, ShieldOff, Square, Undo2, type LucideIcon } from 'lucide-react'
+import { ArrowUp, ClipboardList, FilePen, Gauge, Shield, ShieldOff, Square, Undo2, type LucideIcon } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
-import { PERMISSION_MODES, type PermissionMode } from '../../../shared/types'
+import { EFFORT_LABELS } from '@/lib/providers'
+import { EFFORT_LEVELS, PERMISSION_MODES, type Effort, type PermissionMode } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,13 +16,15 @@ export interface PromptInputProps {
   model: string
   models: ModelList
   onModel(model: string): void
+  effort: Effort
+  onEffort(effort: Effort): void
   onSend(text: string): void
   onStop(): void
   onMode(mode: PermissionMode): void
   onRewind(): void
 }
 
-export function PromptInput({ busy, disabled, mode, model, models, onModel, onSend, onStop, onMode, onRewind }: PromptInputProps) {
+export function PromptInput({ busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind }: PromptInputProps) {
   const [text, setText] = useState('')
   const submit = () => {
     if (busy || disabled || !text.trim()) return
@@ -39,7 +42,7 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, onSe
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) (e.preventDefault(), submit())
         }}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Select value={mode} disabled={disabled} onValueChange={(m) => onMode(m as PermissionMode)}>
           <SelectTrigger aria-label="Permission mode" className="w-48">
             <SelectValue />
@@ -59,6 +62,19 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, onSe
           </SelectContent>
         </Select>
         <ModelCombobox value={model} list={models} disabled={busy} onSelect={onModel} className="w-56" />
+        <Select value={effort} disabled={busy} onValueChange={(e) => onEffort(e as Effort)}>
+          <SelectTrigger aria-label="Effort" className="w-36 min-w-0 shrink">
+            <Gauge className="h-4 w-4 shrink-0" aria-hidden />
+            <SelectValue className="truncate" />
+          </SelectTrigger>
+          <SelectContent>
+            {EFFORT_LEVELS.map((e) => (
+              <SelectItem key={e} value={e}>
+                {EFFORT_LABELS[e]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button variant="outline" disabled={busy || disabled} onClick={onRewind} title="Undo the last turn: restore its files and drop it from the conversation">
           <Undo2 className="mr-2 h-4 w-4" aria-hidden />
           Rewind

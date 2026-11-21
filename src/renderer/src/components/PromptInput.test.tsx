@@ -2,9 +2,17 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { PromptInput } from './PromptInput'
 
-const base = { busy: false, mode: 'default' as const, model: 'claude-x', models: { models: [] }, onModel: vi.fn(), onSend: vi.fn(), onStop: vi.fn(), onMode: vi.fn(), onRewind: vi.fn() }
+const base = { busy: false, mode: 'default' as const, model: 'claude-x', models: { models: [] }, onModel: vi.fn(), effort: 'medium' as const, onEffort: vi.fn(), onSend: vi.fn(), onStop: vi.fn(), onMode: vi.fn(), onRewind: vi.fn() }
 
 describe('PromptInput', () => {
+  it('renders the effort select with Medium selected by default, disabled while busy', () => {
+    const { rerender } = render(<PromptInput {...base} />)
+    const sel = screen.getByRole('combobox', { name: 'Effort' })
+    expect(sel).toHaveTextContent('Medium')
+    expect(sel).toBeEnabled()
+    rerender(<PromptInput {...base} busy />)
+    expect(screen.getByRole('combobox', { name: 'Effort' })).toBeDisabled()
+  })
   it('Enter sends and clears; Shift+Enter does not', () => {
     const onSend = vi.fn()
     render(<PromptInput {...base} onSend={onSend} />)

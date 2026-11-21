@@ -4,6 +4,7 @@ import { getKey, type ProviderId } from '../core/credentials'
 import { DEFAULT_MODELS } from '../core/provider/models'
 import { PROVIDER_IDS, providerFromCredentials } from '../core/provider/factory'
 import { MODES, parseMode, splitRules } from '../core/permissions'
+import { EFFORT_LEVELS, parseEffort } from '../shared/types'
 import { runHeadless } from './headless'
 import { runInteractive } from './ui'
 
@@ -14,6 +15,7 @@ Options:
   -p, --print            Run one prompt non-interactively; answer on stdout, tool activity on stderr
       --provider <id>    anthropic | openrouter (default: first one with a key)
       --model <id>       Model id (default: the provider's main model)
+      --effort <level>   low | medium | high | xhigh | max (default: medium)
       --permission-mode <mode>
                          default | acceptEdits | plan | bypassPermissions
       --allowed-tools <rules>
@@ -47,6 +49,7 @@ async function main(): Promise<void> {
         print: { type: 'boolean', short: 'p' },
         provider: { type: 'string' },
         model: { type: 'string' },
+        effort: { type: 'string' },
         'permission-mode': { type: 'string' },
         'allowed-tools': { type: 'string', multiple: true },
         trust: { type: 'boolean' }
@@ -61,6 +64,8 @@ async function main(): Promise<void> {
   if (values.version) return console.log(pkg.version)
   if (values.help) return console.log(USAGE)
 
+  const effort = parseEffort(values.effort)
+  if (!effort) return fail(`Unknown effort "${values.effort}". Use ${EFFORT_LEVELS.join(', ')}.`)
   const modeArg = values['permission-mode']
   const permissionMode = modeArg === undefined ? undefined : parseMode(modeArg)
   if (modeArg !== undefined && !permissionMode) return fail(`Unknown permission mode "${modeArg}". Use ${MODES.join(', ')}.`)
@@ -86,12 +91,13 @@ async function main(): Promise<void> {
   }
 
   const model = values.model ?? DEFAULT_MODELS[id].main
-  if (!values.print) return runInteractive({ provider, model, cwd: process.cwd(), mode: permissionMode, allowedTools, trust: values.trust })
+  if (!values.print) return runInteractive({ provider, model, effort, cwd: process.cwd(), mode: permissionMode, allowedTools, trust: values.trust })
 
   const code = await runHeadless({
     prompt,
     provider,
     model,
+    effort,
     cwd: process.cwd(),
     permissionMode,
     allowedTools,

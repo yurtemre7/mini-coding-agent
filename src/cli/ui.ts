@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline/promises'
-import type { Decision, PermissionMode, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import type { Decision, Effort, PermissionMode, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
 import { AgentSession, type Frontend } from '../core/agent'
 import { parseInput, runCommand } from '../core/commands'
 import { createPermissions, type Permissions } from '../core/permissions'
@@ -117,6 +117,7 @@ export class CtrlC {
 export async function runInteractive(o: {
   provider: ModelProvider
   model: string
+  effort?: Effort
   cwd: string
   mode?: PermissionMode
   allowedTools?: string[]
@@ -157,7 +158,7 @@ export async function runInteractive(o: {
     }
   }
   const perms: Permissions = built.perms
-  const session = new AgentSession({ provider: o.provider, model: o.model, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide })
+  const session = new AgentSession({ provider: o.provider, model: o.model, effort: o.effort, system: SYSTEM_PROMPT, tools: builtinTools, cwd: o.cwd, frontend: fe, decide: perms.decide })
 
   let exiting = false
   const ctrl = new CtrlC()

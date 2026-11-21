@@ -10,7 +10,7 @@ import type { ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
 import { isTrusted, trustWorkspace } from '../core/trust'
 import { reduce, emptyView } from '../shared/reducer'
-import { type Decision, type KeySource, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Decision, type Effort, type KeySource, type PromptRequest, type ProviderId, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
 const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
@@ -34,6 +34,7 @@ export class Controller {
   private seq = 0
   private provider: ProviderId = 'anthropic'
   private model: string = DEFAULT_MODELS.anthropic.main
+  private effort: Effort = DEFAULT_EFFORT
   private workspace: string | null = null
   private session?: AgentSession
   private perms?: Permissions
@@ -76,7 +77,7 @@ export class Controller {
       hasKey[id] = !!(await this.keys.get(id))
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
-    return { provider: this.provider, model: this.model, hasKey, keySource: source }
+    return { provider: this.provider, model: this.model, effort: this.effort, hasKey, keySource: source }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -115,13 +116,17 @@ export class Controller {
     return this.getSettings()
   }
 
-  async update(patch: { provider?: ProviderId; model?: string }): Promise<SettingsInfo> {
-    this.assertIdle('change the model')
+  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort }): Promise<SettingsInfo> {
+    this.assertIdle('change the model or effort')
     if (patch.provider) {
       if (!PROVIDER_IDS.includes(patch.provider)) throw new Error(`Unknown provider "${patch.provider}".`)
       this.setProvider(patch.provider)
     }
     if (patch.model?.trim()) this.model = patch.model.trim()
+    if (patch.effort) {
+      if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
+      this.effort = patch.effort
+    }
     return this.getSettings()
   }
 
@@ -136,7 +141,7 @@ export class Controller {
     return p
   }
   private async *stream(req: Parameters<ModelProvider['stream']>[0]) {
-    yield* (await this.current()).stream({ ...req, model: this.model })
+    yield* (await this.current()).stream({ ...req, model: this.model, effort: this.effort })
   }
 
   private frontend: Frontend = {

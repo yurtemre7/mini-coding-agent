@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Check, CircleAlert, CircleCheck, KeyRound } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
-import { PROVIDER_LABELS } from '@/lib/providers'
-import type { KeySource, ProviderId, SettingsInfo } from '../../../shared/types'
+import { EFFORT_LABELS, PROVIDER_LABELS } from '@/lib/providers'
+import { EFFORT_LEVELS, type Effort, type KeySource, ProviderId, SettingsInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export interface SettingsActions {
-  onUpdate(patch: { provider?: ProviderId; model?: string }): Promise<unknown> | void
+  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort }): Promise<unknown> | void
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
@@ -66,6 +66,21 @@ export function ProviderForm({ settings, models = { models: [] }, disabled, onUp
         <ModelCombobox id="model" className="w-full" value={settings.model} list={models} disabled={disabled} onSelect={(model) => void onUpdate({ model })} />
       </div>
       <div className="space-y-2">
+        <Label>Effort</Label>
+        <Select value={settings.effort} disabled={disabled} onValueChange={(e) => void onUpdate({ effort: e as Effort })}>
+          <SelectTrigger aria-label="Effort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {EFFORT_LEVELS.map((e) => (
+              <SelectItem key={e} value={e}>
+                {EFFORT_LABELS[e]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="api-key">API key</Label>
         <div className="flex gap-2">
           <Input id="api-key" type="password" autoComplete="off" value={key} placeholder={saved ? 'Key saved' : 'Paste your API key'} onChange={(e) => setKey(e.target.value)} />
@@ -92,7 +107,7 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>{disabled ? 'Provider and model cannot change while a turn is running.' : 'Choose a provider and model, and save its API key.'}</DialogDescription>
+          <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Choose a provider, model and effort, and save its API key.'}</DialogDescription>
         </DialogHeader>
         <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
       </DialogContent>
