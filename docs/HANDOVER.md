@@ -99,6 +99,18 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 - **Key lookup order**: env → Keychain → `~/.mca/credentials.json` → `.env` (last, so a cloned repo's `.env` never overrides your key).
 - **Effort** is sent on every request (default `medium`); OpenRouter maps `xhigh`/`max` to `high`; an Anthropic model that returns a 400 mentioning effort is retried once without it and remembered for the session.
 
+## Releasing
+
+Unsigned macOS builds are released by tag (`.github/workflows/release.yml`):
+
+```bash
+npm version 0.2.0 --no-git-tag-version   # bump package.json, then commit it
+git commit -am "release 0.2.0" && git push
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+The tag must equal the `package.json` version, or the workflow stops. It runs lint, typecheck and tests, builds arm64 and x64 `.dmg`/`.zip` with `identity: null` (no signing, `CSC_IDENTITY_AUTO_DISCOVERY=false`), writes `SHA256SUMS.txt`, and creates the GitHub release with `gh release create` (a tag containing `-`, such as `v0.2.0-beta.1`, is marked prerelease). Users must clear the quarantine flag (`xattr -dr com.apple.quarantine`), which the release notes explain. The release workflow has never run: the first tag is its test.
+
 ## Known gaps and parked findings
 
 - Deny rule `Bash(git push:*)` does not match `git -c x=y push` (options between the words).

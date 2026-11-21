@@ -12,6 +12,9 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts,components.json}'
 mac:
   category: public.app-category.developer-tools
+  identity: null # unsigned: no Apple Developer certificate is used
+  hardenedRuntime: false
+  gatekeeperAssess: false
   target:
     - dmg
     - zip

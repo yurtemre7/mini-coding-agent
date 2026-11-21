@@ -1,0 +1,115 @@
+name: Release
+
+# Push a tag like v0.2.0 (or v0.2.0-beta.1 for a prerelease) to build the unsigned macOS app and publish a GitHub release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify tag and checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}. Bump the version, commit, then tag."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  build-mac:
+    name: Build unsigned macOS app
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: npm run build
+
+      - name: Package (arm64 and x64, unsigned)
+        run: npx electron-builder --mac dmg zip --arm64 --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # never pick up a certificate: these builds are unsigned on purpose
+
+      - name: Checksums
+        working-directory: dist
+        run: shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mini-coding-agent-macos
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build-mac
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mini-coding-agent-macos
+          path: release
+
+      - name: Create the release with the GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
+          cat > notes.md <<'NOTES'
+          ## Install (macOS, unsigned)
+
+          This build is **not signed or notarized**, so macOS blocks it on first launch.
+
+          1. Open the `.dmg` matching your Mac (`arm64` = Apple Silicon, `x64` = Intel) and drag the app to Applications.
+          2. Remove the quarantine flag once: `xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"`
+             (or right-click the app, choose Open, then Open again; on macOS 15 use System Settings > Privacy & Security > Open Anyway).
+          3. Verify the download against `SHA256SUMS.txt` if you like: `shasum -a 256 -c SHA256SUMS.txt`.
+
+          ## Changes
+          NOTES
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes-file notes.md \
+            $flags
