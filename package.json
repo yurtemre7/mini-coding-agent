@@ -10,7 +10,7 @@
   "author": "MCA",
   "license": "MIT",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "build": "electron-vite build && npm run build:cli",
     "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node22 --format=cjs --packages=external --banner:js=\"#!/usr/bin/env node\" --outfile=out/cli/index.js",
     "preview": "electron-vite preview",
