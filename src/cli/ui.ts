@@ -8,6 +8,7 @@ import { builtinTools } from '../core/registry'
 import { startSession } from '../core/session'
 import { isTrusted, trustWorkspace } from '../core/trust'
 import { buildReminder } from '../core/context'
+import { toolSubject } from '../shared/guards'
 import { SYSTEM_PROMPT } from './headless'
 
 export interface Term {
@@ -23,7 +24,7 @@ const oneLine = (v: unknown, max = 120): string => {
 }
 
 /** The one-line subject of a tool call: the command, the file, or the pattern. */
-export const summarize = (input: any): string => oneLine(input?.command ?? input?.file_path ?? input?.pattern ?? input?.url ?? input?.path ?? input)
+export const summarize = (input: unknown): string => oneLine(toolSubject(input) || input)
 
 export function formatPermission(r: PermissionRequest): string {
   return [
@@ -60,7 +61,11 @@ export function terminalFrontend(t: Term): Frontend {
   return {
     emit(e) {
       if (e.type === 'text_delta') {
-        if (!inText) (nl(), t.write('⏺ '), (inText = true))
+        if (!inText) {
+          nl()
+          t.write('⏺ ')
+          inText = true
+        }
         t.write(e.text)
         midLine = !e.text.endsWith('\n')
       } else if (e.type === 'tool_start') {
@@ -71,8 +76,13 @@ export function terminalFrontend(t: Term): Frontend {
         const lines = e.result.split('\n')
         const shown = lines.slice(0, 4).map((l) => oneLine(l, 160))
         t.write(dim(`  ⎿ ${e.isError ? 'error: ' : ''}${shown.join('\n    ')}${lines.length > 4 ? `\n    … +${lines.length - 4} lines` : ''}`) + '\n')
-      } else if (e.type === 'notice') (nl(), t.write(`${e.level}: ${e.message}\n`))
-      else if (e.type === 'turn_end') (nl(), (inText = false))
+      } else if (e.type === 'notice') {
+        nl()
+        t.write(`${e.level}: ${e.message}\n`)
+      } else if (e.type === 'turn_end') {
+        nl()
+        inText = false
+      }
     },
     async ask(req: PermissionRequest | PlanRequest | TrustRequest): Promise<Decision> {
       nl()
@@ -132,14 +142,14 @@ export async function runInteractive(o: {
   home?: string
 }): Promise<void> {
   const input = o.input ?? process.stdin
-  const output = o.output ?? process.stdout
-  const rl = createInterface({ input, output, terminal: (output as any).isTTY })
+  const output: NodeJS.WritableStream & { isTTY?: boolean } = o.output ?? process.stdout
+  const rl = createInterface({ input, output, terminal: output.isTTY })
   const closed = new Promise<never>((_, rej) => rl.once('close', () => rej(new Error('closed'))))
   closed.catch(() => {})
   let question: AbortController | undefined
   const term: Term = {
     write: (s) => void output.write(s),
-    color: !!(output as any).isTTY && !process.env.NO_COLOR,
+    color: !!output.isTTY && !process.env.NO_COLOR,
     readLine: (q) => {
       const ac = (question = new AbortController())
       return Promise.race([rl.question(q, { signal: ac.signal }), closed])
@@ -172,10 +182,18 @@ export async function runInteractive(o: {
   const ctrl = new CtrlC()
   rl.on('SIGINT', () => {
     const act = ctrl.press({ busy: session.busy, hasInput: rl.line.length > 0 })
-    if (act === 'abort') (session.abort(), question?.abort(), term.write('\n(interrupted)\n'))
-    else if (act === 'clear') rl.write(null as any, { ctrl: true, name: 'u' })
-    else if (act === 'warn') (term.write('\n(Press Ctrl+C again within 2 s to exit)\n'), rl.prompt(true))
-    else (exiting = true, rl.close())
+    if (act === 'abort') {
+      session.abort()
+      question?.abort()
+      term.write('\n(interrupted)\n')
+    } else if (act === 'clear') rl.write(null, { ctrl: true, name: 'u' })
+    else if (act === 'warn') {
+      term.write('\n(Press Ctrl+C again within 2 s to exit)\n')
+      rl.prompt(true)
+    } else {
+      exiting = true
+      rl.close()
+    }
   })
 
   const env = {

@@ -52,6 +52,13 @@ export async function* sseData(chunks: AsyncIterable<Uint8Array | string>): Asyn
 
 const FINISH: Record<string, StopReason> = { stop: 'end_turn', tool_calls: 'tool_use', length: 'max_tokens', error: 'error' }
 
+/** The fields of an OpenRouter stream chunk that we read. */
+interface Chunk {
+  error?: { code?: unknown; message?: string }
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
+  choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string }[]
+}
+
 /** Parsed SSE payloads -> StreamEvents. `estimateIn` is the fallback when no usage is sent. */
 export async function* openRouterEvents(data: AsyncIterable<string>, estimateIn = 0): AsyncGenerator<StreamEvent> {
   const calls = new Map<number, { id: string; name: string; args: string }>()
@@ -60,7 +67,7 @@ export async function* openRouterEvents(data: AsyncIterable<string>, estimateIn 
   let chars = 0
   for await (const payload of data) {
     if (payload === '[DONE]') break
-    let chunk: any
+    let chunk: Chunk
     try {
       chunk = JSON.parse(payload)
     } catch {

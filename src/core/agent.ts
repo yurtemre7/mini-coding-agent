@@ -26,7 +26,7 @@ export interface TurnOptions {
   persist?: (m: Message) => void
   files?: FileState // readState + checkpoints + Bash cwd; AgentSession keeps one across turns
   maxIterations?: number // 50 per turn (25 for subagents)
-  /** Permission seam (filled in Milestone 3). Return a denial reason to block the call; undefined allows it. */
+  /** Permission check: returns a denial reason to block the call, or undefined to allow it. */
   decide?: (tool: Tool, input: unknown, ctx: ToolContext) => Promise<string | undefined>
   hooks?: Hooks
   /** Builds the <system-reminder> block (date, git snapshot, instruction files) sent with the first user message of a session. */
@@ -76,7 +76,7 @@ export async function runOne(call: ToolCall, opts: TurnOptions): Promise<ToolRes
       const parsed = tool.schema.safeParse(call.input)
       if (!parsed.success) throw new Error(`Invalid input for ${tool.name}: ${describeIssues(parsed.error)}`)
       input = parsed.data
-    } // shortcut: raw JSON-Schema (MCP) tools are validated by their server
+    } // raw JSON-Schema (MCP) tools are validated by their server
     const files = (opts.files ??= new FileState())
     const ctx: ToolContext = {
       cwd: files.cwd ?? opts.cwd,

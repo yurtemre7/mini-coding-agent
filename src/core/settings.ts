@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { asRecord, field } from '../shared/guards'
 import { PERMISSION_MODES, type PermissionMode } from '../shared/types'
 import { describeHooks, mergeHooks, parseHooks, type HookConfig } from './hooks'
 
@@ -17,12 +18,14 @@ export interface Settings {
   hooks: HookConfig // user hooks always; project hooks only when the workspace is trusted
   ignoredHooks: string[] // project hooks left out because the workspace is not trusted (shown in the trust prompt)
   warnings: string[]
-  rest: Record<string, unknown> // other keys pass through (hooks, MCP, model: later milestones); project keys only when trusted
+  rest: Record<string, unknown> // other keys pass through (MCP, model); project keys only when trusted
 }
+
+const isPermissionMode = (v: unknown): v is PermissionMode => (PERMISSION_MODES as readonly unknown[]).includes(v)
 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 
-async function readJson(file: string, warnings: string[]): Promise<Record<string, any> | undefined> {
+async function readJson(file: string, warnings: string[]): Promise<Record<string, unknown> | undefined> {
   let text: string
   try {
     text = await readFile(file, 'utf8')
@@ -30,9 +33,11 @@ async function readJson(file: string, warnings: string[]): Promise<Record<string
     return undefined
   }
   try {
-    const v = JSON.parse(text)
-    if (v && typeof v === 'object' && !Array.isArray(v)) return v
-  } catch {}
+    const v = asRecord(JSON.parse(text))
+    if (v) return v
+  } catch {
+    // falls through to the warning below
+  }
   warnings.push(`Ignored ${file}: not a valid JSON object.`)
   return undefined
 }
@@ -49,13 +54,14 @@ export async function loadSettings(cwd: string, o: { trusted: boolean; home?: st
     const j = await readJson(join(cwd, f), warnings)
     if (j) project.push(j)
   }
-  const perm = (j: Record<string, any>, k: keyof Rules) => strings(j.permissions?.[k])
+  const perm = (j: Record<string, unknown>, k: keyof Rules) => strings(field(j.permissions, k))
   const out: Settings = { permissions: { allow: [], deny: [], ask: [] }, projectAllow: project.flatMap((j) => perm(j, 'allow')), hooks: {}, ignoredHooks: [], warnings, rest: {} }
   const parsed: HookConfig[] = []
   const layers = [...(user ? [{ j: user, project: false }] : []), ...project.map((j) => ({ j, project: true }))]
   for (const { j, project: isProject } of layers) {
     for (const k of ['allow', 'deny', 'ask'] as const) if (k !== 'allow' || !isProject || o.trusted) out.permissions[k].push(...perm(j, k))
-    if ((PERMISSION_MODES as readonly string[]).includes(j.permissions?.defaultMode) && (!isProject || o.trusted)) out.defaultMode = j.permissions.defaultMode
+    const mode = field(j.permissions, 'defaultMode')
+    if (isPermissionMode(mode) && (!isProject || o.trusted)) out.defaultMode = mode
     const h = parseHooks(j.hooks, isProject ? 'project settings' : '~/.mca/settings.json')
     warnings.push(...h.warnings)
     if (!isProject || o.trusted) parsed.push(h.config)

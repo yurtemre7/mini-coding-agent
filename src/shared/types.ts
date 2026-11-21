@@ -12,7 +12,6 @@ export interface AppInfo {
   electronVersion: string
 }
 
-// Minimal versions: later milestones (permissions, plan mode, trust, todos) extend these.
 export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'] as const
 export type PermissionMode = (typeof PERMISSION_MODES)[number]
 

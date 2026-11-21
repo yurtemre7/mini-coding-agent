@@ -9,10 +9,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import { toolSubject } from '../../../shared/guards'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
-const subject = (input: any): string => String(input?.command ?? input?.file_path ?? input?.pattern ?? input?.url ?? input?.path ?? JSON.stringify(input) ?? '')
 
 function PermissionBody({ request, onDecision }: { request: PermissionRequest; onDecision: (d: Decision) => void }) {
   const [feedback, setFeedback] = useState('')
@@ -26,7 +26,7 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
         </AlertDialogTitle>
         <AlertDialogDescription>{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
-      <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{subject(request.input).slice(0, 2000)}</pre>
+      <pre className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(toolSubject(request.input) || JSON.stringify(request.input) || '').slice(0, 2000)}</pre>
       <Textarea placeholder="Optional: tell the model what to do instead (sent with No)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
       {request.suggestion && (
         <p className="text-xs text-muted-foreground">

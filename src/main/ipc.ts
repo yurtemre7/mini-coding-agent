@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { type BrowserWindow, dialog, ipcMain } from 'electron'
 import type { IpcContract } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'

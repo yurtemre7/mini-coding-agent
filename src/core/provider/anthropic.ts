@@ -3,9 +3,20 @@ import { anthropicContextWindow } from './models'
 import { authMessage, ProviderError, withRetry } from './retry'
 import type { Message, ModelInfo, ModelProvider, StopReason, StreamEvent, StreamRequest } from './types'
 
+/** The fields of the SDK's streaming events that we read. */
+interface WireEvent {
+  type: string
+  message?: { usage?: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }
+  content_block?: { type: string; id: string; name: string }
+  delta?: { type: string; text?: string; partial_json?: string; stop_reason?: string }
+  usage?: { output_tokens?: number }
+  error?: { message?: string; type?: string }
+}
+type WireBlock = Record<string, unknown>
+
 // The slice of the SDK we use, so tests can inject a fake.
 export interface AnthropicLike {
-  messages: { create(body: any, opts: { signal: AbortSignal }): Promise<AsyncIterable<any>> }
+  messages: { create(body: Record<string, unknown>, opts: { signal: AbortSignal }): Promise<AsyncIterable<WireEvent>> }
   models: { list(): AsyncIterable<{ id: string }> }
 }
 
@@ -18,26 +29,40 @@ const parseJson = (s: string): unknown => {
   }
 }
 
-function toProviderError(e: any): Error {
-  const status: number | undefined = e?.status
-  if (e instanceof ProviderError) return e
+/** What the SDK's APIError carries that we read. */
+interface ApiErrorLike extends Error {
+  status?: number
+  error?: { type?: string; error?: { type?: string } }
+  headers?: { get?(name: string): string | null }
+}
+
+function toProviderError(err: unknown): Error {
+  if (err instanceof ProviderError) return err
+  const e = err as ApiErrorLike
   // the SDK throws an APIError with no status for in-stream error events
   const inStream = e?.error?.error?.type ?? e?.error?.type
-  if (status === undefined) return inStream === 'overloaded_error' ? new ProviderError(e.message, 529) : e
-  if (status === 401 || status === 403) return new ProviderError(authMessage('Anthropic', 'ANTHROPIC_API_KEY'), status)
+  if (e?.status === undefined) return inStream === 'overloaded_error' ? new ProviderError(e.message, 529) : e
+  if (e.status === 401 || e.status === 403) return new ProviderError(authMessage('Anthropic', 'ANTHROPIC_API_KEY'), e.status)
   const ra = Number(e.headers?.get?.('retry-after'))
-  return new ProviderError(e.message, status, ra > 0 ? ra * 1000 : undefined)
+  return new ProviderError(e.message, e.status, ra > 0 ? ra * 1000 : undefined)
 }
 
 // Cache breakpoints: system prompt + last block of the last message.
-function withCache(messages: Message[]): Message[] {
-  const wire = messages.map((m) => ({ ...m, content: m.content.map((b): any => (b.type === 'image' ? { type: 'image', source: { type: 'base64', media_type: b.mime, data: b.data } } : b)) }))
+function withCache(messages: Message[]): { role: Message['role']; content: WireBlock[] }[] {
+  const wire = messages.map((m) => ({ ...m, content: m.content.map((b): WireBlock => (b.type === 'image' ? { type: 'image', source: { type: 'base64', media_type: b.mime, data: b.data } } : b)) }))
   const last = wire.at(-1)
-  if (!last?.content.length) return wire as Message[]
-  const content: any[] = last.content.map((b, i) =>
-    i === last.content.length - 1 ? { ...b, cache_control: { type: 'ephemeral' } } : b
-  )
+  if (!last?.content.length) return wire
+  const content = last.content.map((b, i) => (i === last.content.length - 1 ? { ...b, cache_control: { type: 'ephemeral' } } : b))
   return [...wire.slice(0, -1), { ...last, content }]
+}
+
+/** The real SDK behind AnthropicLike. The one place the request body and stream events are cast: the SDK's types are far wider than the slice we use. */
+function sdkClient(apiKey: string): AnthropicLike {
+  const sdk = new Anthropic({ apiKey, maxRetries: 0 }) // maxRetries: 0 because withRetry owns the policy
+  return {
+    messages: { create: (body, o) => sdk.messages.create(body as unknown as Anthropic.MessageCreateParamsStreaming, o) as unknown as Promise<AsyncIterable<WireEvent>> },
+    models: sdk.models
+  }
 }
 
 export class AnthropicProvider implements ModelProvider {
@@ -48,8 +73,7 @@ export class AnthropicProvider implements ModelProvider {
     apiKey: string,
     private opts: { client?: AnthropicLike; sleep?: (ms: number, s: AbortSignal) => Promise<void> } = {}
   ) {
-    // maxRetries: 0 because withRetry owns the policy
-    this.client = opts.client ?? new Anthropic({ apiKey, maxRetries: 0 })
+    this.client = opts.client ?? sdkClient(apiKey)
   }
 
   async contextWindow(model: string): Promise<number> {
@@ -81,7 +105,7 @@ export class AnthropicProvider implements ModelProvider {
   }
 
   private async *once(req: StreamRequest): AsyncGenerator<StreamEvent> {
-    let events: AsyncIterable<any>
+    let events: AsyncIterable<WireEvent>
     try {
       events = await this.client.messages.create(
         {
@@ -101,19 +125,19 @@ export class AnthropicProvider implements ModelProvider {
       let tool: { id: string; name: string; json: string } | undefined
       for await (const ev of events) {
         if (ev.type === 'message_start') {
-          const u = ev.message.usage ?? {}
+          const u = ev.message?.usage ?? {}
           contextTokens =
             (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
-        } else if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') {
+        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
           tool = { id: ev.content_block.id, name: ev.content_block.name, json: '' }
-        } else if (ev.type === 'content_block_delta') {
-          if (ev.delta.type === 'text_delta') yield { type: 'text_delta', text: ev.delta.text }
-          else if (ev.delta.type === 'input_json_delta' && tool) tool.json += ev.delta.partial_json
+        } else if (ev.type === 'content_block_delta' && ev.delta) {
+          if (ev.delta.type === 'text_delta') yield { type: 'text_delta', text: ev.delta.text ?? '' }
+          else if (ev.delta.type === 'input_json_delta' && tool) tool.json += ev.delta.partial_json ?? ''
         } else if (ev.type === 'content_block_stop' && tool) {
           yield { type: 'tool_use', id: tool.id, name: tool.name, input: parseJson(tool.json) }
           tool = undefined
         } else if (ev.type === 'message_delta') {
-          if (ev.delta.stop_reason === 'tool_use' || ev.delta.stop_reason === 'max_tokens') stop = ev.delta.stop_reason
+          if (ev.delta?.stop_reason === 'tool_use' || ev.delta?.stop_reason === 'max_tokens') stop = ev.delta.stop_reason
           yield { type: 'usage', contextTokens, outputTokens: ev.usage?.output_tokens ?? 0 }
         } else if (ev.type === 'error') {
           throw new ProviderError(ev.error?.message ?? 'stream error', ev.error?.type === 'overloaded_error' ? 529 : 500)

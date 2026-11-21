@@ -3,6 +3,7 @@ import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, F
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
+import { toolSubject } from '../../../shared/guards'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
@@ -12,7 +13,6 @@ type ToolItem = Extract<Item, { kind: 'tool' }>
 const TOOL_ICONS: Record<string, LucideIcon> = { Read: FileText, Write: FilePlus, Edit: FilePen, Glob: FolderSearch, Grep: Search, Bash: SquareTerminal }
 
 const clip = (s: string) => (s.length > PREVIEW_CHARS ? `${s.slice(0, PREVIEW_CHARS)}\n… (${s.length - PREVIEW_CHARS} more characters)` : s)
-const subject = (i: any): string => String(i?.command ?? i?.file_path ?? i?.pattern ?? i?.url ?? i?.path ?? '')
 
 /** Raw HTML is not rendered (no rehype-raw); links open in the system browser through the window-open handler in main. */
 export function Markdown({ children }: { children: string }) {
@@ -34,7 +34,7 @@ function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNod
         <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="h-4 w-4 shrink-0" aria-hidden />
         <span className="font-medium">{tool.name}</span>
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={subject(tool.input)}>{subject(tool.input)}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={toolSubject(tool.input)}>{toolSubject(tool.input)}</span>
         <Badge variant={tool.isError ? 'destructive' : 'secondary'} className="ml-auto shrink-0">
           <Status className={`mr-1 h-4 w-4 ${tool.done ? '' : 'animate-spin'}`} aria-hidden />
           {!tool.done ? 'running' : tool.isError ? 'error' : 'done'}

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import { isExternalUrl } from './urls'
 import { join } from 'path'
 import type { AppInfo } from '../shared/types'
@@ -24,6 +24,7 @@ function createWindow(): BrowserWindow {
     minWidth: 800,
     minHeight: 560,
     show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff', // matches --background, so the window never flashes the wrong theme while loading
     title: 'mini-coding-agent (MCA)',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,

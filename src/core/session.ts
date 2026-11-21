@@ -114,7 +114,7 @@ export function loadSession(cwd: string, id: string, meta: () => SessionMeta, ho
   return { transcript: new Transcript(cwd, meta, { home, id, started: true }), messages }
 }
 
-/** Newest first. shortcut: parses every transcript in the workspace dir, upgrade to reading just the head if lists get slow. */
+/** Newest first. Cost: parses every transcript in the workspace folder, so it slows down with very large histories. */
 export function listSessions(cwd: string, home?: string): SessionInfo[] {
   const dir = sessionDir(cwd, home)
   if (!existsSync(dir)) return []

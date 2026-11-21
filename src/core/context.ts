@@ -17,7 +17,9 @@ export async function expandImports(text: string, file: string, home: string, de
   let real = file
   try {
     real = await realpath(file)
-  } catch {}
+  } catch {
+    // a file that cannot be resolved is tracked under its given path
+  }
   visited.add(real)
   if (depth >= MAX_IMPORT_DEPTH) return text
   const lines = text.split('\n')

@@ -39,7 +39,7 @@ export const Read: Tool<z.infer<typeof schema>> = {
     } finally {
       await fh.close()
     }
-    // shortcut: whole file is read into memory even for a small window; stream by line if multi-MB files matter
+    // The whole file is read even for a small window: the freshness hash covers all of it. Multi-MB files cost memory here.
     const text = await readFile(p, 'utf8')
     ctx.files.markRead(p, text, info.mtimeMs) // a partial read counts as a read
     if (text === '') return '(file is empty)'

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { field, stringField } from '../shared/guards'
 
 export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop'] as const
 export type HookEvent = (typeof HOOK_EVENTS)[number]
@@ -33,16 +34,17 @@ export function parseHooks(raw: unknown, source: string): { config: HookConfig; 
       continue
     }
     for (const g of groups) {
-      const list = g && typeof g === 'object' && Array.isArray((g as any).hooks) ? ((g as any).hooks as unknown[]) : []
-      const matcher = typeof (g as any)?.matcher === 'string' ? (g as any).matcher : undefined
+      const inner = field(g, 'hooks')
+      const list: unknown[] = Array.isArray(inner) ? inner : []
+      const matcher = stringField(g, 'matcher')
       if (!list.length) warnings.push(`Ignored an entry of hooks.${event} in ${source}: it has no "hooks" list.`)
       for (const h of list) {
-        const cmd = (h as any)?.command
-        if ((h as any)?.type !== 'command' || typeof cmd !== 'string' || !cmd.trim()) {
+        const cmd = stringField(h, 'command')
+        if (stringField(h, 'type') !== 'command' || !cmd?.trim()) {
           warnings.push(`Ignored a hook of hooks.${event} in ${source}: only {"type":"command","command":"..."} is supported.`)
           continue
         }
-        const t = (h as any).timeout
+        const t = field(h, 'timeout')
         ;(config[event as HookEvent] ??= []).push({ matcher, command: cmd, ...(typeof t === 'number' && t > 0 && { timeoutMs: t * 1000 }) })
       }
     }
@@ -94,7 +96,9 @@ function runCommand(def: HookDef, stdin: string, cwd: string, signal?: AbortSign
     const killGroup = () => {
       try {
         process.kill(-child.pid!, 'SIGKILL')
-      } catch {}
+      } catch {
+        // already gone
+      }
     }
     const finish = (r: Ran) => {
       if (done) return
@@ -139,7 +143,9 @@ export class Hooks {
       if (event === 'PreToolUse' || event === 'PostToolUse') if (!matches(def.matcher, o.toolName ?? '')) continue
       const r = await runCommand(def, stdin, this.cwd, o.signal)
       if (r.failure) result.warnings.push(`Hook "${def.command}" ${r.failure}; continuing.`)
-      else if (r.code === 0) r.stdout.trim() && result.output.push(r.stdout.trim())
+      else if (r.code === 0) {
+        if (r.stdout.trim()) result.output.push(r.stdout.trim())
+      }
       else if (r.code === 2) {
         result.block = (r.stderr.trim() || r.stdout.trim() || `Blocked by hook "${def.command}".`).slice(0, 10_000)
         return result

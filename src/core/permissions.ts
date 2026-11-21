@@ -1,7 +1,8 @@
 import { homedir } from 'node:os'
 import { relative } from 'node:path'
 import picomatch from 'picomatch'
-import { PERMISSION_MODES, type Decision, type PermissionMode, PermissionRequest, PlanRequest, TrustRequest } from '../shared/types'
+import { field, stringField } from '../shared/guards'
+import { PERMISSION_MODES, type Decision, type PermissionMode, type PermissionRequest, type PlanRequest, type TrustRequest } from '../shared/types'
 import { isInsideWorkspace, isProtectedPath, realpathNearest, resolvePath } from './paths'
 import { Hooks } from './hooks'
 import { loadSettings, type Rules } from './settings'
@@ -78,10 +79,13 @@ export function parseCommand(cmd: string): ParsedCommand {
       cur += c // part of `&>` / `2>&1`
       continue
     }
-    if (c === '&' && n === '&') (cut(), i++)
-    else if (c === '|' && n === '|') (cut(), i++)
-    else if (c === '&') (r.background = true, cut())
-    else if (c === ';' || c === '|' || c === '\n') cut()
+    if ((c === '&' && n === '&') || (c === '|' && n === '|')) {
+      cut()
+      i++
+    } else if (c === '&') {
+      r.background = true
+      cut()
+    } else if (c === ';' || c === '|' || c === '\n') cut()
     else cur += c
   }
   if (quote || /(^|[\s;&|(])(eval|exec)(\s|$)|(^|[\s;&|(])(ba|z|da|k)?sh\s+-\w*c/.test(cmd)) r.subst = true
@@ -124,8 +128,8 @@ function parseRule(rule: string): { tool: string; spec?: string } {
 
 const expandHome = (s: string): string => s.replace(/^~(?=$|\/)/, homedir())
 
-function pathOf(tool: Tool, input: any, ctx: ToolContext): string | undefined {
-  const p = tool.name === 'Glob' || tool.name === 'Grep' ? (input?.path ?? ctx.cwd) : tool.name === 'Read' || tool.name === 'Write' || tool.name === 'Edit' ? input?.file_path : undefined
+function pathOf(tool: Tool, input: unknown, ctx: ToolContext): string | undefined {
+  const p = tool.name === 'Glob' || tool.name === 'Grep' ? (field(input, 'path') ?? ctx.cwd) : tool.name === 'Read' || tool.name === 'Write' || tool.name === 'Edit' ? field(input, 'file_path') : undefined
   return typeof p === 'string' ? resolvePath(ctx.cwd, p) : undefined
 }
 
@@ -141,14 +145,14 @@ function globMatches(spec: string, abs: string, root: string, realOnly: boolean)
 }
 
 /** Does a non-Bash rule match this call? Bash is handled per segment in `bashRule`. */
-function ruleMatches(rule: string, tool: Tool, input: any, ctx: ToolContext, realOnly = false): boolean {
+function ruleMatches(rule: string, tool: Tool, input: unknown, ctx: ToolContext, realOnly = false): boolean {
   const { tool: name, spec } = parseRule(rule)
   if (name !== alias(tool.name)) return false
   if (spec === undefined) return true
   if (name === 'WebFetch') {
     const host = (() => {
       try {
-        return new URL(input?.url).hostname
+        return new URL(stringField(input, 'url') ?? '').hostname
       } catch {
         return ''
       }
@@ -208,17 +212,17 @@ function bashRuleMatches(rules: string[], cmd: string, mode: 'any' | 'all'): boo
   })
 }
 
-function matches(rules: string[], tool: Tool, input: any, ctx: ToolContext, mode: 'any' | 'all'): boolean {
-  if (tool.name === 'Bash') return bashRuleMatches(rules, String(input?.command ?? ''), mode)
+function matches(rules: string[], tool: Tool, input: unknown, ctx: ToolContext, mode: 'any' | 'all'): boolean {
+  if (tool.name === 'Bash') return bashRuleMatches(rules, stringField(input, 'command') ?? '', mode)
   return rules.some((r) => ruleMatches(r, tool, input, ctx, mode === 'all'))
 }
 
 const esc = (s: string): string => s.replace(/[()[\]{}*?!+@|\\]/g, '\\$&')
 
 /** The narrowest rule that covers what the user just approved. */
-export function sessionRule(tool: Tool, input: any, root: string): string | undefined {
+export function sessionRule(tool: Tool, input: unknown, root: string): string | undefined {
   if (tool.name === 'Bash') {
-    const cmd = String(input?.command ?? '').trim()
+    const cmd = (stringField(input, 'command') ?? '').trim()
     const p = parseCommand(cmd)
     if (p.subst) return undefined // never auto-allowed, so a rule would be useless
     const prefix = cmd.split(/\s+/).slice(0, 2).join(' ')
@@ -229,7 +233,6 @@ export function sessionRule(tool: Tool, input: any, root: string): string | unde
   return tool.name
 }
 
-const describe = (tool: Tool, input: any): string => (tool.name === 'Bash' ? String(input?.command) : (input?.file_path ?? input?.path ?? input?.pattern ?? input?.url ?? JSON.stringify(input) ?? '').toString())
 
 // ---------- decide() ----------
 
@@ -290,7 +293,7 @@ export class Permissions {
     if (reason) hard = true // only explicit/built-in ask rules and protected paths in non-bypass modes reach here
     else {
       if (this.mode === 'bypassPermissions') return undefined // 4
-      if (readOnly && inside && (tool.name !== 'Bash' || this.bashStaysHome(String((input as any).command), ctx))) return undefined // 5
+      if (readOnly && inside && (tool.name !== 'Bash' || this.bashStaysHome(stringField(input, 'command') ?? '', ctx))) return undefined // 5
       if (matches(all, tool, input, ctx, 'all')) return undefined // 6
       if (this.mode === 'acceptEdits' && isWrite && inside) return undefined // 7
       reason = !inside ? 'it is outside the workspace' : undefined // 8

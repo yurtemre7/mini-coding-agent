@@ -42,7 +42,7 @@ export const Bash: Tool<z.infer<typeof schema>> = {
       merge: true,
       env: { ...(await loginEnv()), MCA_CWD_FILE: cwdFile, GIT_TERMINAL_PROMPT: '0', PAGER: 'cat', GIT_PAGER: 'cat' }
     })
-    let next = ''
+    let next: string
     try {
       next = (await readFile(cwdFile, 'utf8').catch(() => '')).trim()
     } finally {

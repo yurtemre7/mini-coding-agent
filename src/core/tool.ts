@@ -14,6 +14,8 @@ export interface ToolContext {
   ask(request: PermissionRequest | PlanRequest | TrustRequest): Promise<Decision>
 }
 
+// `any` on purpose: a heterogeneous Tool[] needs a default that accepts every concrete Tool<I> (the readOnly callback is contravariant in I).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Tool<I = any> {
   name: string
   description: string

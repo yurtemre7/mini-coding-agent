@@ -40,6 +40,7 @@ class Bounded {
   }
 }
 
+// eslint-disable-next-line no-control-regex -- matching terminal escape sequences needs the ESC and BEL control characters
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g
 
 export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecResult> {

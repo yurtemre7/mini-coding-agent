@@ -13,7 +13,10 @@ describe('state.json', () => {
     writeFileSync(join(home, '.mca', 'state.json'), JSON.stringify({ other: { keep: 1 } }))
     await trustWorkspace(home, home)
     const dirs = Array.from({ length: 12 }, (_, i) => join(home, `w${i}`))
-    for (const d of dirs) (mkdirSync(d), await rememberWorkspace(d, home))
+    for (const d of dirs) {
+      mkdirSync(d)
+      await rememberWorkspace(d, home)
+    }
     await rememberWorkspace(dirs[5], home)
     await savePrefs({ model: 'm' }, home)
     await savePrefs({ effort: 'high' }, home)

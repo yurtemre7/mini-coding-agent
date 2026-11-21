@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { ago, ChatsSidebar } from './ChatsSidebar'
+import { ago } from '@/lib/ago'
+import { ChatsSidebar } from './ChatsSidebar'
 
 describe('ChatsSidebar', () => {
   const props = { workspace: '/w/app', recent: ['/w/app', '/w/other'], chats: [{ id: 'c1', title: 'Fix the bug', updated: Date.now() - 3 * 3_600_000, messageCount: 4 }], disabled: false, onWorkspace: vi.fn(), onChat: vi.fn(), onNew: vi.fn() }

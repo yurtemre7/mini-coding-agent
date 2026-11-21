@@ -35,7 +35,11 @@ describe('headless', () => {
   it('exit 1 on a runtime error, message on stderr', async () => {
     const { o, io: i } = io()
     const provider = new FakeProvider([[]]) // no stop event, then script exhausted on the retry-free second call
-    provider.stream = () => (async function* () { throw new Error('down') })()
+    provider.stream = () =>
+      (async function* () {
+        yield* [] // a stream that yields nothing, then fails
+        throw new Error('down')
+      })()
     expect(await runHeadless({ prompt: 'p', provider, model: 'm', cwd: '/', io: i })).toBe(1)
     expect(o.err).toContain('error: down')
   })

@@ -26,7 +26,7 @@ export const macKeychain: Keychain = {
     }
   },
   async set(p, key) {
-    // shortcut: the key is visible in the process list for a few ms; `security -i` stdin would avoid it
+    // Known limitation: `security` takes the key as an argument, so it is visible in the process list for a few ms.
     await run(SECURITY, ['add-generic-password', '-U', '-s', 'mca', '-a', p, '-w', key])
   }
 }

@@ -48,10 +48,10 @@ export class Controller {
 
   constructor(private d: ControllerDeps) {
     this.keys = d.keys ?? { get: getKey, set: setKey, source: keySource }
-    const outer = this
+    const currentProvider = () => this.provider
     this.proxy = {
       get id() {
-        return outer.provider
+        return currentProvider()
       },
       contextWindow: async () => (await this.current()).contextWindow(this.model),
       stream: (req) => this.stream(req)

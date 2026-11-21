@@ -9,13 +9,16 @@ import { PromptInput } from '@/components/PromptInput'
 import { ProviderForm, SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAgentSession } from '@/hooks/useAgentSession'
+import { useTheme } from '@/lib/theme'
 
 const Drag = () => <div className="fixed inset-x-0 top-0 h-10" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
 export default function App() {
   const api = window.mca
   const s = useAgentSession(api)
+  const theme = useTheme()
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
   const [recent, setRecent] = useState<string[]>([])
@@ -23,7 +26,7 @@ export default function App() {
   const [setupError, setSetupError] = useState<string | null>(null)
 
   const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
-  const [models, setModels] = useState<ModelList>({ models: [] })
+  const [fetched, setFetched] = useState<{ key: string; list: ModelList } | null>(null)
   const loadSettings = useCallback(() => api?.invoke('settings:get').then(setSettings), [api])
   useEffect(() => void loadSettings(), [loadSettings])
 
@@ -39,14 +42,20 @@ export default function App() {
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
   const provider = settings?.provider
   const source = provider && settings?.keySource[provider]
+  const modelsKey = provider && settings?.hasKey[provider] ? `${provider}:${source}:${keyN}` : null
   useEffect(() => {
-    if (!api || !provider || !settings.hasKey[provider]) return setModels({ models: [] })
+    if (!api || !provider || !modelsKey) return
     let live = true
-    setModels((m) => ({ ...m, loading: true }))
-    api.invoke('settings:models', provider).then((r) => live && setModels(r), () => live && setModels({ models: [] }))
-    return () => void (live = false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, provider, source, keyN])
+    api.invoke('settings:models', provider).then(
+      (list) => live && setFetched({ key: modelsKey, list }),
+      () => live && setFetched({ key: modelsKey, list: { models: [] } })
+    )
+    return () => {
+      live = false
+    }
+  }, [api, provider, modelsKey])
+  // while a newer fetch is pending, the previous list stays visible and is marked as loading
+  const models: ModelList = !modelsKey ? { models: [] } : fetched?.key === modelsKey ? fetched.list : { models: fetched?.list.models ?? [], loading: true }
 
   const actions = {
     onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort }) => {
@@ -124,6 +133,7 @@ export default function App() {
             Context {Math.round(v.usage.contextTokens / 1000)}k / {Math.round(v.usage.contextWindow / 1000)}k
           </p>
         )}
+        <ThemeToggle pref={theme.pref} onChange={theme.setPref} />
         <Button variant="ghost" onClick={() => setOpen(true)}>
           <Settings className="mr-2 h-4 w-4" />
           Settings

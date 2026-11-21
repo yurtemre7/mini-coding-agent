@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -69,7 +69,7 @@ describe('Hooks.run exit codes', () => {
 describe('loadSettings hooks and trust', () => {
   const project = () => {
     const d = dir()
-    require('node:fs').mkdirSync(join(d, '.mca'))
+    mkdirSync(join(d, '.mca'))
     writeFileSync(join(d, '.mca', 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'check.sh' }] }] } }))
     return d
   }
@@ -85,7 +85,7 @@ describe('loadSettings hooks and trust', () => {
   })
   it('user hooks always apply', async () => {
     const home = dir()
-    require('node:fs').mkdirSync(join(home, '.mca'))
+    mkdirSync(join(home, '.mca'))
     writeFileSync(join(home, '.mca', 'settings.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'u.sh' }] }] } }))
     expect((await loadSettings(dir(), { trusted: false, home })).hooks.Stop).toHaveLength(1)
   })
