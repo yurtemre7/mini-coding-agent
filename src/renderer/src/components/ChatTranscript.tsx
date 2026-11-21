@@ -54,7 +54,7 @@ const keyOf = (i: Item, n: number) => (i.kind === 'tool' ? `tool-${i.id}` : `${i
 function Row({ item, items }: { item: Item; items: Item[] }) {
   if (item.kind === 'user')
     return (
-      <div className="ml-auto flex max-w-[80%] items-start gap-2">
+      <div className="ml-auto flex w-fit max-w-[80%] items-start justify-end gap-2">
         <div className="min-w-0 rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-primary-foreground">{item.text}</div>
         <User className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
       </div>
