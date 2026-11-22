@@ -21,6 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAgentSession } from '@/hooks/useAgentSession'
 import { useTheme } from '@/lib/theme'
 import { useKeys } from '@/lib/keybindings'
+import { useFocusStrength } from '@/lib/focusStrength'
 
 const Drag = () => <div className="fixed inset-x-0 top-0 z-0 h-10" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
@@ -31,6 +32,7 @@ export default function App() {
   const lay = useLayout()
   const term = useTerminal(api)
   const keys = useKeys()
+  const focusStrength = useFocusStrength()
   const [focusN, setFocusN] = useState(0) // bumped to move the cursor into the message field
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
@@ -214,7 +216,7 @@ export default function App() {
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} busy={v.busy} />}
-        <PromptInput key={v.workspace ?? ''} focusSignal={focusN} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput key={v.workspace ?? ''} focusSignal={focusN} focusStrength={focusStrength.value} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (
         <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l bg-sidebar p-3 pt-12">
@@ -226,7 +228,7 @@ export default function App() {
         </aside>
       )}
       <PromptDialog keys={keys.keys} request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} skills={skills} onSkill={(n, e) => void s.setSkill(n, e).then((l) => (setSkills(l), api?.invoke('commands:list').then(setCommands, () => {})))} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} keyEditor={keys} {...actions} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} skills={skills} onSkill={(n, e) => void s.setSkill(n, e).then((l) => (setSkills(l), api?.invoke('commands:list').then(setCommands, () => {})))} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} keyEditor={keys} focus={{ value: focusStrength.value, onChange: focusStrength.set }} {...actions} />
     </main>
   )
 }

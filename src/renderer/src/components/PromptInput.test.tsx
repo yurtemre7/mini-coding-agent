@@ -127,4 +127,13 @@ describe('PromptInput', () => {
     rerender(<PromptInput {...base} focusSignal={1} />)
     expect(screen.getByLabelText('Message')).toHaveFocus()
   })
+  it('highlights the composer with the configured strength only while focused', () => {
+    render(<PromptInput {...base} focusStrength={40} />)
+    const box = screen.getByTestId('composer')
+    expect(box.style.boxShadow).toBe('')
+    fireEvent.focus(screen.getByLabelText('Message'))
+    expect(box.getAttribute('style')).toContain('40%')
+    fireEvent.blur(screen.getByLabelText('Message'))
+    expect(box.style.boxShadow).toBe('')
+  })
 })

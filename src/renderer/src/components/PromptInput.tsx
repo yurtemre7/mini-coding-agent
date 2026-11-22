@@ -14,6 +14,8 @@ export interface PromptInputProps {
   busy: boolean
   /** Moves the cursor into the field whenever this number changes (not on the first render). */
   focusSignal?: number
+  /** Highlight strength (0-100 %) while the field has the cursor. */
+  focusStrength?: number
   disabled?: boolean // e.g. no workspace yet
   mode: PermissionMode
   model: string
@@ -39,7 +41,7 @@ const toBase64 = (f: File) =>
     r.readAsDataURL(f)
   })
 
-export function PromptInput({ focusSignal = 0, busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles }: PromptInputProps) {
+export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles }: PromptInputProps) {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -51,6 +53,7 @@ export function PromptInput({ focusSignal = 0, busy, disabled, mode, model, mode
   const [dragging, setDragging] = useState(false)
   const [fileList, setFileList] = useState<string[] | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
+  const [focused, setFocused] = useState(false)
   useEffect(() => {
     if (focusSignal > 0) area.current?.focus()
   }, [focusSignal])
@@ -118,7 +121,10 @@ export function PromptInput({ focusSignal = 0, busy, disabled, mode, model, mode
     <div className="shrink-0 px-3 pb-3 pt-1">
       <div
         data-testid="composer"
-        className={'relative mx-auto flex w-full max-w-3xl flex-col gap-1 rounded-2xl border bg-surface p-2 shadow-float transition-[box-shadow,border-color] duration-150 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30 ' + (dragging ? 'border-primary ring-[3px] ring-primary/30' : '')}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={focused && !dragging ? { borderColor: `color-mix(in oklab, var(--ring) ${focusStrength}%, transparent)`, boxShadow: `0 0 0 3px color-mix(in oklab, var(--ring) ${Math.round(focusStrength / 2)}%, transparent)` } : undefined}
+        className={'relative mx-auto flex w-full max-w-3xl flex-col gap-1 rounded-2xl border bg-surface p-2 shadow-float transition-[box-shadow,border-color] duration-150 ' + (dragging ? 'border-primary ring-[3px] ring-primary/30' : '')}
         onDragOver={(e) => (e.preventDefault(), !disabled && setDragging(true))}
         onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDragging(false)}
         onDrop={onDrop}

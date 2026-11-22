@@ -131,7 +131,7 @@ function Row({ title, description, children }: { title: string; description: str
   )
 }
 
-function GeneralPanel({ settings, theme, onUpdate }: { settings: SettingsInfo; theme?: { pref: ThemePref; onChange(p: ThemePref): void } } & Pick<SettingsActions, 'onUpdate'>) {
+function GeneralPanel({ settings, theme, focus, onUpdate }: { settings: SettingsInfo; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; focus?: FocusStrength } & Pick<SettingsActions, 'onUpdate'>) {
   return (
     <div className="space-y-5">
       {theme && (
@@ -148,6 +148,17 @@ function GeneralPanel({ settings, theme, onUpdate }: { settings: SettingsInfo; t
             })}
           </div>
         </Row>
+      )}
+      {focus && (
+        <>
+          <Separator />
+          <Row title="Message field highlight" description="How visible the message field is while it has the cursor. 100 % is the strongest.">
+            <div className="flex shrink-0 items-center gap-2">
+              <input type="range" min={0} max={100} step={10} value={focus.value} aria-label="Message field highlight" className="w-32 accent-primary" onChange={(e) => focus.onChange(Number(e.target.value))} />
+              <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{focus.value} %</span>
+            </div>
+          </Row>
+        </>
       )}
       <Separator />
       <Row title="Notifications" description="While MCA is in the background: a macOS notification when a task finishes, a permission prompt waits for you, or MCA looks stuck.">
@@ -251,6 +262,11 @@ export function SkillsPanel({ skills, onToggle }: { skills: SkillInfo[]; onToggl
   )
 }
 
+export interface FocusStrength {
+  value: number
+  onChange(v: number): void
+}
+
 /** Shortcut settings: the current map, a setter that returns an error message (or null), and a reset. */
 export interface KeyEditor {
   keys: KeyMap
@@ -317,7 +333,7 @@ export function ShortcutsPanel({ editor }: { editor: KeyEditor }) {
 
 export type SettingsTab = 'general' | 'provider' | 'instructions' | 'skills' | 'mcp' | 'shortcuts' | 'about'
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, info, keyEditor, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; keyEditor?: KeyEditor; tab?: SettingsTab } & SettingsActions) {
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, focus, info, keyEditor, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; focus?: FocusStrength; keyEditor?: KeyEditor; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(44rem,85vh)] flex-col gap-4 sm:max-w-3xl [&>*]:min-w-0">
@@ -359,7 +375,7 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
             </TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="min-h-0 min-w-0 overflow-y-auto pr-1">
-            <GeneralPanel settings={settings} theme={theme} onUpdate={actions.onUpdate} />
+            <GeneralPanel settings={settings} theme={theme} focus={focus} onUpdate={actions.onUpdate} />
           </TabsContent>
           <TabsContent value="provider" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />

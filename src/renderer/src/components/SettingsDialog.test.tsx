@@ -120,4 +120,13 @@ describe('SettingsDialog instructions', () => {
     expect(reset).toHaveBeenCalled()
     expect(screen.getByText('Menu shortcuts')).toBeInTheDocument()
   })
+  it('general tab: the message field highlight is adjustable', () => {
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'x', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as any
+    const onChange = vi.fn()
+    render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} focus={{ value: 60, onChange }} />)
+    const slider = screen.getByLabelText('Message field highlight') as HTMLInputElement
+    expect(slider.value).toBe('60')
+    fireEvent.change(slider, { target: { value: '30' } })
+    expect(onChange).toHaveBeenCalledWith(30)
+  })
 })
