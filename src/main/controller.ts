@@ -17,7 +17,7 @@ import { gitBranches, gitCommit, gitDiff, gitPush, gitStage, gitStatus, gitSwitc
 import { Terminal } from '../core/terminal'
 import { composeSystem } from '../core/system'
 import { exportMarkdown } from '../core/export'
-import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
+import { deleteSession, listSessions, loadSession, parseTranscript, renameSession, sessionDir, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
 import { discoverSkills } from '../core/skill'
@@ -194,6 +194,7 @@ export class Controller {
         this.stopTimer('long')
         if (e.reason === 'done') this.notify('MCA finished the task.')
         else if (e.reason === 'error') this.notify('MCA stopped because of an error.')
+        else if (e.reason === 'max_iterations') this.notify('MCA stopped: step limit reached. Continue the chat to go on.')
       }
       if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
     },
@@ -328,6 +329,13 @@ export class Controller {
     const current = this.session?.store?.id === id
     deleteSession(this.workspace, id, this.d.home)
     if (current) this.newChat()
+  }
+
+  /** Renames a saved chat. Allowed while a turn runs: it only touches the title line. */
+  renameChat(id: string, title: string): void {
+    if (!this.workspace) throw new Error('Open a workspace first.')
+    if (!this.chats().some((c) => c.id === id)) throw new Error('Unknown chat.')
+    renameSession(this.workspace, id, title, this.d.home)
   }
 
   /** Markdown copy of a saved chat; the caller decides where it is written. */

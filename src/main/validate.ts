@@ -49,6 +49,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'session:open': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'session:new': () => [],
   'session:delete': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
+  'session:rename': ([id, t]) => [isSessionId(id) ? id : bad('invalid session id'), str(t, 'title').slice(0, 200)],
   'session:export': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'workspace:reveal': () => [],
   'workspace:files': () => [],

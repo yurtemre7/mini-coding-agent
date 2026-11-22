@@ -173,6 +173,7 @@ export default function App() {
             onChat={(path, id) => void openChatIn(path, id)}
             onNew={(path) => void newChatIn(path)}
             onDelete={(id) => void s.deleteChat(id).then(refreshWorkspaces)}
+            onRename={(id, title) => void s.renameChat(id, title).then(refreshWorkspaces)}
             onExport={(id) => void s.exportChat(id)}
           />
           <TodoSidebar todos={todos} />
@@ -203,7 +204,7 @@ export default function App() {
           </div>
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
-        {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
+        {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} busy={v.busy} />}
         <PromptInput key={v.workspace ?? ''} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (

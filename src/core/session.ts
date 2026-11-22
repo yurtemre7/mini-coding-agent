@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, rmSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, rmSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { sealHistory } from './agent'
@@ -131,6 +131,25 @@ export function deleteSession(cwd: string, id: string, home?: string): void {
   const dir = sessionDir(cwd, home)
   for (const f of [`${id}.jsonl`, `${id}.jsonl.bak`]) rmSync(join(dir, f), { force: true })
   rmSync(new Transcript(cwd, () => ({ provider: '', model: '' }), { home, id }).checkpointDir, { recursive: true, force: true })
+}
+
+/** Gives a chat a new title (first line of its file). The file keeps its modification time, so the chat does not jump to the top of the list. */
+export function renameSession(cwd: string, id: string, title: string, home?: string): string {
+  if (!isSessionId(id)) throw new Error('Invalid chat id.')
+  const name = title.replace(/\s+/g, ' ').trim().slice(0, 80)
+  if (!name) throw new Error('A chat title cannot be empty.')
+  const path = join(sessionDir(cwd, home), `${id}.jsonl`)
+  if (!existsSync(path)) throw new Error('Unknown chat.')
+  const text = readFileSync(path, 'utf8')
+  const nl = text.indexOf('\n')
+  const head = JSON.parse(nl < 0 ? text : text.slice(0, nl)) as Meta
+  if (head?.type !== 'meta') throw new Error('Not an MCA session file (no meta record).')
+  const st = statSync(path)
+  const tmp = `${path}.${process.pid}.tmp`
+  writeFileSync(tmp, JSON.stringify({ ...head, title: name }) + (nl < 0 ? '\n' : text.slice(nl)), { mode: 0o600 })
+  renameSync(tmp, path)
+  utimesSync(path, st.atime, st.mtime)
+  return name
 }
 
 /** Newest first. Cost: parses every transcript in the workspace folder, so it slows down with very large histories. */

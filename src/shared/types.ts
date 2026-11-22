@@ -228,6 +228,8 @@ export interface IpcContract {
     'session:new': { args: []; result: void }
     /** Deletes a saved chat of this workspace (idle only). */
     'session:delete': { args: [id: string]; result: void }
+    /** Renames a saved chat of this workspace. */
+    'session:rename': { args: [id: string, title: string]; result: void }
     /** Asks where to save, then writes the chat as Markdown. Resolves to the saved path, or null when cancelled. */
     'session:export': { args: [id: string]; result: string | null }
     /** Shows the workspace folder in Finder. */
@@ -266,7 +268,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:rename': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

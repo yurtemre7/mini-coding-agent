@@ -23,6 +23,25 @@ const props = () => ({
 
 describe('ChatsSidebar', () => {
   beforeEach(() => localStorage.clear())
+  it('renames a chat in place on double-click (Enter saves, Escape cancels, empty is ignored)', () => {
+    const onRename = vi.fn()
+    render(<ChatsSidebar {...props()} onRename={onRename} />)
+    fireEvent.doubleClick(screen.getByTitle('Fix the bug'))
+    const input = screen.getByLabelText('Rename "Fix the bug"') as HTMLInputElement
+    expect(input.value).toBe('Fix the bug')
+    fireEvent.change(input, { target: { value: '  Better   name ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onRename).toHaveBeenCalledWith('c1', 'Better name')
+    expect(screen.queryByLabelText('Rename "Fix the bug"')).toBeNull()
+
+    fireEvent.doubleClick(screen.getByTitle('Fix the bug'))
+    fireEvent.change(screen.getByLabelText('Rename "Fix the bug"'), { target: { value: 'Nope' } })
+    fireEvent.keyDown(screen.getByLabelText('Rename "Fix the bug"'), { key: 'Escape' })
+    fireEvent.doubleClick(screen.getByTitle('Fix the bug'))
+    fireEvent.change(screen.getByLabelText('Rename "Fix the bug"'), { target: { value: '   ' } })
+    fireEvent.blur(screen.getByLabelText('Rename "Fix the bug"'))
+    expect(onRename).toHaveBeenCalledTimes(1)
+  })
 
   it('has a New workspace button on top; the open workspace is expanded, the others are collapsed tiles', () => {
     const p = props()

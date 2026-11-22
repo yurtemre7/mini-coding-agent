@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
 import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ago } from '@/lib/ago'
 
@@ -43,6 +44,8 @@ interface Props {
   onChat(path: string, id: string): void
   onNew(path: string): void
   onDelete?(id: string): void
+  /** Double-click on a chat of the open workspace edits its title in place. */
+  onRename?(id: string, title: string): void
   onExport?(id: string): void
 }
 
@@ -51,6 +54,7 @@ export function ChatsSidebar(p: Props) {
   const [collapsed, setCollapsed] = useState(load)
   const [menu, setMenu] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [edit, setEdit] = useState<{ id: string; value: string } | null>(null)
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const order = p.workspaces.map((w) => w.path)
@@ -167,10 +171,35 @@ export function ChatsSidebar(p: Props) {
                           </div>
                         </div>
                       )
+                    if (open && edit?.id === c.id) {
+                      const done = (save: boolean) => {
+                        const title = edit.value.replace(/\s+/g, ' ').trim()
+                        setEdit(null)
+                        if (save && title && title !== c.title) p.onRename?.(c.id, title)
+                      }
+                      return (
+                        <div key={c.id} className="px-1 py-0.5">
+                          <Input
+                            autoFocus
+                            aria-label={`Rename "${c.title}"`}
+                            className="h-7 text-sm"
+                            maxLength={80}
+                            value={edit.value}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => setEdit({ id: c.id, value: e.target.value })}
+                            onBlur={() => done(true)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') done(true)
+                              else if (e.key === 'Escape') done(false)
+                            }}
+                          />
+                        </div>
+                      )
+                    }
                     return (
                       <div key={c.id} className={`group relative flex items-center rounded-md ${here ? 'bg-accent text-accent-foreground' : ''}`} aria-current={here ? 'true' : undefined}>
                         {here && <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary" />}
-                        <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(path, c.id)}>
+                        <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(path, c.id)} onDoubleClick={() => open && p.onRename && setEdit({ id: c.id, value: c.title })}>
                           <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
                           <span className="min-w-0 flex-1">
                             <span className={`block truncate ${here ? 'font-medium' : ''}`}>{c.title}</span>
