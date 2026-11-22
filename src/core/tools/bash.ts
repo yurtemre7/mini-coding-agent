@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { z } from 'zod'
 import { exec } from '../exec'
 import { loginEnv } from '../env'
@@ -47,7 +47,7 @@ export const Bash: Tool<z.infer<typeof schema>> = {
     } finally {
       await rm(cwdFile, { force: true })
     }
-    if (next && existsSync(next)) ctx.setCwd(next)
+    if (next && existsSync(next)) ctx.setCwd(resolve(next)) // native separators (Git Bash prints C:/…)
     let out = notice + r.stdout
     if (r.timedOut) out += `\n[Command timed out after ${ms / 1000}s and was killed. Output above is partial.]`
     else if (r.aborted) out += '\n[Command was interrupted.]'

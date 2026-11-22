@@ -1,8 +1,10 @@
+import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import { exec } from './exec'
 import { parseEnv0 } from './env'
+import { getShell } from './shell'
 
-const sh = (script: string, o: Partial<Parameters<typeof exec>[2]> = {}) => exec('/bin/bash', ['-c', script], { cwd: '/', ...o })
+const sh = (script: string, o: Partial<Parameters<typeof exec>[2]> = {}) => exec(getShell().path, ['-c', script], { cwd: tmpdir(), ...o })
 
 describe('exec', () => {
   it('captures output and exit code, strips ANSI', async () => {

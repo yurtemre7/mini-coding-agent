@@ -233,7 +233,7 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
     if (p.segments.length === 1 && !p.background && !/['"\\]/.test(prefix)) return `Bash(${prefix}:*)`
     return `Bash(${cmd})`
   }
-  if (tool.name === 'Edit' || tool.name === 'Write') return `Edit(${esc(realpathNearest(root))}/**)`
+  if (tool.name === 'Edit' || tool.name === 'Write') return `Edit(${esc(realpathNearest(root).replace(/\\/g, '/'))}/**)` // picomatch patterns use forward slashes
   if (tool.name === 'WebFetch') {
     try {
       return `WebFetch(domain:${new URL(stringField(input, 'url') ?? '').hostname})`
@@ -247,11 +247,14 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
 
 // ---------- catastrophic commands ----------
 
-const quotedWords = (s: string): string[] => Array.from(s.matchAll(/"([^"]*)"|'([^']*)'|((?:\\.|[^\s\\])+)/g), (m) => m[1] ?? m[2] ?? m[3].replace(/\\(.)/g, '$1'))
+const quotedWords = (s: string): string[] => Array.from(s.matchAll(/"([^"]*)"|'([^']*)'|((?:\\.|[^\s\\])+)/g), (m) => m[1] ?? m[2] ?? m[3].replace(process.platform === 'win32' ? /\\([\s"'])/g : /\\(.)/g, '$1')) // on Windows a backslash is mostly a path separator
 const SYSTEM_DIRS = new Set(['bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'opt', 'sbin', 'sys', 'usr', 'var', 'home', 'root', 'Users', 'System', 'Library', 'Applications', 'Volumes', 'private'])
+/** `C:\Users\me`, `C:/Users/me` and Git Bash's `/c/Users/me` all become `/Users/me` (Windows only; elsewhere the path is unchanged). */
+const winPath = (t: string): string => (process.platform === 'win32' ? t.replace(/\\/g, '/').replace(/^[a-z]:(?=\/|$)/i, '').replace(/^\/[a-z](?=\/|$)/i, '') : t)
 /** A target whose recursive deletion or permission change ruins the machine: the root, a home directory (the real one too), or a top-level system directory. */
 function isVitalTarget(t: string): boolean {
-  const home = homedir().replace(/\/+$/, '')
+  const home = winPath(homedir()).replace(/\/+$/, '')
+  t = winPath(t) || '/' // a bare drive (`C:\`, `/c`) is the root
   if (t === '~' || t === '$HOME' || t === '${HOME}') return true
   const rest = t.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, '')
   if (rest !== t) return /^\/(\*|\.\*|\.)?\/?$/.test(rest) // ~/  ~/*  ~/.

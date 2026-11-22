@@ -29,6 +29,9 @@ async function target(cwd: string, path: string | undefined): Promise<{ dir: str
   return info.isDirectory() ? { dir: p, arg: '.' } : { dir: dirname(p), arg: basename(p) }
 }
 
+/** ripgrep prints `.\\src\\a.ts` on Windows; tools always show `src/a.ts` (the line text after `path:N:` is left alone). */
+const portable = (line: string): string => (process.platform === 'win32' ? line.replace(/^[^:]*?(?=:\d+:|$)/, (f) => f.replace(/\\/g, '/').replace(/^\.\//, '')) : line)
+
 const globSchema = z.object({
   pattern: z.string().describe('Glob pattern such as "**/*.ts" or "src/**/*.test.ts"'),
   path: z.string().optional().describe('Directory to search (default: working directory)')
@@ -44,7 +47,7 @@ export const Glob: Tool<z.infer<typeof globSchema>> = {
     if (t.arg !== '.') throw new Error(`${resolvePath(ctx.cwd, path!)} is a file, not a directory.`)
     const out = await rg(['--files', '--hidden', '--no-require-git', '-g', pattern, '-g', '!.git', '--sortr', 'modified', '.'], t.dir, ctx.signal)
     if (out === 'No matches.') return out
-    const files = out.split('\n').filter(Boolean)
+    const files = out.split('\n').filter(Boolean).map(portable)
     return files.slice(0, 100).join('\n') + (files.length > 100 ? `\n\n(${files.length - 100} more files omitted; narrow the pattern or path.)` : '')
   }
 }
@@ -66,6 +69,6 @@ export const Grep: Tool<z.infer<typeof grepSchema>> = {
     const t = await target(ctx.cwd, path)
     const content = output_mode === 'content'
     const args = ['--hidden', '--no-require-git', '-g', '!.git', ...(content ? ['-n', '--with-filename', '--no-heading', '--max-columns', '300'] : ['-l']), ...(ignore_case ? ['-i'] : []), ...(glob ? ['-g', glob] : []), '-e', pattern, '--', t.arg]
-    return truncate(await rg(args, t.dir, ctx.signal), 20_000)
+    return truncate((await rg(args, t.dir, ctx.signal)).split('\n').map(portable).join('\n'), 20_000)
   }
 }
