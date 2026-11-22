@@ -168,19 +168,19 @@ export default function App() {
       </aside>
       )}
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className={`relative z-10 flex h-10 shrink-0 items-center justify-between gap-2 px-3 ${lay.layout.sidebar ? '' : 'pl-20'}`} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.sidebar ? 'Hide the sidebar' : 'Show the sidebar'} title="Sidebar (Cmd/Ctrl+B)" aria-pressed={lay.layout.sidebar} onClick={lay.toggleSidebar}>
+        <div className={`relative z-10 flex h-10 shrink-0 items-center justify-between gap-2 px-3 ${lay.layout.sidebar ? '' : 'pl-20'}`}>
+          <Button style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.sidebar ? 'Hide the sidebar' : 'Show the sidebar'} title="Sidebar (Cmd/Ctrl+B)" aria-pressed={lay.layout.sidebar} onClick={lay.toggleSidebar}>
             <PanelLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-1">
-            <div role="group" aria-label="Layout" className="flex rounded-md border p-0.5">
+            <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} role="group" aria-label="Layout" className="flex rounded-md border p-0.5">
               {([[1, Square, '1 column: chat only'], [2, Columns2, '2 columns: chat and tools'], [3, Columns3, '3 columns: sidebar, chat and tools']] as const).map(([n, Icon, label]) => (
                 <Button key={n} size="icon" variant={columns(lay.layout) === n ? 'secondary' : 'ghost'} className="h-7 w-7" aria-label={label} title={label} aria-pressed={columns(lay.layout) === n} onClick={() => lay.setColumns(n)}>
                   <Icon className="h-4 w-4" />
                 </Button>
               ))}
             </div>
-            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.panel ? 'Hide the tools panel' : 'Show the tools panel'} title="Tools (Cmd/Ctrl+J)" aria-pressed={lay.layout.panel} onClick={lay.togglePanel}>
+            <Button style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.panel ? 'Hide the tools panel' : 'Show the tools panel'} title="Tools (Cmd/Ctrl+J)" aria-pressed={lay.layout.panel} onClick={lay.togglePanel}>
               <PanelRight className="h-4 w-4" />
             </Button>
           </div>

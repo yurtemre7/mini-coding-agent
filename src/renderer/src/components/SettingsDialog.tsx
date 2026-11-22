@@ -231,7 +231,7 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
           <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Appearance, provider and key, instructions, and about MCA.'}</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue={tab} orientation="vertical" className="min-h-0 flex-1">
-          <TabsList className="h-fit w-40 shrink-0" aria-label="Settings sections">
+          <TabsList className="h-fit max-h-full w-40 shrink-0 overflow-y-auto" aria-label="Settings sections">
             <TabsTrigger value="general">
               <SlidersHorizontal aria-hidden />
               General

@@ -244,6 +244,7 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
 
 // ---------- catastrophic commands ----------
 
+const quotedWords = (s: string): string[] => Array.from(s.matchAll(/"([^"]*)"|'([^']*)'|((?:\\.|[^\s\\])+)/g), (m) => m[1] ?? m[2] ?? m[3].replace(/\\(.)/g, '$1'))
 const SYSTEM_DIRS = new Set(['bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'opt', 'sbin', 'sys', 'usr', 'var', 'home', 'root', 'Users', 'System', 'Library', 'Applications', 'Volumes', 'private'])
 /** A target whose recursive deletion or permission change ruins the machine: the root, a home directory (the real one too), or a top-level system directory. */
 function isVitalTarget(t: string): boolean {
@@ -252,6 +253,7 @@ function isVitalTarget(t: string): boolean {
   const rest = t.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, '')
   if (rest !== t) return /^\/(\*|\.\*|\.)?\/?$/.test(rest) // ~/  ~/*  ~/.
   if (!t.startsWith('/')) return false
+  t = t.replace(/\/{2,}/g, '/') // /Users//me is /Users/me
   if (home && (t.replace(/\/+$/, '') === home || /^\/(\*|\.\*|\.)$/.test(t.slice(home.length)) && t.startsWith(home + '/'))) return true // /home/me  /home/me/*
   const parts = t.split('/').filter(Boolean)
   return parts.length === 0 || (parts.length === 1 && (SYSTEM_DIRS.has(parts[0]) || parts[0] === '*')) || (parts.length === 2 && parts[1] === '*' && SYSTEM_DIRS.has(parts[0]))
@@ -269,11 +271,13 @@ export function dangerOf(cmd: string): string | undefined {
   const base = (w: string) => w.slice(w.lastIndexOf('/') + 1) || w
   for (const seg of parseCommand(plain).segments) {
     const t = words(seg)
+    const q = quotedWords(seg) // keeps "/home/my name" as one operand (words() splits it)
     for (let i = 0; i < t.length; i++) {
       const prog = base(t[i])
       const args = t.slice(i + 1)
       const flags = args.filter((a) => a.startsWith('-'))
-      const targets = args.filter((a) => !a.startsWith('-'))
+      const qargs = q.slice(Math.max(0, q.findIndex((w) => base(w.replace(/^['"]|['"]$/g, '')) === prog)) + 1)
+      const targets = [...args, ...qargs].filter((a) => !a.startsWith('-'))
       const recursive = flags.some((f) => /^-[a-zA-Z]*[rR]/.test(f) || f === '--recursive')
       if (prog === 'rm' && (flags.includes('--no-preserve-root') || (recursive && targets.some(isVitalTarget)))) return 'this command can delete the whole system or your home directory'
       if ((prog === 'chmod' || prog === 'chown' || prog === 'chgrp') && recursive && targets.some(isVitalTarget)) return 'this command recursively changes permissions or ownership across the whole system or your home directory'
