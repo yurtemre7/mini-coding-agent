@@ -156,6 +156,7 @@ Ordered by value. Pull from the top; each item should end as a PR.
 1. Push tag `v0.1.0`, watch the release workflow, install the `.dmg` per the README, and walk the packaged-app checklist: bundled `rg` runs, Bash finds `node`/`git` when launched from Finder, Keychain key is read, no Keychain prompt loop.
 2. Smoke-test with real keys: `mca -p` on both providers; desktop flow Read â†’ Grep â†’ Edit (approve) â†’ Bash â†’ Rewind; plan mode with parallel Explore subagents; a long session that compacts then `--continue`; a `.mcp.json` server.
 3. Confirm model ids and which models accept `output_config.effort`.
+4. Run the golden agent eval (`evals/golden/`) with a real key: `python3 -I evals/golden/mca_eval.py run --k 1`, then a full run graded by a non-Claude judge; hand-label the judged runs to calibrate the judge (85 % agreement bar).
 
 **Product**
 - Highlight the active chat in the sidebar.
@@ -256,3 +257,10 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 ## Pinned chats
 
 - Every chat row in the sidebar has a pin button on hover (also in the open workspace's chat menu). A pin lasts for the app session (sessionStorage); pinning it again ("Keep pinned", the pin button in the Pinned list) saves it across restarts (localStorage `mca.pinned`, `{ path, id }`). Saved pins show a filled pin icon. One click on the unpin button removes either kind. A pin whose chat was deleted is not shown. Each window (main, CiP) has its own session pins.
+
+## Golden agent eval (`evals/golden/`)
+
+- 14 cases that run the real harness headless (`mca -p`) on a synthetic Python sandbox repo: implement (5), reward hack, test generation (mutation kill rate), code review (2), incident diagnosis (2), safety (prompt injection in a repo file, ambiguous ticket, destructive cleanup). See `evals/golden/README.md`.
+- Grading: code gates first (forbidden files, test edits, new dependencies, special-casing, injected or out-of-workspace commands, grader-directed text), then visible + hidden tests, then an LLM judge from another model family. Reports pass@1, pass@k, pass^k and cost per success.
+- Python 3.11 standard library only; not part of `npm test`. `python3 -I evals/golden/mca_eval.py selftest` checks the set against itself without a key.
+- Not verified: no live run with a model yet; judge uncalibrated; headless tool-call inputs are truncated at 200 characters, so the trajectory gates can miss a long command.

@@ -1,0 +1,2 @@
+[PagerDuty] SEV2 ledger-api: p95 latency > 2s and 5xx rate > 5% for 5 min
+Triggered 2026-11-03 14:09 UTC. Service: ledger-api (3 pods). Runbook: none.

@@ -9,6 +9,7 @@ Electron + React + TypeScript desktop app and `mca` CLI sharing one agent runtim
 ## Commands
 - `npm run lint && npm run typecheck && npm test && npm run build` must pass before every push.
 - `npm run dev` runs the desktop app; `node out/cli/index.js` runs the CLI after a build.
+- `python3 -I evals/golden/mca_eval.py selftest` checks the golden agent eval (Python 3.11, no key); `run` / `grade` need API keys. See `evals/golden/README.md`.
 
 ## Rules
 - English only in UI, CLI output, errors and docs. Prefer shadcn/ui components.

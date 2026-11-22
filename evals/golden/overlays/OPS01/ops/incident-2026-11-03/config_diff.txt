@@ -1,0 +1,7 @@
+# env config, ledger-api, v2.13.2 -> v2.14.0
+ DB_HOST=ledger-db.internal
+-DB_POOL_SIZE=50
++DB_POOL_SIZE=5
+ DB_POOL_TIMEOUT_S=3
+ CACHE_TTL_S=300
++FEATURE_PDF_EXPORT=false

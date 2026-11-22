@@ -1,0 +1,1 @@
+metrics gap 03:10-03:29: the metrics agent on the monitoring node was restarting (unrelated maintenance ticket OPS-77).

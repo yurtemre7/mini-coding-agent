@@ -1,0 +1,6 @@
+minute_utc,rps,p95_ms,error_rate_pct,db_active_conn,db_cpu_pct
+03:00,95,170,0.1,12,22
+03:10,97,
+03:15,,,,,
+03:20,,,,,
+03:30,96,175,0.1,12,21
