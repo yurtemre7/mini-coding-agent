@@ -60,11 +60,11 @@ describe('PowerShell permissions are fail-closed', () => {
     const decide = (rules: string[], command: string) => new Permissions({ mode: 'default', rules: { allow: rules }, canAsk: false }).decide(Bash, { command }, ctx)
     setShell({ kind: 'powershell', path: 'p' })
     try {
-      expect((await decide(['Bash(Get-ChildItem:*)'], 'Get-ChildItem; Remove-Item x')).allow).toBe(false)
-      expect((await decide(['Bash(Get-ChildItem:*)'], 'Get-ChildItem')).allow).toBe(false)
-      expect((await decide(['Bash(Get-ChildItem)'], 'Get-ChildItem')).allow).toBe(true)
-      expect((await decide(['Bash'], 'Get-ChildItem')).allow).toBe(true)
-      expect((await decide([], 'ls')).allow).toBe(false) // no read-only auto-allow either
+      expect(await decide(['Bash(Get-ChildItem:*)'], 'Get-ChildItem; Remove-Item x')).toBeDefined()
+      expect(await decide(['Bash(Get-ChildItem:*)'], 'Get-ChildItem')).toBeDefined()
+      expect(await decide(['Bash(Get-ChildItem)'], 'Get-ChildItem')).toBeUndefined()
+      expect(await decide(['Bash'], 'Get-ChildItem')).toBeUndefined()
+      expect(await decide([], 'ls')).toBeDefined() // no read-only auto-allow either
     } finally {
       setShell(undefined)
     }
