@@ -66,6 +66,9 @@ export interface Prefs {
   model?: string
   effort?: string
   notifications?: boolean
+  /** Custom instructions for the model; added after the built-in prompt, or used instead of it when systemReplace is set. */
+  systemPrompt?: string
+  systemReplace?: boolean
 }
 export const loadPrefs = async (home?: string): Promise<Prefs> => {
   const p = (await readState(home)).prefs

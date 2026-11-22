@@ -44,11 +44,14 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'session:list': () => [],
   'session:open': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'session:new': () => [],
+  'session:delete': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
+  'session:export': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
+  'workspace:reveal': () => [],
   'settings:get': () => [],
   'settings:setKey': ([p, k]) => [provider(p), str(k, 'key')],
   'settings:update': ([patch]) => {
     const o = obj(patch, 'patch')
-    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }) }]
+    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }), ...(o.systemPrompt !== undefined && { systemPrompt: str(o.systemPrompt, 'systemPrompt') }), ...(o.systemReplace !== undefined && { systemReplace: bool(o.systemReplace, 'systemReplace') }) }]
   },
   'settings:models': ([p]) => [provider(p)],
   'prompt:answer': ([id, d]) => {

@@ -1,4 +1,5 @@
-import { type BrowserWindow, dialog, ipcMain, Notification } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import { type BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
 import type { IpcContract } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
@@ -50,6 +51,20 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     'session:list': () => c.chats(),
     'session:open': (id) => c.openChat(id),
     'session:new': () => c.newChat(),
+    'session:delete': (id) => c.deleteChat(id),
+    'session:export': async (id) => {
+      const { title, markdown } = c.exportChat(id)
+      const w = getWindow()
+      const opts = { defaultPath: `${title.replace(/[^\w .-]+/g, '').trim().slice(0, 60) || 'chat'}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] }
+      const r = await (w ? dialog.showSaveDialog(w, opts) : dialog.showSaveDialog(opts))
+      if (r.canceled || !r.filePath) return null
+      await writeFile(r.filePath, markdown, 'utf8')
+      return r.filePath
+    },
+    'workspace:reveal': () => {
+      const ws = c.getState().workspace
+      if (ws) shell.showItemInFolder(ws)
+    },
     'settings:get': () => c.getSettings(),
     'settings:setKey': (p, key) => c.setKey(p, key),
     'settings:update': (patch) => c.update(patch),

@@ -150,6 +150,11 @@ export interface SettingsInfo {
   effort: Effort
   /** desktop notifications when the model looks stuck or something waits for the user */
   notifications: boolean
+  /** the user's own instructions for the model; empty = none */
+  systemPrompt: string
+  /** use systemPrompt instead of the built-in prompt */
+  systemReplace: boolean
+  defaultSystemPrompt: string
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
 }
@@ -177,9 +182,15 @@ export interface IpcContract {
     /** Resume a listed chat: main rebuilds the view and keeps appending to its file. */
     'session:open': { args: [id: string]; result: void }
     'session:new': { args: []; result: void }
+    /** Deletes a saved chat of this workspace (idle only). */
+    'session:delete': { args: [id: string]; result: void }
+    /** Asks where to save, then writes the chat as Markdown. Resolves to the saved path, or null when cancelled. */
+    'session:export': { args: [id: string]; result: string | null }
+    /** Shows the workspace folder in Finder. */
+    'workspace:reveal': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
-    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort }]; result: SettingsInfo }
+    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
     'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
@@ -193,7 +204,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

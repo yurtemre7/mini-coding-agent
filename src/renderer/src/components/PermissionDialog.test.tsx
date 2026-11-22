@@ -16,22 +16,22 @@ describe('PromptDialog (permission)', () => {
   it('Yes -> once', () => {
     const f = vi.fn()
     render(<PromptDialog request={req} onDecision={f} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
     expect(f).toHaveBeenCalledWith({ allow: true, scope: 'once' })
   })
   it('Yes for this session -> session scope', () => {
     const f = vi.fn()
     render(<PromptDialog request={req} onDecision={f} />)
-    fireEvent.click(screen.getByRole('button', { name: /for this session/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Allow for this session/ }))
     expect(f).toHaveBeenCalledWith({ allow: true, scope: 'session' })
   })
   it('No sends the feedback, or nothing when empty', () => {
     const f = vi.fn()
     render(<PromptDialog request={req} onDecision={f} />)
-    fireEvent.click(screen.getByRole('button', { name: 'No' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
     expect(f).toHaveBeenLastCalledWith({ allow: false })
     fireEvent.change(screen.getByPlaceholderText(/what to do instead/), { target: { value: ' use Edit ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'No' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
     expect(f).toHaveBeenLastCalledWith({ allow: false, feedback: 'use Edit' })
   })
   it('shows the command and renders nothing without a request', () => {

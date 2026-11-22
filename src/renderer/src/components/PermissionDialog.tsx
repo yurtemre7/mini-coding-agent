@@ -22,25 +22,25 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
       <AlertDialogHeader>
         <AlertDialogTitle className="flex items-center gap-2">
           <ShieldQuestion className="h-4 w-4" aria-hidden />
-          {request.toolName} wants to run
+          Allow {request.toolName}?
         </AlertDialogTitle>
         <AlertDialogDescription className="[overflow-wrap:anywhere]">{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
       <pre data-testid="subject" className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(toolSubject(request.input) || JSON.stringify(request.input) || '').slice(0, 2000)}</pre>
-      <Textarea placeholder="Optional: tell the model what to do instead (sent with No)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
+      <Textarea placeholder="Optional: tell the model what to do instead (sent with Deny)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
       {request.suggestion && (
         <p className="text-xs text-muted-foreground">
-          &quot;Yes, for this session&quot; allows: <code data-testid="suggestion" className="block max-h-20 overflow-auto font-mono break-all">{request.suggestion.length > 300 ? `${request.suggestion.slice(0, 300)}…` : request.suggestion}</code>
+          &quot;Allow for this session&quot; allows: <code data-testid="suggestion" className="block max-h-20 overflow-auto font-mono break-all">{request.suggestion.length > 300 ? `${request.suggestion.slice(0, 300)}…` : request.suggestion}</code>
         </p>
       )}
-      <AlertDialogFooter className="flex-wrap">
+      <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">
         <Button variant="outline" onClick={() => onDecision({ allow: false, ...(text && { feedback: text }) })}>
-          No
+          Deny
         </Button>
         <Button variant="secondary" onClick={() => onDecision({ allow: true, scope: 'session' })} title={request.suggestion}>
-          Yes, for this session
+          Allow for this session
         </Button>
-        <Button onClick={() => onDecision({ allow: true, scope: 'once' })}>Yes</Button>
+        <Button onClick={() => onDecision({ allow: true, scope: 'once' })}>Allow once</Button>
       </AlertDialogFooter>
     </>
   )
@@ -62,9 +62,9 @@ function PlanBody({ plan, onDecision }: { plan: string; onDecision: (d: Decision
       <Textarea placeholder="Optional: what should change in the plan (sent with Reject)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
       <AlertDialogFooter>
         <Button variant="outline" onClick={() => onDecision({ allow: false, ...(text && { feedback: text }) })}>
-          Reject
+          Reject plan
         </Button>
-        <Button onClick={() => onDecision({ allow: true })}>Approve</Button>
+        <Button onClick={() => onDecision({ allow: true })}>Approve plan</Button>
       </AlertDialogFooter>
     </>
   )
@@ -74,7 +74,7 @@ function PlanBody({ plan, onDecision }: { plan: string; onDecision: (d: Decision
 export function PromptDialog({ request, onDecision }: { request: PromptRequest | null; onDecision: (d: Decision) => void }) {
   return (
     <AlertDialog open={!!request}>
-      <AlertDialogContent className="[&>*]:min-w-0" onEscapeKeyDown={(e) => e.preventDefault()}>
+      <AlertDialogContent className="max-h-[90vh] overflow-y-auto [&>*]:min-w-0" onEscapeKeyDown={(e) => e.preventDefault()}>
         {request?.kind === 'permission' && <PermissionBody key={JSON.stringify(request)} request={request} onDecision={onDecision} />}
         {request?.kind === 'trust' && (
           <>

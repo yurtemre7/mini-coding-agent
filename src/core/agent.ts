@@ -420,6 +420,11 @@ export class AgentSession {
     this.base = { ...this.base, tools }
   }
 
+  /** Applies to the next turn. */
+  setSystem(system: string): void {
+    this.base = { ...this.base, system }
+  }
+
   setHooks(hooks: Hooks): void {
     this.base = { ...this.base, hooks }
   }

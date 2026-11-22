@@ -138,6 +138,53 @@ describe('Controller', () => {
     expect(await c.recent()).toEqual([other])
     expect((await stat(ws)).isDirectory()).toBe(true) // the folder itself is still there
   })
+  describe('chat management and instructions', () => {
+    it('deletes a chat (replacing the open one) and exports a chat as Markdown', async () => {
+      const { c, idle } = await setup([say])
+      c.send('first question')
+      await idle()
+      const [chat] = c.chats()
+      const exp = c.exportChat(chat.id)
+      expect(exp.markdown).toContain('# first question')
+      expect(exp.markdown).toContain('## MCA\n\ndone')
+      c.deleteChat(chat.id)
+      expect(c.chats()).toEqual([])
+      expect(c.getState().items).toEqual([])
+      expect(() => c.deleteChat(chat.id)).toThrow(/Unknown chat/)
+      expect(() => c.exportChat(chat.id)).toThrow(/Unknown chat/)
+    })
+    it('refuses to delete a chat while a turn runs', async () => {
+      const { c, ws, prompts, idle } = await setup([[]])
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'z.txt')), say])
+      c.send('go')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      expect(() => c.deleteChat('whatever')).toThrow(/while a turn is running/)
+      c.abort()
+      await idle()
+    })
+    it('appends custom instructions, or replaces the built-in prompt, and remembers them', async () => {
+      const fake = new FakeProvider([say, say])
+      const { c, idle, ws } = await setup([[]], true, { makeProvider: () => fake })
+      c.send('hi')
+      await idle()
+      const base = fake.requests[0].system
+      expect(base).toMatch(/You are MCA/)
+      expect((await c.update({ systemPrompt: 'Answer in German.' })).systemPrompt).toBe('Answer in German.')
+      c.send('again')
+      await idle()
+      expect(fake.requests.at(-1)!.system).toBe(`${base}\n\nAnswer in German.`)
+      await c.update({ systemReplace: true })
+      c.send('third')
+      while (fake.requests.length < 3) await new Promise((r) => setTimeout(r, 5))
+      expect(fake.requests.at(-1)!.system).toBe('Answer in German.')
+      const home = (c as any).d.home
+      const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} } })
+      await c2.init()
+      expect(await c2.getSettings()).toMatchObject({ systemPrompt: 'Answer in German.', systemReplace: true })
+      void ws
+    })
+  })
+
   describe('notifications', () => {
     const loopTurns = () => { const same: StreamEvent[] = [{ type: 'tool_use', id: 'g', name: 'Glob', input: { pattern: '*.nothing' } }, { type: 'stop', reason: 'tool_use' }]; return [same, same, same, say] }
     it('tells the user when the model looks stuck in a loop', async () => {
@@ -147,7 +194,7 @@ describe('Controller', () => {
       await c.command('/mode bypassPermissions')
       c.send('go')
       await idle()
-      expect(sent).toEqual(['MCA may be stuck in a loop.'])
+      expect(sent).toEqual(['MCA may be stuck in a loop.', 'MCA finished the task.'])
     })
     it('the Notifications setting silences them, is remembered across launches and can change during a turn', async () => {
       const sent: string[] = []
@@ -174,13 +221,15 @@ describe('Controller', () => {
       c.answer(prompts[0].id, { allow: true, scope: 'once' }) // in time
       await idle()
       await new Promise((r) => setTimeout(r, 60))
-      expect(sent).toEqual([])
+      expect(sent).toEqual(['MCA finished the task.']) // answered in time: no waiting notification
+      sent.length = 0
       c.send('two')
       while (prompts.length < 2) await new Promise((r) => setTimeout(r, 5))
       await new Promise((r) => setTimeout(r, 60)) // left waiting
       expect(sent).toEqual(['MCA is waiting for your approval.'])
       c.abort()
       await idle()
+      expect(sent).toEqual(['MCA is waiting for your approval.']) // an aborted turn is not "finished"
     })
     it('notifies once when a turn runs long, and never after it ended', async () => {
       const sent: string[] = []
@@ -193,7 +242,7 @@ describe('Controller', () => {
       c.answer(prompts[0].id, { allow: true, scope: 'once' })
       await idle()
       await new Promise((r) => setTimeout(r, 60))
-      expect(sent).toHaveLength(1)
+      expect(sent).toEqual(['MCA is still working on your request.', 'MCA finished the task.']) // nothing after the end
     })
   })
   it('/resume lists saved chats newest first and opens one by number or id; bad arguments say so', async () => {
