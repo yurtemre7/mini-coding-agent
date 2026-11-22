@@ -4,7 +4,7 @@ Desktop coding agent built with [Electron](https://www.electronjs.org/), React, 
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 26.13.1+ (pinned in `.nvmrc`; with nvm: `nvm install && nvm use`)
 - npm 10+
 - macOS (primary target) and Windows 10/11 (x64). On Windows commands run in Git Bash when Git for Windows is installed, otherwise in PowerShell (every command then asks first). Windows support is new and CI-built, not yet checked by hand on a real PC.
 

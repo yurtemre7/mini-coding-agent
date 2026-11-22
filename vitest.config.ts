@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   test: {
     globals: true,
+    // Node 25+ ships a global localStorage (undefined without --localstorage-file) that hides jsdom's in renderer tests
+    poolOptions: { forks: { execArgv: ['--no-experimental-webstorage'] } },
     projects: [
       {
         test: {
