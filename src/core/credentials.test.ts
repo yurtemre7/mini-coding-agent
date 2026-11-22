@@ -10,7 +10,9 @@ const fakeKeychain = (store: Record<string, string> = {}): Keychain => ({
   set: async (p, k) => void (store[p] = k)
 })
 beforeEach(() => {
-  vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'mca-home-')))
+  const home = mkdtempSync(join(tmpdir(), 'mca-home-'))
+  vi.stubEnv('HOME', home)
+  vi.stubEnv('USERPROFILE', home) // os.homedir() on Windows
   vi.stubEnv('ANTHROPIC_API_KEY', '')
   vi.stubEnv('OPENROUTER_API_KEY', '')
 })

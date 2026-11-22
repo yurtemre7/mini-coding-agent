@@ -12,7 +12,7 @@ symlinkSync(outside, join(dir, 'escape'))
 describe('paths', () => {
   it('resolves absolute, relative and ~', () => {
     expect(resolvePath(dir, 'a/b')).toBe(join(dir, 'a/b'))
-    expect(resolvePath(dir, '/x/y')).toBe(resolve('/x/y'))
+    expect(resolvePath(dir, '/x/y')).toBe(resolve(dir, '/x/y')) // a rooted path keeps the drive of the base on Windows
     expect(resolvePath(dir, '~/z')).toBe(join(homedir(), 'z'))
   })
   it('workspace check uses realpath of the nearest existing ancestor', () => {
