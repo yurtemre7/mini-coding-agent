@@ -66,6 +66,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       const ws = c.getState().workspace
       if (ws) shell.showItemInFolder(ws)
     },
+    'workspace:files': () => c.workspaceFiles(),
     'git:status': () => c.gitStatus(),
     'git:diff': (p, staged) => c.gitDiff(p, staged),
     'git:stage': (ps, stage) => c.gitStage(ps, stage),

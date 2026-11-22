@@ -16,7 +16,7 @@ describe('GitPanel', () => {
     expect(await screen.findByText('Staged (1)')).toBeInTheDocument()
     expect(screen.getByText('Changes (2)')).toBeInTheDocument()
     fireEvent.click(screen.getByText('b.ts'))
-    expect(await screen.findByText('+new')).toHaveClass('text-green-600')
+    expect(await screen.findByText('+new')).toHaveClass('text-success')
     expect(invoke).toHaveBeenCalledWith('git:diff', 'b.ts', false)
   })
   it('stages, unstages and stages everything', async () => {

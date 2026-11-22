@@ -47,6 +47,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'session:delete': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'session:export': ([id]) => [isSessionId(id) ? id : bad('invalid session id')],
   'workspace:reveal': () => [],
+  'workspace:files': () => [],
   'git:status': () => [],
   'git:diff': ([p, s]) => [str(p, 'path'), bool(s, 'staged')],
   'git:stage': ([ps, s]) => [Array.isArray(ps) && ps.length <= 500 ? ps.map((p) => str(p, 'path')) : bad('paths must be an array'), bool(s, 'stage')],

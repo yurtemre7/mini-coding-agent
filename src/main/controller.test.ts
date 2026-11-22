@@ -202,6 +202,8 @@ describe('Controller', () => {
       expect((await c.gitBranches()).current).toBe('topic')
       const none = new Controller({ home: await mkdtemp(join(tmpdir(), 'mca-home-')), emit: () => {}, prompt: () => {}, keys: { get: async () => null, set: async () => {} } })
       expect((await none.gitStatus()).repo).toBe(false)
+      expect(await none.workspaceFiles()).toEqual([])
+      expect(await c.workspaceFiles()).toContain('f.txt')
       expect(() => none.terminalRun('ls')).toThrow(/Open a workspace/)
     })
     it('blocks commit, push and branch switches while a turn runs', async () => {

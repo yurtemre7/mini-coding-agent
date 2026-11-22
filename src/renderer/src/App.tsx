@@ -143,7 +143,7 @@ export default function App() {
     <main className="flex h-screen bg-background text-foreground">
       <Drag />
       {lay.layout.sidebar && (
-      <aside aria-label="Sidebar" className="flex w-60 shrink-0 flex-col gap-3 border-r p-3 pt-12">
+      <aside aria-label="Sidebar" className="flex w-60 shrink-0 flex-col gap-3 border-r bg-sidebar p-3 pt-12">
         <div className="flex gap-1">
           <Button variant="outline" className="min-w-0 flex-1" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
             <FolderOpen className="mr-2 h-4 w-4 shrink-0" />
@@ -186,10 +186,10 @@ export default function App() {
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
-        <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput key={v.workspace ?? ''} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={() => api.invoke('workspace:files')} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (
-        <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l p-3 pt-12">
+        <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l bg-sidebar p-3 pt-12">
           <SidePanel tab={lay.layout.tab} onTab={lay.setTab} badge={{ changes: v.changes.total.length }}>
             {lay.layout.tab === 'changes' && <DiffPanel changes={v.changes} busy={v.busy} loadDiff={s.changeDiff} onRevert={s.changeRevert} />}
             {lay.layout.tab === 'git' && api && <GitPanel api={api} workspace={v.workspace} busy={v.busy} refreshKey={`${v.busy}:${v.changes.total.length}`} />}

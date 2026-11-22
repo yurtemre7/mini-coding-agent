@@ -210,6 +210,7 @@ export interface IpcContract {
     'session:export': { args: [id: string]; result: string | null }
     /** Shows the workspace folder in Finder. */
     'workspace:reveal': { args: []; result: void }
+    'workspace:files': { args: []; result: string[] }
     'git:status': { args: []; result: GitStatus }
     /** Unified diff of one changed file, staged or not. */
     'git:diff': { args: [path: string, staged: boolean]; result: string }
@@ -241,7 +242,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]
