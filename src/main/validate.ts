@@ -7,6 +7,7 @@ const bad = (m: string): never => {
 }
 const str = (v: unknown, name: string): string => (typeof v === 'string' ? v : bad(`${name} must be a string`))
 const provider = (v: unknown): ProviderId => (PROVIDER_IDS.includes(v as ProviderId) ? (v as ProviderId) : bad('unknown provider'))
+const bool = (v: unknown, name: string): boolean => (typeof v === 'boolean' ? v : bad(`${name} must be a boolean`))
 const effort = (v: unknown): Effort => (EFFORT_LEVELS.includes(v as Effort) ? (v as Effort) : bad('unknown effort'))
 const scope = (v: unknown): 'turn' | 'all' => (v === 'turn' || v === 'all' ? v : bad('scope must be "turn" or "all"'))
 const changedPath = (v: unknown): string => {
@@ -47,7 +48,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'settings:setKey': ([p, k]) => [provider(p), str(k, 'key')],
   'settings:update': ([patch]) => {
     const o = obj(patch, 'patch')
-    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }) }]
+    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }) }]
   },
   'settings:models': ([p]) => [provider(p)],
   'prompt:answer': ([id, d]) => {

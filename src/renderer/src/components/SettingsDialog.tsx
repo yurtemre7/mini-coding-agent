@@ -1,16 +1,20 @@
 import { useState } from 'react'
-import { Check, CircleAlert, CircleCheck, KeyRound } from 'lucide-react'
+import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
-import { EFFORT_LEVELS, type Effort, type KeySource, type ProviderId, type SettingsInfo } from '../../../shared/types'
+import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { THEME_PREFS, type ThemePref } from '@/lib/theme'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export interface SettingsActions {
-  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort }): Promise<unknown> | void
+  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }): Promise<unknown> | void
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
@@ -110,24 +114,130 @@ export function ProviderForm({ settings, models = { models: [] }, disabled, onUp
   )
 }
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[] } & SettingsActions) {
+const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
+const THEME_LABEL: Record<ThemePref, string> = { system: 'System', light: 'Light', dark: 'Dark' }
+
+function Row({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0 space-y-0.5">
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function GeneralPanel({ settings, theme, onUpdate }: { settings: SettingsInfo; theme?: { pref: ThemePref; onChange(p: ThemePref): void } } & Pick<SettingsActions, 'onUpdate'>) {
+  return (
+    <div className="space-y-5">
+      {theme && (
+        <Row title="Appearance" description="Follow the system, or always use light or dark.">
+          <div className="flex shrink-0 gap-1 rounded-lg border p-1" role="group" aria-label="Theme">
+            {THEME_PREFS.map((p) => {
+              const Icon = THEME_ICON[p]
+              return (
+                <Button key={p} size="sm" variant={theme.pref === p ? 'secondary' : 'ghost'} aria-pressed={theme.pref === p} onClick={() => theme.onChange(p)}>
+                  <Icon className="mr-1 h-4 w-4" aria-hidden />
+                  {THEME_LABEL[p]}
+                </Button>
+              )
+            })}
+          </div>
+        </Row>
+      )}
+      <Separator />
+      <Row title="Notifications" description="Desktop notification when MCA looks stuck, a prompt waits for you, or a turn runs long.">
+        <Switch aria-label="Notifications" checked={settings.notifications} onCheckedChange={(notifications) => void onUpdate({ notifications })} />
+      </Row>
+    </div>
+  )
+}
+
+function AboutPanel({ info }: { info?: AppInfo | null }) {
+  if (!info) return <p className="text-sm text-muted-foreground">Loading…</p>
+  const link = (href: string, text: string) => (
+    <a className="inline-flex items-center gap-1 text-sm underline underline-offset-4" href={href} target="_blank" rel="noreferrer">
+      {text}
+      <ExternalLink className="h-3 w-3" aria-hidden />
+    </a>
+  )
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">{info.name}</h3>
+        <p className="text-sm text-muted-foreground">A coding agent for your desktop. Bring your own API key; everything runs on your machine.</p>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">Version</dt>
+        <dd>{info.version}</dd>
+        <dt className="text-muted-foreground">License</dt>
+        <dd>{info.license}</dd>
+        <dt className="text-muted-foreground">Platform</dt>
+        <dd>
+          {info.platform} · Electron {info.electronVersion}
+        </dd>
+      </dl>
+      <Separator />
+      <div className="flex flex-wrap gap-x-6 gap-y-2">
+        {link(info.repoUrl, 'Source code on GitHub')}
+        {link(`${info.repoUrl}/issues`, 'Report an issue')}
+        {link(`${info.repoUrl}/releases`, 'Releases')}
+      </div>
+    </div>
+  )
+}
+
+export type SettingsTab = 'general' | 'provider' | 'mcp' | 'about'
+
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Choose a provider, model and effort, and save its API key.'}</DialogDescription>
+          <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Appearance, provider and key, and about MCA.'}</DialogDescription>
         </DialogHeader>
-        <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
-        <section className="space-y-1" aria-label="MCP servers">
-          <h3 className="text-sm font-medium">MCP servers</h3>
-          {mcp.length === 0 && <p className="text-xs text-muted-foreground">None configured. Add them to .mcp.json in a trusted workspace.</p>}
-          {mcp.map((line) => (
-            <p key={line} className="text-xs [overflow-wrap:anywhere]">
-              {line}
-            </p>
-          ))}
-        </section>
+        <Tabs defaultValue={tab} orientation="vertical" className="min-h-72">
+          <TabsList className="w-40 shrink-0" aria-label="Settings sections">
+            <TabsTrigger value="general">
+              <SlidersHorizontal aria-hidden />
+              General
+            </TabsTrigger>
+            <TabsTrigger value="provider">
+              <KeyRound aria-hidden />
+              Provider
+            </TabsTrigger>
+            <TabsTrigger value="mcp">
+              <Plug aria-hidden />
+              MCP servers
+            </TabsTrigger>
+            <TabsTrigger value="about">
+              <Info aria-hidden />
+              About
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="general">
+            <GeneralPanel settings={settings} theme={theme} onUpdate={actions.onUpdate} />
+          </TabsContent>
+          <TabsContent value="provider">
+            <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
+          </TabsContent>
+          <TabsContent value="mcp">
+            <section className="space-y-1" aria-label="MCP servers">
+              {mcp.length === 0 && <p className="text-sm text-muted-foreground">None configured. Add them to .mcp.json in a trusted workspace.</p>}
+              {mcp.map((line) => (
+                <p key={line} className="text-sm [overflow-wrap:anywhere]">
+                  {line}
+                </p>
+              ))}
+            </section>
+          </TabsContent>
+          <TabsContent value="about">
+            <AboutPanel info={info} />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FileDiff, FolderOpen, Settings } from 'lucide-react'
-import type { CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
+import type { AppInfo, CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { UsageMeter } from './components/UsageMeter'
 import { DiffPanel } from './components/DiffPanel'
@@ -12,7 +12,6 @@ import { PromptInput } from '@/components/PromptInput'
 import { ProviderForm, SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAgentSession } from '@/hooks/useAgentSession'
 import { useTheme } from '@/lib/theme'
 
@@ -25,6 +24,8 @@ export default function App() {
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
+  const [info, setInfo] = useState<AppInfo | null>(null)
+  useEffect(() => void api?.invoke('app:getInfo').then(setInfo, () => {}), [api])
   const [recent, setRecent] = useState<string[]>([])
   const [chats, setChats] = useState<SessionInfo[]>([])
   const [commands, setCommands] = useState<CommandInfo[]>([])
@@ -64,7 +65,7 @@ export default function App() {
   const models: ModelList = !modelsKey ? { models: [] } : fetched?.key === modelsKey ? fetched.list : { models: fetched?.list.models ?? [], loading: true }
 
   const actions = {
-    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort }) => {
+    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:update', patch))
@@ -127,7 +128,6 @@ export default function App() {
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
-        <ThemeToggle pref={theme.pref} onChange={theme.setPref} />
         <Button variant="ghost" onClick={() => setOpen(true)}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
@@ -150,7 +150,7 @@ export default function App() {
         </aside>
       )}
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} {...actions} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} {...actions} />
     </main>
   )
 }

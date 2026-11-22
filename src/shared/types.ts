@@ -14,12 +14,17 @@ export interface ModelInfo {
   free?: boolean
 }
 
+/** Where the source lives; the About tab links here. */
+export const REPO_URL = 'https://github.com/yurtemre7/mini-coding-agent'
+
 export interface AppInfo {
   name: string
   shortName: string
   version: string
   platform: NodeJS.Platform
   electronVersion: string
+  license: string
+  repoUrl: string
 }
 
 export const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'] as const
@@ -143,6 +148,8 @@ export interface SettingsInfo {
   provider: ProviderId
   model: string
   effort: Effort
+  /** desktop notifications when the model looks stuck or something waits for the user */
+  notifications: boolean
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
 }

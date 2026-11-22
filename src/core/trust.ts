@@ -65,6 +65,7 @@ export interface Prefs {
   provider?: string
   model?: string
   effort?: string
+  notifications?: boolean
 }
 export const loadPrefs = async (home?: string): Promise<Prefs> => {
   const p = (await readState(home)).prefs

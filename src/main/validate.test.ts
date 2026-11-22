@@ -26,6 +26,7 @@ describe('IPC validation', () => {
     ['settings:update', [{ provider: 'evil' }]],
     ['settings:update', [{ model: 3 }]],
     ['settings:update', [{ effort: 'turbo' }]],
+    ['settings:update', [{ notifications: 'yes' }]],
     ['prompt:answer', [1, { allow: true }]],
     ['prompt:answer', ['id', { allow: 'yes' }]],
     ['prompt:answer', ['id', { allow: true, scope: 'forever' }]],

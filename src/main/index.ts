@@ -1,7 +1,7 @@
 import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import { isExternalUrl } from './urls'
 import { join } from 'path'
-import type { AppInfo } from '../shared/types'
+import { REPO_URL, type AppInfo } from '../shared/types'
 import { registerIpc } from './ipc'
 import type { Controller } from './controller'
 
@@ -11,7 +11,9 @@ export function getAppInfo(): AppInfo {
     shortName: 'MCA',
     version: app.getVersion(),
     platform: process.platform,
-    electronVersion: process.versions.electron
+    electronVersion: process.versions.electron,
+    license: 'MIT',
+    repoUrl: REPO_URL
   }
 }
 
