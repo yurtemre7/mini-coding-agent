@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, SlidersHorizontal, Sun } from 'lucide-react'
+import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
 import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo } from '../../../shared/types'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,7 +15,7 @@ import { THEME_PREFS, type ThemePref } from '@/lib/theme'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export interface SettingsActions {
-  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }): Promise<unknown> | void
+  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }): Promise<unknown> | void
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
@@ -148,9 +149,39 @@ function GeneralPanel({ settings, theme, onUpdate }: { settings: SettingsInfo; t
         </Row>
       )}
       <Separator />
-      <Row title="Notifications" description="Desktop notification when MCA looks stuck, a prompt waits for you, or a turn runs long.">
+      <Row title="Notifications" description="While MCA is in the background: a macOS notification when a task finishes, a permission prompt waits for you, or MCA looks stuck.">
         <Switch aria-label="Notifications" checked={settings.notifications} onCheckedChange={(notifications) => void onUpdate({ notifications })} />
       </Row>
+    </div>
+  )
+}
+
+/** Custom instructions: added after the built-in prompt, or used instead of it. Applies from the next message. */
+function InstructionsPanel({ settings, onUpdate }: { settings: SettingsInfo } & Pick<SettingsActions, 'onUpdate'>) {
+  const [draft, setDraft] = useState(settings.systemPrompt)
+  const dirty = draft !== settings.systemPrompt
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="system-prompt">Custom instructions</Label>
+        <Textarea id="system-prompt" className="max-h-60 min-h-32 font-mono text-xs" placeholder="For example: Answer in German. Prefer small commits. Never touch the migrations folder." value={draft} onChange={(e) => setDraft(e.target.value)} />
+        <p className="text-xs text-muted-foreground">Sent to the model with every message, in all workspaces. Project rules belong in the project&apos;s CLAUDE.md. Applies from your next message.</p>
+      </div>
+      <Row title="Replace the built-in prompt" description="Use only your text. Without the built-in prompt MCA may behave differently.">
+        <Switch aria-label="Replace the built-in prompt" checked={settings.systemReplace} disabled={!settings.systemPrompt.trim()} onCheckedChange={(systemReplace) => void onUpdate({ systemReplace })} />
+      </Row>
+      <div className="flex gap-2">
+        <Button disabled={!dirty} onClick={() => void onUpdate({ systemPrompt: draft })}>
+          Save instructions
+        </Button>
+        <Button variant="outline" disabled={!draft && !settings.systemPrompt} onClick={() => { setDraft(''); void onUpdate({ systemPrompt: '', systemReplace: false }) }}>
+          Clear
+        </Button>
+      </div>
+      <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground">Show the built-in prompt</summary>
+        <pre className="mt-2 max-h-32 overflow-auto rounded-md border bg-muted p-2 whitespace-pre-wrap [overflow-wrap:anywhere]">{settings.defaultSystemPrompt}</pre>
+      </details>
     </div>
   )
 }
@@ -189,15 +220,15 @@ function AboutPanel({ info }: { info?: AppInfo | null }) {
   )
 }
 
-export type SettingsTab = 'general' | 'provider' | 'mcp' | 'about'
+export type SettingsTab = 'general' | 'provider' | 'instructions' | 'mcp' | 'about'
 
 export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Appearance, provider and key, and about MCA.'}</DialogDescription>
+          <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Appearance, provider and key, instructions, and about MCA.'}</DialogDescription>
         </DialogHeader>
         <Tabs defaultValue={tab} orientation="vertical" className="min-h-72">
           <TabsList className="w-40 shrink-0" aria-label="Settings sections">
@@ -208,6 +239,10 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
             <TabsTrigger value="provider">
               <KeyRound aria-hidden />
               Provider
+            </TabsTrigger>
+            <TabsTrigger value="instructions">
+              <ScrollText aria-hidden />
+              Instructions
             </TabsTrigger>
             <TabsTrigger value="mcp">
               <Plug aria-hidden />
@@ -223,6 +258,9 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
           </TabsContent>
           <TabsContent value="provider">
             <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
+          </TabsContent>
+          <TabsContent value="instructions" className="min-w-0">
+            <InstructionsPanel settings={settings} onUpdate={actions.onUpdate} />
           </TabsContent>
           <TabsContent value="mcp">
             <section className="space-y-1" aria-label="MCP servers">

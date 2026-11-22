@@ -5,7 +5,7 @@ import { SettingsDialog } from './SettingsDialog'
 describe('SettingsDialog', () => {
   it('never renders a stored key: the input is empty and only says "Key saved"', () => {
     // even if a key leaked into the settings object, nothing renders it
-    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null }, key: 'sk-secret-123' } as any
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null }, key: 'sk-secret-123' } as any
     const { baseElement } = render(<SettingsDialog tab="provider" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
     const input = screen.getByLabelText('API key') as HTMLInputElement
     expect(input.value).toBe('')
@@ -13,7 +13,7 @@ describe('SettingsDialog', () => {
     expect(baseElement.innerHTML).not.toContain('sk-secret-123')
   })
   it('shows where the key was found, or that it was rejected, or that there is none', () => {
-    const base = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'dotenv', openrouter: null } } as const
+    const base = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'dotenv', openrouter: null } } as const
     const props = { open: true, onOpenChange: vi.fn(), onUpdate: vi.fn(), onSaveKey: vi.fn() }
     const { rerender } = render(<SettingsDialog tab="provider" {...props} settings={base} />)
     expect(screen.getByRole('status')).toHaveTextContent('Key found in .env')
@@ -23,7 +23,7 @@ describe('SettingsDialog', () => {
     expect(screen.getByRole('status')).toHaveTextContent('No key yet')
   })
   it('without a key it says where to get one, with a link to the right provider; with a key it does not', () => {
-    const base = { provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } } as const
+    const base = { provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } } as const
     const props = { open: true, onOpenChange: vi.fn(), onUpdate: vi.fn(), onSaveKey: vi.fn() }
     const { rerender } = render(<SettingsDialog tab="provider" {...props} settings={base} />)
     expect(screen.getByTestId('key-help')).toHaveTextContent('OpenRouter')
@@ -32,12 +32,12 @@ describe('SettingsDialog', () => {
     expect(screen.queryByTestId('key-help')).toBeNull()
   })
   it('save is disabled until a key is typed', () => {
-    render(<SettingsDialog tab="provider" open onOpenChange={vi.fn()} settings={{ provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } }} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
+    render(<SettingsDialog tab="provider" open onOpenChange={vi.fn()} settings={{ provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } }} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled()
     expect((screen.getByLabelText('API key') as HTMLInputElement).placeholder).toBe('Paste your API key')
   })
   describe('tabs', () => {
-    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null } } as const
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null } } as const
     const info = { name: 'mini-coding-agent', shortName: 'MCA', version: '0.1.0', platform: 'darwin', electronVersion: '40.0.0', license: 'MIT', repoUrl: 'https://github.com/yurtemre7/mini-coding-agent' } as const
     it('General: theme buttons and the notifications switch report changes', () => {
       const onChange = vi.fn()
@@ -62,5 +62,19 @@ describe('SettingsDialog', () => {
       fireEvent.mouseDown(screen.getByRole('tab', { name: 'Provider' }), { button: 0 })
       expect(screen.getByLabelText('API key')).toBeInTheDocument()
     })
+  })
+})
+
+describe('SettingsDialog instructions', () => {
+  it('saves custom instructions and can switch to replacing the built-in prompt', () => {
+    const onUpdate = vi.fn()
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: 'Be brief.', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as const
+    render(<SettingsDialog open onOpenChange={() => {}} settings={settings} onUpdate={onUpdate} onSaveKey={() => {}} tab="instructions" />)
+    fireEvent.change(screen.getByLabelText('Custom instructions'), { target: { value: 'Answer in German.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save instructions' }))
+    expect(onUpdate).toHaveBeenCalledWith({ systemPrompt: 'Answer in German.' })
+    fireEvent.click(screen.getByRole('switch', { name: 'Replace the built-in prompt' }))
+    expect(onUpdate).toHaveBeenCalledWith({ systemReplace: true })
+    expect(screen.getByText('Base prompt.')).toBeInTheDocument()
   })
 })

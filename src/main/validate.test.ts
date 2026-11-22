@@ -33,6 +33,10 @@ describe('IPC validation', () => {
     ['prompt:answer', ['id', { allow: false, feedback: 7 }]],
     ['prompt:answer', ['id', null]],
     ['session:open', ['../x']],
+    ['session:delete', ['../x']],
+    ['session:export', [5]],
+    ['settings:update', [{ systemPrompt: 5 }]],
+    ['settings:update', [{ systemReplace: 'yes' }]],
     ['session:open', [5]],
     ['workspace:open', [{}]],
     ['workspace:forget', [5]]
@@ -47,6 +51,8 @@ describe('IPC validation', () => {
     expect(v['prompt:answer'](['id', { allow: true, scope: 'session', feedback: 'f', evil: 1 }])).toEqual(['id', { allow: true, scope: 'session', feedback: 'f' }])
     expect(v['session:abort']([1, 2])).toEqual([])
     expect(v['session:open'](['0b9c-4e1f'])).toEqual(['0b9c-4e1f'])
+    expect(v['session:delete'](['0b9c-4e1f'])).toEqual(['0b9c-4e1f'])
+    expect(v['settings:update']([{ systemPrompt: 'x', systemReplace: true }])).toEqual([{ systemPrompt: 'x', systemReplace: true }])
   })
   it('only http(s) links leave the app', () => {
     expect(isExternalUrl('https://example.com/x')).toBe(true)

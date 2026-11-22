@@ -1,4 +1,5 @@
-import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AgentSession, type Frontend } from '../core/agent'
 import { BUILTIN_INFO, loadCommands, parseInput, runCommand } from '../core/commands'
@@ -10,14 +11,16 @@ import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
-import { listSessions, loadSession, Transcript } from '../core/session'
+import { exportMarkdown } from '../core/export'
+import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
 import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
 
-const SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
+const MAX_SYSTEM_PROMPT = 20_000
+export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
 
 export interface ControllerDeps {
   /** Every state change, in order. The ipc layer batches these. */
@@ -45,6 +48,8 @@ export class Controller {
   private model: string = DEFAULT_MODELS.anthropic.main
   private effort: Effort = DEFAULT_EFFORT
   private notifications = true
+  private systemPrompt = ''
+  private systemReplace = false
   private workspace: string | null = null
   private session?: AgentSession
   private perms?: Permissions
@@ -87,7 +92,7 @@ export class Controller {
       hasKey[id] = !!(await this.keys.get(id))
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
-    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, hasKey, keySource: source }
+    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -113,6 +118,8 @@ export class Controller {
     if (prefs.model?.trim()) this.model = prefs.model
     if (EFFORT_LEVELS.includes(prefs.effort as Effort)) this.effort = prefs.effort as Effort
     if (prefs.notifications === false) this.notifications = false
+    if (typeof prefs.systemPrompt === 'string') this.systemPrompt = prefs.systemPrompt
+    this.systemReplace = prefs.systemReplace === true
     const s = await this.getSettings()
     const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
     this.setProvider(id)
@@ -131,9 +138,14 @@ export class Controller {
     return this.getSettings()
   }
 
-  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }): Promise<SettingsInfo> {
+  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }): Promise<SettingsInfo> {
     if (patch.provider || patch.model || patch.effort) this.assertIdle('change the model or effort') // notifications can change any time
     if (patch.notifications !== undefined) this.notifications = patch.notifications
+    if (patch.systemPrompt !== undefined || patch.systemReplace !== undefined) {
+      if (patch.systemPrompt !== undefined) this.systemPrompt = patch.systemPrompt.slice(0, MAX_SYSTEM_PROMPT)
+      if (patch.systemReplace !== undefined) this.systemReplace = patch.systemReplace
+      this.session?.setSystem(this.system()) // next turn; a running turn keeps the prompt it started with
+    }
     if (patch.provider) {
       if (!PROVIDER_IDS.includes(patch.provider)) throw new Error(`Unknown provider "${patch.provider}".`)
       this.setProvider(patch.provider)
@@ -143,8 +155,15 @@ export class Controller {
       if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
       this.effort = patch.effort
     }
-    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
+    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     return this.getSettings()
+  }
+
+  /** Built-in prompt, plus the user's instructions, or only those when "replace" is on and they are not empty. */
+  private system(): string {
+    const custom = this.systemPrompt.trim()
+    if (!custom) return DEFAULT_SYSTEM_PROMPT
+    return this.systemReplace ? custom : `${DEFAULT_SYSTEM_PROMPT}\n\n${custom}`
   }
 
   /** Same shape as the CLI's provider, but resolved lazily from the credential store so a key saved mid-session just works. */
@@ -166,7 +185,11 @@ export class Controller {
     emit: (e) => {
       this.apply(e)
       if (e.type === 'attention') this.notify(e.message)
-      if (e.type === 'turn_end') this.stopTimer('long')
+      if (e.type === 'turn_end') {
+        this.stopTimer('long')
+        if (e.reason === 'done') this.notify('MCA finished the task.')
+        else if (e.reason === 'error') this.notify('MCA stopped because of an error.')
+      }
       if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
     },
     ask: (request) =>
@@ -233,7 +256,7 @@ export class Controller {
     this.perms = built.perms
     this.workspace = dir
     await this.startMcp(built.mcp, dir)
-    this.session = new AgentSession({ provider: this.proxy, model: '', system: SYSTEM_PROMPT, tools: this.tools(), cwd: dir, frontend: this.frontend, decide: built.perms.decide, plan: built.perms, fastModel: FAST_MODEL, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
+    this.session = new AgentSession({ provider: this.proxy, model: '', system: this.system(), tools: this.tools(), cwd: dir, frontend: this.frontend, decide: built.perms.decide, plan: built.perms, fastModel: FAST_MODEL, hooks: built.hooks, reminder: () => buildReminder(dir, { home: this.d.home }) })
     this.session.store = new Transcript(dir, this.meta, { home: this.d.home })
     await rememberWorkspace(dir, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     this.apply({ type: 'clear' })
@@ -280,6 +303,25 @@ export class Controller {
 
   chats(): SessionInfo[] {
     return this.workspace ? listSessions(this.workspace, this.d.home) : []
+  }
+
+  /** Deletes a saved chat. The open chat is replaced by a fresh one; a running turn blocks it. */
+  deleteChat(id: string): void {
+    this.assertIdle('delete a chat')
+    if (!this.workspace) throw new Error('Open a workspace first.')
+    if (!this.chats().some((c) => c.id === id)) throw new Error('Unknown chat.')
+    const current = this.session?.store?.id === id
+    deleteSession(this.workspace, id, this.d.home)
+    if (current) this.newChat()
+  }
+
+  /** Markdown copy of a saved chat; the caller decides where it is written. */
+  exportChat(id: string): { title: string; markdown: string } {
+    if (!this.workspace) throw new Error('Open a workspace first.')
+    if (!this.chats().some((c) => c.id === id)) throw new Error('Unknown chat.')
+    const { meta, messages } = parseTranscript(readFileSync(join(sessionDir(this.workspace, this.d.home), `${id}.jsonl`), 'utf8'))
+    const title = meta.title || 'Chat'
+    return { title, markdown: exportMarkdown(title, messages) }
   }
 
   newChat(): void {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FileDiff, FolderOpen, Settings } from 'lucide-react'
-import type { AppInfo, CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
+import { ExternalLink, FileDiff, FolderOpen, Settings } from 'lucide-react'
+import type { AppInfo, CommandInfo, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
@@ -10,7 +10,7 @@ import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
 import { PromptInput } from '@/components/PromptInput'
-import { ProviderForm, SettingsDialog } from '@/components/SettingsDialog'
+import { ProviderForm, SettingsDialog, type SettingsActions } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAgentSession } from '@/hooks/useAgentSession'
@@ -47,6 +47,8 @@ export default function App() {
     api.invoke('commands:list').then(setCommands, () => {})
   }, [api, workspace, busy])
 
+  const refreshChats = () => api?.invoke('session:list').then(setChats, () => {})
+
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
   const provider = settings?.provider
   const source = provider && settings?.keySource[provider]
@@ -66,7 +68,7 @@ export default function App() {
   const models: ModelList = !modelsKey ? { models: [] } : fetched?.key === modelsKey ? fetched.list : { models: fetched?.list.models ?? [], loading: true }
 
   const actions = {
-    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }) => {
+    onUpdate: async (patch: Parameters<SettingsActions['onUpdate']>[0]) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:update', patch))
@@ -121,12 +123,19 @@ export default function App() {
     <main className="flex h-screen bg-background text-foreground">
       <Drag />
       <aside className="flex w-60 shrink-0 flex-col gap-3 border-r p-3 pt-12">
-        <Button variant="outline" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
-          <FolderOpen className="mr-2 h-4 w-4" />
-          <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
-        </Button>
+        <div className="flex gap-1">
+          <Button variant="outline" className="min-w-0 flex-1" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
+            <FolderOpen className="mr-2 h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
+          </Button>
+          {v.workspace && (
+            <Button variant="outline" size="icon" className="shrink-0" aria-label="Show the workspace in Finder" title="Show in Finder" onClick={() => void s.reveal()}>
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
-          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} />
+          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} onDelete={(id) => void s.deleteChat(id).then(refreshChats)} onExport={(id) => void s.exportChat(id)} />
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}

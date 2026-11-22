@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, rmSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { sealHistory } from './agent'
@@ -123,6 +123,14 @@ export function loadSession(cwd: string, id: string, meta: () => SessionMeta, ho
     renameSync(tmp, path)
   }
   return { transcript: new Transcript(cwd, meta, { home, id, started: true }), messages }
+}
+
+/** Removes a chat's transcript, its backup and its rewind checkpoints. Missing files are fine. */
+export function deleteSession(cwd: string, id: string, home?: string): void {
+  if (!isSessionId(id)) throw new Error('Invalid chat id.')
+  const dir = sessionDir(cwd, home)
+  for (const f of [`${id}.jsonl`, `${id}.jsonl.bak`]) rmSync(join(dir, f), { force: true })
+  rmSync(new Transcript(cwd, () => ({ provider: '', model: '' }), { home, id }).checkpointDir, { recursive: true, force: true })
 }
 
 /** Newest first. Cost: parses every transcript in the workspace folder, so it slows down with very large histories. */

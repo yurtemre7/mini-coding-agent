@@ -1,4 +1,5 @@
-import { FolderClock, History, MessageSquare, Plus, X } from 'lucide-react'
+import { useState } from 'react'
+import { Download, FolderClock, History, MessageSquare, Plus, Trash2, X } from 'lucide-react'
 import type { SessionInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { ago } from '@/lib/ago'
@@ -12,7 +13,8 @@ const Head = ({ icon: Icon, children }: { icon: typeof History; children: string
 )
 
 /** Recent workspaces and the current workspace's saved chats. Everything is disabled while a turn runs. */
-export function ChatsSidebar(p: { workspace: string | null; recent: string[]; chats: SessionInfo[]; disabled: boolean; onWorkspace(path: string): void; onForget(path: string): void; onChat(id: string): void; onNew(): void }) {
+export function ChatsSidebar(p: { workspace: string | null; recent: string[]; chats: SessionInfo[]; disabled: boolean; onWorkspace(path: string): void; onForget(path: string): void; onChat(id: string): void; onNew(): void; onDelete?(id: string): void; onExport?(id: string): void }) {
+  const [confirm, setConfirm] = useState<string | null>(null)
   return (
     <>
       <div className="space-y-1">
@@ -37,15 +39,41 @@ export function ChatsSidebar(p: { workspace: string | null; recent: string[]; ch
             New chat
           </Button>
           {p.chats.length === 0 && <p className="text-xs text-muted-foreground">No saved chats yet.</p>}
-          {p.chats.map((c) => (
-            <Button key={c.id} variant="ghost" size="sm" className="h-auto w-full justify-start py-1 text-left" disabled={p.disabled} title={c.title} onClick={() => p.onChat(c.id)}>
-              <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{c.title}</span>
-                <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
-              </span>
-            </Button>
-          ))}
+          {p.chats.map((c) =>
+            confirm === c.id ? (
+              <div key={c.id} className="space-y-1 rounded-md border p-2 text-xs">
+                <p className="[overflow-wrap:anywhere]">Delete &quot;{c.title}&quot;? This cannot be undone.</p>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="destructive" className="h-7" onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
+                    Delete chat
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div key={c.id} className="group flex items-center">
+                <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left" disabled={p.disabled} title={c.title} onClick={() => p.onChat(c.id)}>
+                  <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{c.title}</span>
+                    <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
+                  </span>
+                </Button>
+                {p.onExport && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={`Export "${c.title}" as Markdown`} title="Export as Markdown" onClick={() => p.onExport?.(c.id)}>
+                    <Download className="h-3 w-3" />
+                  </Button>
+                )}
+                {p.onDelete && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={`Delete "${c.title}"`} title="Delete chat" disabled={p.disabled} onClick={() => setConfirm(c.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            )
+          )}
         </div>
       )}
     </>

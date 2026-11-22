@@ -172,3 +172,10 @@ Ordered by value. Pull from the top; each item should end as a PR.
 
 ## UI polish batch (JURA-7, partial)
 Settings is a tabbed dialog (General: theme + notifications switch; Provider; MCP servers; About: version, license, platform, GitHub/issues/releases links from `REPO_URL`). The theme toggle moved out of the sidebar. New `EmptyState` guides first use (choose a folder, then "What should we work on?"); the provider setup card has a welcome line. Visual checks: build the renderer and load `out/renderer` in Playwright Chromium with a mocked `window.mca` (no Electron needed). Still open: sidebar restructure, first-run walkthrough, dark-mode review on a real Mac.
+
+## Project management, instructions, notifications (batch 4)
+- Chats: delete (inline confirm; the open chat is replaced by a fresh one; idle only) and export to Markdown (`core/export.ts`, save dialog in main). `deleteSession` removes transcript, `.bak` and checkpoints. Sidebar also has "Show in Finder" for the workspace.
+- Custom instructions: Settings > Instructions. Stored in prefs (`systemPrompt`, `systemReplace`, capped at 20k chars), appended to the built-in prompt or replacing it; applied from the next turn via `AgentSession.setSystem`. Desktop only; the CLI still uses its own fixed prompt (backlog: share prefs with the CLI).
+- Notifications (desktop, only while the window is unfocused, one Settings switch): task finished (`turn_end` reason done), stopped by error, permission prompt waiting, looks stuck, long turn. Aborted turns do not notify.
+- Permission dialog buttons are now "Deny / Allow for this session / Allow once" (plan: "Reject plan / Approve plan"); dialogs scroll instead of overflowing.
+- Not yet: rename chat, project-level instructions UI, delete all chats of a workspace.
