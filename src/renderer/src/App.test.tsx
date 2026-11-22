@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { McaApi, ViewState } from '../../shared/types'
@@ -32,5 +32,25 @@ describe('App', () => {
     render(<App />)
     expect(await screen.findByText('Open workspace')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Open a workspace to start')).toBeDisabled()
+  })
+
+  it('folds the sidebar and opens the tools column from the layout controls', async () => {
+    localStorage.clear()
+    window.mca = api(true)
+    render(<App />)
+    expect(await screen.findByLabelText('Sidebar')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Tools')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the sidebar' }))
+    expect(screen.queryByLabelText('Sidebar')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /3 columns/ }))
+    expect(screen.getByLabelText('Sidebar')).toBeInTheDocument()
+    expect(screen.getByLabelText('Tools')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Terminal/ }))
+    expect(screen.getByLabelText('Command')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /1 column/ }))
+    expect(screen.queryByLabelText('Tools')).toBeNull()
+    expect(screen.queryByLabelText('Sidebar')).toBeNull()
+    fireEvent.keyDown(window, { key: 'b', metaKey: true })
+    expect(screen.getByLabelText('Sidebar')).toBeInTheDocument()
   })
 })

@@ -23,6 +23,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
   })
   const c = new Controller({
     notify,
+    terminal: (e) => send('terminal:event', e),
     emit: (e, seq) => batcher.push(e, seq),
     prompt: (p) => {
       batcher.flush() // the prompt must not overtake the tool_start it belongs to
@@ -65,6 +66,15 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       const ws = c.getState().workspace
       if (ws) shell.showItemInFolder(ws)
     },
+    'git:status': () => c.gitStatus(),
+    'git:diff': (p, staged) => c.gitDiff(p, staged),
+    'git:stage': (ps, stage) => c.gitStage(ps, stage),
+    'git:commit': (m) => c.gitCommit(m),
+    'git:push': () => c.gitPush(),
+    'git:branches': () => c.gitBranches(),
+    'git:switch': (n, create) => c.gitSwitch(n, create),
+    'terminal:run': (cmd) => c.terminalRun(cmd),
+    'terminal:kill': () => c.terminalKill(),
     'settings:get': () => c.getSettings(),
     'settings:setKey': (p, key) => c.setKey(p, key),
     'settings:update': (patch) => c.update(patch),

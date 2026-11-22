@@ -8,7 +8,7 @@ const v = validators as Record<string, (a: unknown[]) => unknown[]>
 describe('IPC validation', () => {
   it('has a validator for every invoke channel, and the preload allowlists match the contract', () => {
     expect(Object.keys(validators).sort()).toEqual([...INVOKE_CHANNELS].sort())
-    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request'])
+    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event'])
   })
   it.each([
     ['session:send', [42]],
@@ -33,6 +33,10 @@ describe('IPC validation', () => {
     ['prompt:answer', ['id', { allow: false, feedback: 7 }]],
     ['prompt:answer', ['id', null]],
     ['session:open', ['../x']],
+    ['git:stage', ['a', true]],
+    ['git:diff', ['a']],
+    ['git:switch', ['b']],
+    ['terminal:run', [5]],
     ['session:delete', ['../x']],
     ['session:export', [5]],
     ['settings:update', [{ systemPrompt: 5 }]],
@@ -52,6 +56,8 @@ describe('IPC validation', () => {
     expect(v['session:abort']([1, 2])).toEqual([])
     expect(v['session:open'](['0b9c-4e1f'])).toEqual(['0b9c-4e1f'])
     expect(v['session:delete'](['0b9c-4e1f'])).toEqual(['0b9c-4e1f'])
+    expect(v['git:stage']([['a.txt'], true])).toEqual([['a.txt'], true])
+    expect(v['terminal:run'](['ls'])).toEqual(['ls'])
     expect(v['settings:update']([{ systemPrompt: 'x', systemReplace: true }])).toEqual([{ systemPrompt: 'x', systemReplace: true }])
   })
   it('only http(s) links leave the app', () => {

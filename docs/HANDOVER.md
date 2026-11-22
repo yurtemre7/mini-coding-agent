@@ -179,3 +179,9 @@ Settings is a tabbed dialog (General: theme + notifications switch; Provider; MC
 - Notifications (desktop, only while the window is unfocused, one Settings switch): task finished (`turn_end` reason done), stopped by error, permission prompt waiting, looks stuck, long turn. Aborted turns do not notify.
 - Permission dialog buttons are now "Deny / Allow for this session / Allow once" (plan: "Reject plan / Approve plan"); dialogs scroll instead of overflowing.
 - Not yet: rename chat, project-level instructions UI, delete all chats of a workspace.
+
+## Workbench: git, terminal, layout (batch 5)
+- Layout: header controls for 1/2/3 columns plus sidebar and tools toggles (Cmd/Ctrl+B, Cmd/Ctrl+J), persisted in localStorage (`lib/layout.ts`). The right column ("tools") has tabs Changes (agent diffs), Git, Terminal.
+- Git (`core/git.ts`, no shell, `git` via execFile, no prompts/pager): status with branch/ahead/behind, stage/unstage, per-file staged/unstaged diff (untracked shown as added), commit, plain push (never forced; sets the upstream on origin the first time), branch list/create/switch (names validated by `git check-ref-format`). Paths from the renderer are rejected if absolute, `..` or option-like. Commit, push and switch are blocked while the agent runs.
+- Terminal (`core/terminal.ts`): a command runner, NOT a pty: one login-shell command at a time in the workspace, streamed output (1 MB cap), Stop kills the process group, history with arrow keys. No vim/ssh prompts/colors. It is the user's own shell, so agent permission rules do not apply. A real pty needs `node-pty` (native rebuild + notarization impact): backlog.
+- Not yet: resizable columns, discard-changes in the Git tab, pull/fetch, stash, merge-conflict UI, inline line comments.
