@@ -44,6 +44,18 @@ describe('GitPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create branch' }))
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('git:switch', 'feat/x', true))
   })
+  it('keeps the typed commit message when the commit fails and shows git\'s error', async () => {
+    const invoke = vi.fn(async (ch: string) => {
+      if (ch === 'git:commit') throw new Error("Error invoking remote method 'git:commit': Error: hook failed")
+      return ch === 'git:status' ? status : ch === 'git:branches' ? { current: 'main', branches: ['main'] } : ''
+    })
+    render(<GitPanel api={{ invoke, on: () => () => {} } as unknown as McaApi} workspace="/w" busy={false} refreshKey={0} />)
+    const box = await screen.findByLabelText('Commit message')
+    fireEvent.change(box, { target: { value: 'wip' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Commit' }))
+    expect(await screen.findByText('hook failed')).toBeInTheDocument()
+    expect(box).toHaveValue('wip')
+  })
   it('explains a non-repo, a missing workspace and disables actions while the agent works', async () => {
     const none = mk({ 'git:status': { ...status, repo: false } })
     const { rerender } = render(<GitPanel api={none.api} workspace="/w" busy={false} refreshKey={0} />)
