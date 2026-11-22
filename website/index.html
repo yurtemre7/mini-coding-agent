@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCA – a coding agent you stay in control of</title>
+<meta name="description" content="MCA is a desktop and command-line coding agent. Bring your own API key, review every change, and approve every risky command.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='%23fff' font-family='sans-serif' font-weight='700'%3EM%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="logo" href="#">MCA</a>
+    <nav aria-label="Main"><a href="#features">Features</a><a href="#safety">Safety</a><a href="#install">Install</a><a href="#cli">CLI</a></nav>
+  </header>
+
+  <main>
+  <div class="hero">
+    <h1>A coding agent you stay in control of</h1>
+    <p>MCA runs on your Mac with your own API key. It reads, edits and tests your code, and shows every change before you keep it.</p>
+    <div class="btns"><a class="btn primary" href="#install">Install for macOS</a><a class="btn" href="#cli">Use the CLI</a></div>
+    <div class="shot" role="img" aria-label="Illustration of a chat where MCA edits a file and shows a diff">
+      <div class="row"><div class="bubble me">Add a /resume command and a test for it</div></div>
+      <div class="row"><div class="bubble" style="flex:1"><div class="tool"><span>Edit src/core/commands.ts</span><span><span class="add">+18</span> <span class="del">-2</span></span></div><div class="tool"><span>Bash npm test</span><span>passed</span></div><p style="margin:.5rem 0 0">Done. The command lists saved chats and resumes one. All tests pass.</p></div></div>
+    </div>
+  </div>
+
+  <section id="features"><div class="wrap">
+    <h2>Everything in one workbench</h2>
+    <p class="lead">Chat on the left, your project in the middle, tools on the right. Fold any column away.</p>
+    <div class="grid">
+      <div class="card"><h3>Bring your own key</h3><p>Use Anthropic or OpenRouter. Keys stay in your macOS Keychain, never in a project file.</p></div>
+      <div class="card"><h3>Diff and revert</h3><p>See what each turn changed, file by file, and undo a file or a whole turn with Rewind.</p></div>
+      <div class="card"><h3>Git built in</h3><p>Stage, commit, push and create branches without leaving the app. Pushes are never forced.</p></div>
+      <div class="card"><h3>Terminal tab</h3><p>Run your own commands next to the chat, in your own shell.</p></div>
+      <div class="card"><h3>Images and @files</h3><p>Paste or drop screenshots, and type @ to point the agent at a file.</p></div>
+      <div class="card"><h3>Your instructions</h3><p>Add to or replace the system prompt, define slash commands and skills, connect MCP servers.</p></div>
+      <div class="card"><h3>Native notifications</h3><p>Get a macOS notification when a task finishes or needs your approval.</p></div>
+      <div class="card"><h3>Chats per project</h3><p>Resume, export to Markdown or delete saved chats for each workspace.</p></div>
+    </div>
+  </div></section>
+
+  <section id="safety"><div class="wrap">
+    <h2>Safe by default</h2>
+    <p class="lead">The agent asks before it acts, and some things it never does without an explicit yes.</p>
+    <div class="grid">
+      <div class="card"><h3>Permission modes</h3><p>Default asks for edits and commands. Accept-edits allows file changes. Plan mode only reads. Bypass is opt-in.</p></div>
+      <div class="card"><h3>Catastrophic commands</h3><p>Commands like <code>rm -rf ~</code> or <code>dd</code> to a disk always ask, in every mode, and are never remembered.</p></div>
+      <div class="card"><h3>Untrusted projects</h3><p>A project's allow rules, hooks and MCP servers do nothing until you trust that workspace.</p></div>
+    </div>
+  </div></section>
+
+  <section id="install"><div class="wrap">
+    <h2>Install on macOS</h2>
+    <p class="lead">Apple Silicon and Intel builds are available.</p>
+    <ol class="steps">
+      <li>Download the <code>.dmg</code> for your Mac from the project's Releases page (<code>arm64</code> for M1 and later, <code>x64</code> for Intel).</li>
+      <li>Open it and drag <strong>mini-coding-agent</strong> into Applications.</li>
+      <li>The app is not signed or notarized yet, so macOS blocks the first launch. Run this once:
+<pre><code>xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"</code></pre></li>
+      <li>Open the app, pick a provider, paste your API key and open a workspace.</li>
+    </ol>
+    <p class="note">Unsigned builds are a temporary limitation. Only install builds you got from the official Releases page.</p>
+  </div></section>
+
+  <section id="cli"><div class="wrap">
+    <h2>Also a CLI</h2>
+    <p class="lead">The same agent, scriptable. <code>mca</code> works in your terminal and in pipelines.</p>
+<pre><code>mca -p "explain src/main" --permission-mode plan
+git diff | mca -p "review this diff"
+mca --continue</code></pre>
+  </div></section>
+  </main>
+
+  <footer><span>MCA is open source under the MIT license.</span><span><a href="#features">Features</a> · <a href="#safety">Safety</a> · <a href="#install">Install</a></span></footer>
+</div>
+</body>
+</html>
