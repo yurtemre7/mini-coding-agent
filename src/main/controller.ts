@@ -332,6 +332,7 @@ export class Controller {
     if (!this.session) throw new Error('Open a workspace first.')
     this.session.clear() // moves to a fresh transcript file
     this.apply({ type: 'clear' })
+    this.announce()
   }
 
   /** Loads a saved chat of this workspace, rebuilds the view from its messages and keeps appending to its file. */
@@ -342,12 +343,13 @@ export class Controller {
     const { transcript, messages } = loadSession(this.workspace, id, this.meta, this.d.home)
     this.session.load(messages, transcript)
     this.apply({ type: 'clear' })
+    this.announce()
     for (const e of messagesToEvents(messages)) this.apply(e)
     void this.refreshChanges()
   }
 
   private announce(): void {
-    this.apply({ type: 'session', workspace: this.workspace, mode: this.perms?.mode ?? 'default', mcp: describeStatus(this.mcp?.status ?? []) })
+    this.apply({ type: 'session', workspace: this.workspace, mode: this.perms?.mode ?? 'default', mcp: describeStatus(this.mcp?.status ?? []), chat: this.session?.store?.id })
   }
 
   /** Starts a turn and returns at once; progress arrives as events. */

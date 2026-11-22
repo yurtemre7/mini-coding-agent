@@ -245,43 +245,47 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
 // ---------- catastrophic commands ----------
 
 const SYSTEM_DIRS = new Set(['bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'opt', 'sbin', 'sys', 'usr', 'var', 'home', 'root', 'Users', 'System', 'Library', 'Applications', 'Volumes', 'private'])
-/** A target whose recursive deletion or permission change ruins the machine: the root, the home directory, or a top-level system directory. */
+/** A target whose recursive deletion or permission change ruins the machine: the root, a home directory (the real one too), or a top-level system directory. */
 function isVitalTarget(t: string): boolean {
+  const home = homedir().replace(/\/+$/, '')
   if (t === '~' || t === '$HOME' || t === '${HOME}') return true
-  const home = t.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, '')
-  if (home !== t) return /^\/(\*|\.\*|\.)?\/?$/.test(home) // ~/  ~/*  ~/.
+  const rest = t.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, '')
+  if (rest !== t) return /^\/(\*|\.\*|\.)?\/?$/.test(rest) // ~/  ~/*  ~/.
   if (!t.startsWith('/')) return false
+  if (home && (t.replace(/\/+$/, '') === home || /^\/(\*|\.\*|\.)$/.test(t.slice(home.length)) && t.startsWith(home + '/'))) return true // /home/me  /home/me/*
   const parts = t.split('/').filter(Boolean)
   return parts.length === 0 || (parts.length === 1 && (SYSTEM_DIRS.has(parts[0]) || parts[0] === '*')) || (parts.length === 2 && parts[1] === '*' && SYSTEM_DIRS.has(parts[0]))
 }
 
 /**
  * Built-in guard, independent of any allow rule or mode (even bypassPermissions): commands that can wipe the machine or the home directory,
- * overwrite a disk, or run downloaded code as a shell. It only ever adds a prompt (never an auto-allow); a command whose words cannot be known
- * statically already prompts. Over-matching is accepted: a false alarm costs one click.
+ * overwrite a disk, or run downloaded code as a shell. It only ever adds a prompt (never an auto-allow). Commands are split on shell syntax
+ * (never on operand names), quotes are removed first, and every word after a dangerous program in the same command counts as its operand.
+ * Commands whose words cannot be known statically (`$cmd`, eval) are NOT matched here; they prompt only when no allow-everything mode applies.
+ * Over-matching is accepted: a false alarm costs one click.
  */
 export function dangerOf(cmd: string): string | undefined {
-  const t = words(cmd.replace(/\\\n/g, '').replace(/\$\{?HOME\}?/g, '~'))
+  const plain = cmd.replace(/\\\n/g, '').replace(/\$\{?HOME\}?/g, '~')
   const base = (w: string) => w.slice(w.lastIndexOf('/') + 1) || w
-  for (let i = 0; i < t.length; i++) {
-    const prog = base(t[i])
-    const args = (() => {
-      const out: string[] = []
-      for (let j = i + 1; j < t.length && !['rm', 'dd', 'sudo', 'doas'].includes(base(t[j])); j++) out.push(t[j])
-      return out
-    })()
-    const flags = args.filter((a) => a.startsWith('-'))
-    const targets = args.filter((a) => !a.startsWith('-'))
-    const recursive = flags.some((f) => /^-[a-zA-Z]*[rR]/.test(f) || f === '--recursive')
-    if (prog === 'rm' && (flags.includes('--no-preserve-root') || (recursive && targets.some(isVitalTarget)))) return 'this command can delete the whole system or your home directory'
-    if ((prog === 'chmod' || prog === 'chown' || prog === 'chgrp') && recursive && targets.some(isVitalTarget)) return 'this command recursively changes permissions or ownership across the whole system or your home directory'
-    if (prog === 'dd' && args.some((a, k) => a === 'of' && /^\/dev\/(sd|hd|nvme|disk|mmcblk|rdisk)/.test(args[k + 1] ?? ''))) return 'this command can overwrite a disk'
-    if ((/^mkfs(\..+)?$|^(fdisk|parted|wipefs|shred)$/.test(prog) || (prog === 'diskutil' && /^(erase|partition|zero|secure|reformat)/i.test(args[0] ?? '')))) return 'this command can erase or repartition a disk'
-    if (['shutdown', 'reboot', 'halt', 'poweroff', 'init'].includes(prog) && (prog !== 'init' || /^[06]$/.test(args[0] ?? ''))) return 'this command shuts the machine down'
+  for (const seg of parseCommand(plain).segments) {
+    const t = words(seg)
+    for (let i = 0; i < t.length; i++) {
+      const prog = base(t[i])
+      const args = t.slice(i + 1)
+      const flags = args.filter((a) => a.startsWith('-'))
+      const targets = args.filter((a) => !a.startsWith('-'))
+      const recursive = flags.some((f) => /^-[a-zA-Z]*[rR]/.test(f) || f === '--recursive')
+      if (prog === 'rm' && (flags.includes('--no-preserve-root') || (recursive && targets.some(isVitalTarget)))) return 'this command can delete the whole system or your home directory'
+      if ((prog === 'chmod' || prog === 'chown' || prog === 'chgrp') && recursive && targets.some(isVitalTarget)) return 'this command recursively changes permissions or ownership across the whole system or your home directory'
+      if (prog === 'dd' && args.some((a, k) => a === 'of' && /^\/dev\/(sd|hd|nvme|disk|mmcblk|rdisk)/.test(args[k + 1] ?? ''))) return 'this command can overwrite a disk'
+      if ((/^mkfs(\..+)?$|^(fdisk|parted|wipefs|shred)$/.test(prog) || (prog === 'diskutil' && /^(erase|partition|zero|secure|reformat)/i.test(args[0] ?? '')))) return 'this command can erase or repartition a disk'
+      if (['shutdown', 'reboot', 'halt', 'poweroff', 'init'].includes(prog) && (prog !== 'init' || /^[06]$/.test(args[0] ?? ''))) return 'this command shuts the machine down'
+    }
   }
-  if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/.test(cmd)) return 'this looks like a fork bomb'
-  if (/>\s*\/dev\/(sd|hd|nvme|disk|rdisk)/.test(cmd)) return 'this command can overwrite a disk'
-  if (/\b(curl|wget|fetch)\b[^|;&]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b/.test(cmd)) return 'this pipes a download straight into a shell'
+  const unquoted = plain.replace(/['"\\]/g, '') // bash removes quotes before it opens a target or starts a program
+  if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/.test(unquoted)) return 'this looks like a fork bomb'
+  if (/>\s*\/dev\/(sd|hd|nvme|disk|rdisk)/.test(unquoted)) return 'this command can overwrite a disk'
+  if (/\b(curl|wget|fetch)\b[^|;&]*\|\s*(sudo\s+|env\s+)?(\S*\/)?(ba|z|da|k)?sh\b/.test(unquoted)) return 'this pipes a download straight into a shell'
   return undefined
 }
 

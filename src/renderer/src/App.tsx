@@ -21,7 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useAgentSession } from '@/hooks/useAgentSession'
 import { useTheme } from '@/lib/theme'
 
-const Drag = () => <div className="fixed inset-x-0 top-0 h-10" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
+const Drag = () => <div className="fixed inset-x-0 top-0 z-0 h-10" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
 export default function App() {
   const api = window.mca
@@ -55,6 +55,7 @@ export default function App() {
   const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
   const [fetched, setFetched] = useState<{ key: string; list: ModelList } | null>(null)
   const loadSettings = useCallback(() => api?.invoke('settings:get').then(setSettings), [api])
+  const listFiles = useCallback(() => api!.invoke('workspace:files'), [api])
   useEffect(() => void loadSettings(), [loadSettings])
 
   // saved chats and recent workspaces: refetched when the workspace changes or a turn ends (a turn saves its messages)
@@ -156,7 +157,7 @@ export default function App() {
           )}
         </div>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
-          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} onDelete={(id) => void s.deleteChat(id).then(refreshChats)} onExport={(id) => void s.exportChat(id)} />
+          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} current={v.chat} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} onDelete={(id) => void s.deleteChat(id).then(refreshChats)} onExport={(id) => void s.exportChat(id)} />
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
@@ -167,7 +168,7 @@ export default function App() {
       </aside>
       )}
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className={`flex h-10 shrink-0 items-center justify-between gap-2 px-3 ${lay.layout.sidebar ? '' : 'pl-20'}`} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div className={`relative z-10 flex h-10 shrink-0 items-center justify-between gap-2 px-3 ${lay.layout.sidebar ? '' : 'pl-20'}`} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.sidebar ? 'Hide the sidebar' : 'Show the sidebar'} title="Sidebar (Cmd/Ctrl+B)" aria-pressed={lay.layout.sidebar} onClick={lay.toggleSidebar}>
             <PanelLeft className="h-4 w-4" />
           </Button>
@@ -186,7 +187,7 @@ export default function App() {
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
-        <PromptInput key={v.workspace ?? ''} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={() => api.invoke('workspace:files')} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput key={v.workspace ?? ''} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (
         <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l bg-sidebar p-3 pt-12">

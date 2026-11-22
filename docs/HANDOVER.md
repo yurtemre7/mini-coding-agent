@@ -189,7 +189,7 @@ Settings is a tabbed dialog (General: theme + notifications switch; Provider; MC
 ## Catastrophic-command guard (loop iteration 2)
 - `dangerOf(cmd)` in `core/permissions.ts`: `rm -r` on `/`, `~`, `$HOME` or a top-level system directory (and `--no-preserve-root`), recursive `chmod/chown` there, `dd of=/dev/<disk>`, `mkfs`/`fdisk`/`diskutil erase`, shutdown/reboot, fork bomb, `curl | sh`. Works through `sudo`/quotes/absolute paths/`&&` chains.
 - Decision step 3 (a hard ask): prompts in EVERY mode including `bypassPermissions`, cannot be pre-approved by an allow rule or session grant, is never remembered (no `suggestion`), headless sessions deny it. `deny` rules and plan mode still win. Request carries `danger: true`: desktop shows a red warning and "Run anyway"; CLI prints WARNING.
-- Known gap: only statically visible commands are matched; computed commands (`$cmd`, `eval`) already always prompt but get no danger warning. Not a sandbox.
+- Known gap: only statically visible commands are matched; computed commands (`$cmd`, `eval`) get no danger warning and are NOT forced to prompt: in `bypassPermissions` or headless runs they are not caught (default mode still asks, because the command cannot be matched to an allow rule). Quotes, `/bin/bash`, `env bash`, `/home/<me>` and per-segment operands are handled. Not a sandbox.
 
 ## Design system and composer (loop iteration 3)
 - `docs/DESIGN.md` is the rulebook: semantic tokens added (`success`, `warning`, `info`, `sidebar`, `surface`, `shadow-float`, font stacks); diffs now use `text-success`/`text-destructive`; side columns use `bg-sidebar`. Known gap: other components were already token-based; a Storybook-style gallery and a `warning` use in UsageMeter are not done.

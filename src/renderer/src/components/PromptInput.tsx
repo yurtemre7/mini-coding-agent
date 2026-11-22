@@ -67,7 +67,7 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, effo
           .filter((c) => c.name.toLowerCase().startsWith(prefix.toLowerCase()) && !(prefix === c.name)) // an exactly typed command needs no menu
           .map((c) => ({ key: c.name, label: `/${c.name}`, detail: c.description, tag: c.custom ? 'custom' : undefined, apply: () => setText(`/${c.name} `) }))
       : mention !== undefined && fileList
-        ? rankFiles(fileList, mention).map((f) => ({ key: f, label: f.slice(f.lastIndexOf('/') + 1), detail: f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : undefined, apply: () => setText(text.replace(/@[^\s@]*$/, `@${f} `)) }))
+        ? rankFiles(fileList, mention).map((f) => ({ key: f, label: f.slice(f.lastIndexOf('/') + 1), detail: f.includes('/') ? f.slice(0, f.lastIndexOf('/')) : undefined, apply: () => setText(text.replace(/@[^\s@]*$/, () => `@${f} `)) }))
         : []
   const open = items.length > 0
   const pick = (it: Item) => (it.apply(), setActive(0), area.current?.focus())
