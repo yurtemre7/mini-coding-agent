@@ -225,13 +225,13 @@ export type SettingsTab = 'general' | 'provider' | 'instructions' | 'mcp' | 'abo
 export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl [&>*]:min-w-0">
+      <DialogContent className="flex h-[min(44rem,85vh)] flex-col gap-4 sm:max-w-3xl [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>{disabled ? 'Provider, model and effort cannot change while a turn is running.' : 'Appearance, provider and key, instructions, and about MCA.'}</DialogDescription>
         </DialogHeader>
-        <Tabs defaultValue={tab} orientation="vertical" className="min-h-72">
-          <TabsList className="w-40 shrink-0" aria-label="Settings sections">
+        <Tabs defaultValue={tab} orientation="vertical" className="min-h-0 flex-1">
+          <TabsList className="h-fit max-h-full w-40 shrink-0 overflow-y-auto" aria-label="Settings sections">
             <TabsTrigger value="general">
               <SlidersHorizontal aria-hidden />
               General
@@ -253,16 +253,16 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
               About
             </TabsTrigger>
           </TabsList>
-          <TabsContent value="general">
+          <TabsContent value="general" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <GeneralPanel settings={settings} theme={theme} onUpdate={actions.onUpdate} />
           </TabsContent>
-          <TabsContent value="provider">
+          <TabsContent value="provider" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />
           </TabsContent>
-          <TabsContent value="instructions" className="min-w-0">
+          <TabsContent value="instructions" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <InstructionsPanel settings={settings} onUpdate={actions.onUpdate} />
           </TabsContent>
-          <TabsContent value="mcp">
+          <TabsContent value="mcp" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <section className="space-y-1" aria-label="MCP servers">
               {mcp.length === 0 && <p className="text-sm text-muted-foreground">None configured. Add them to .mcp.json in a trusted workspace.</p>}
               {mcp.map((line) => (
@@ -272,7 +272,7 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
               ))}
             </section>
           </TabsContent>
-          <TabsContent value="about">
+          <TabsContent value="about" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <AboutPanel info={info} />
           </TabsContent>
         </Tabs>

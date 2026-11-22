@@ -112,6 +112,8 @@ export interface ViewState {
   provider: ProviderId
   model: string
   workspace: string | null
+  /** Id of the open chat (its transcript file); a new chat is not in the list until its first message is saved. */
+  chat?: string
   /** One line per MCP server: connected, failed or unsupported. */
   mcp: string[]
   busy: boolean
@@ -121,7 +123,7 @@ export interface ViewState {
 }
 
 /** Everything the reducer understands: agent events plus the events main adds for things only it knows. */
-export type ViewEvent = AgentEvent | { type: 'user_message'; text: string; attachments?: string[] } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode; mcp?: string[] }
+export type ViewEvent = AgentEvent | { type: 'user_message'; text: string; attachments?: string[] } | { type: 'rewind' } | { type: 'clear' } | { type: 'session'; workspace: string | null; mode: PermissionMode; mcp?: string[]; chat?: string }
 
 /** One IPC message: consecutive events, `seq` = the seq of the last one. */
 export interface EventBatch {

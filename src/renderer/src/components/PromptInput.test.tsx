@@ -66,6 +66,14 @@ describe('PromptInput', () => {
   })
   describe('@ file mentions', () => {
     const files = ['src/app/main.ts', 'src/lib/util.ts', 'README.md', 'docs/main-notes.md']
+    it('inserts file names literally, even with replacement patterns like $& in them', async () => {
+      render(<PromptInput {...base} listFiles={async () => ['a/$&x.ts']} />)
+      const box = screen.getByRole('textbox')
+      fireEvent.change(box, { target: { value: 'see @x' } })
+      await screen.findAllByRole('option')
+      fireEvent.keyDown(box, { key: 'Enter' })
+      expect(box).toHaveValue('see @a/$&x.ts ')
+    })
     it('typing @ offers workspace files, Enter inserts the path, and the list loads once', async () => {
       const listFiles = vi.fn(async () => files)
       render(<PromptInput {...base} listFiles={listFiles} />)

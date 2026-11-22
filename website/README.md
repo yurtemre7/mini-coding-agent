@@ -3,7 +3,7 @@
 Plain static HTML and CSS: no build step, no dependencies, no scripts. Edit `index.html` and `style.css`; preview with `npx serve website`.
 
 ## Deploy on Netlify (works with a private repo)
-1. Netlify > Add new site > Import an existing project > GitHub. Authorize the Netlify GitHub app and select **only** this repo (private repos are supported on every plan).
+1. Netlify > Add new site > Import an existing project > GitHub. Authorize the Netlify GitHub app and select **only** this repo (private repos work on Netlify's free plan when your personal account owns the repo; a repo owned by a GitHub organization needs a paid Netlify plan).
 2. Settings are read from `netlify.toml` (base `website`, publish `.`, no build command). Click Deploy.
 3. Every push to `main` redeploys; pull requests get deploy previews.
 

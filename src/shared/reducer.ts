@@ -42,7 +42,7 @@ export function reduce<S extends Reduced>(s: S, e: ViewEvent): S {
     case 'clear':
       return { ...s, items: [], todos: [], changes: { turn: [], total: [] }, usage: undefined, busy: false }
     case 'session':
-      return { ...s, workspace: e.workspace, mode: e.mode, mcp: e.mcp ?? s.mcp }
+      return { ...s, workspace: e.workspace, mode: e.mode, mcp: e.mcp ?? s.mcp, chat: e.chat }
   }
 }
 
