@@ -1,4 +1,4 @@
-const lineClass = (line: string): string => (line.startsWith('+') && !line.startsWith('+++') ? 'text-green-600' : line.startsWith('-') && !line.startsWith('---') ? 'text-red-600' : line.startsWith('@@') ? 'text-muted-foreground' : '')
+const lineClass = (line: string): string => (line.startsWith('+') && !line.startsWith('+++') ? 'text-success' : line.startsWith('-') && !line.startsWith('---') ? 'text-destructive' : line.startsWith('@@') ? 'text-muted-foreground' : '')
 
 /** A unified diff with added and removed lines colored; long lines wrap inside the box. */
 export function DiffText({ text, className = '' }: { text: string; className?: string }) {

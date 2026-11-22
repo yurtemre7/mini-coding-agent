@@ -35,9 +35,10 @@ export function formatPermission(r: PermissionRequest): string {
   return [
     `${r.toolName}: ${summarize(r.input)}`,
     ...(r.reason ? [`  (${r.reason})`] : []),
+    ...(r.danger ? ['  WARNING: this can cause damage that cannot be undone. It is asked every time and never remembered.'] : []),
     'Do you want to proceed?',
-    '  1. Yes',
-    `  2. Yes, for this session${r.suggestion ? ` (${r.suggestion})` : ''}`,
+    r.danger ? '  1. Yes, run it anyway' : '  1. Yes',
+    r.danger ? '  2. Yes (same as 1: not remembered)' : `  2. Yes, for this session${r.suggestion ? ` (${r.suggestion})` : ''}`,
     '  3. No, and tell the model what to do instead'
   ].join('\n')
 }

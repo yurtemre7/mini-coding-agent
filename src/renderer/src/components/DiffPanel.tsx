@@ -60,8 +60,8 @@ export function DiffPanel(p: { changes: { turn: ChangeSummary[]; total: ChangeSu
                 </button>
                 {f.binary && <span className="text-xs text-muted-foreground">binary</span>}
                 {f.tooLarge && <span className="text-xs text-muted-foreground">too large</span>}
-                <span className="text-xs text-green-600">+{f.additions}</span>
-                <span className="text-xs text-red-600">-{f.deletions}</span>
+                <span className="text-xs text-success">+{f.additions}</span>
+                <span className="text-xs text-destructive">-{f.deletions}</span>
                 <Button size="icon" variant="ghost" className="h-6 w-6" aria-label={`Revert ${f.path}`} disabled={p.busy} onClick={() => setConfirm(f.path)}>
                   <Undo2 className="h-3 w-3" />
                 </Button>

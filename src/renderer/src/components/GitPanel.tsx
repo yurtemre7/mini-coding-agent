@@ -40,7 +40,8 @@ export function GitPanel({ api, workspace, busy, refreshKey }: { api: McaApi; wo
     }
   }, [api, workspace, refreshKey])
 
-  const act = async (run: () => Promise<string | void>) => {
+  /** Runs a git action; resolves to whether it succeeded (a failed commit must keep the typed message). */
+  const act = async (run: () => Promise<string | void>): Promise<boolean> => {
     setWorking(true)
     setNote(null)
     try {
@@ -48,8 +49,10 @@ export function GitPanel({ api, workspace, busy, refreshKey }: { api: McaApi; wo
       if (text) setNote({ tone: 'ok', text })
       setOpen(null)
       await reload()
+      return true
     } catch (e) {
       setNote({ tone: 'error', text: clean(e) })
+      return false
     } finally {
       setWorking(false)
     }
@@ -143,7 +146,7 @@ export function GitPanel({ api, workspace, busy, refreshKey }: { api: McaApi; wo
       <div className="space-y-2">
         <Textarea aria-label="Commit message" className="min-h-16 text-xs" placeholder="Commit message" value={message} onChange={(e) => setMessage(e.target.value)} />
         <div className="flex gap-1">
-          <Button size="sm" disabled={locked || !staged.length || !message.trim()} onClick={() => void act(async () => `Committed ${await api.invoke('git:commit', message)}`.trim()).then(() => setMessage(''))}>
+          <Button size="sm" disabled={locked || !staged.length || !message.trim()} onClick={() => void act(async () => `Committed ${await api.invoke('git:commit', message)}`.trim()).then((ok) => ok && setMessage(''))}>
             Commit
           </Button>
           <Button size="sm" variant="outline" disabled={locked || !status.branch} title={status.upstream ? `Push to ${status.upstream}` : 'Push and set the upstream on origin'} onClick={() => void act(() => api.invoke('git:push'))}>

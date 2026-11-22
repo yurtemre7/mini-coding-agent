@@ -19,8 +19,8 @@ describe('DiffPanel', () => {
     const loadDiff = vi.fn(base.loadDiff)
     render(<DiffPanel {...base} loadDiff={loadDiff} />)
     fireEvent.click(screen.getByText('src/a.ts'))
-    expect(await screen.findByText('+new')).toHaveClass('text-green-600')
-    expect(screen.getByText('-old')).toHaveClass('text-red-600')
+    expect(await screen.findByText('+new')).toHaveClass('text-success')
+    expect(screen.getByText('-old')).toHaveClass('text-destructive')
     expect(loadDiff).toHaveBeenCalledWith('turn', 'src/a.ts')
   })
   it('a failing diff load shows the error inline', async () => {

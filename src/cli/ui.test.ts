@@ -15,6 +15,12 @@ describe('permission prompt', () => {
     expect(s).toContain('2. Yes, for this session (Bash(npm test:*))')
     expect(s).toContain('3. No')
   })
+  it('a dangerous command is flagged and offers no session rule', () => {
+    const s = formatPermission({ ...req, input: { command: 'rm -rf /' }, danger: true, suggestion: undefined })
+    expect(s).toContain('WARNING')
+    expect(s).toContain('1. Yes, run it anyway')
+    expect(s).toContain('not remembered')
+  })
   it('parseChoice never guesses', () => {
     expect(parseChoice('1')).toEqual({ allow: true, scope: 'once' })
     expect(parseChoice(' 2 ')).toEqual({ allow: true, scope: 'session' })

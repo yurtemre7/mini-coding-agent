@@ -11,6 +11,7 @@ import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
+import { listWorkspaceFiles } from '../core/workspace-files'
 import { gitBranches, gitCommit, gitDiff, gitPush, gitStage, gitStatus, gitSwitch } from '../core/git'
 import { Terminal } from '../core/terminal'
 import { composeSystem } from '../core/system'
@@ -477,6 +478,10 @@ export class Controller {
     if (!this.workspace) throw new Error('Open a workspace first.')
     return this.workspace
   }
+  workspaceFiles(): Promise<string[]> {
+    return this.workspace ? listWorkspaceFiles(this.workspace) : Promise.resolve([])
+  }
+
   gitStatus() {
     return this.workspace ? gitStatus(this.workspace) : Promise.resolve({ repo: false, branch: null, upstream: null, ahead: 0, behind: 0, files: [] })
   }

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { rankFiles } from '@/lib/rankFiles'
 import { PromptInput } from './PromptInput'
 
 const base = { busy: false, mode: 'default' as const, model: 'claude-x', models: { models: [] }, onModel: vi.fn(), effort: 'medium' as const, onEffort: vi.fn(), onSend: vi.fn(), onStop: vi.fn(), onMode: vi.fn(), onRewind: vi.fn() }
@@ -62,5 +63,54 @@ describe('PromptInput', () => {
     expect(screen.queryByRole('listbox')).toBeNull() // typed exactly: no menu, Enter sends
     fireEvent.keyDown(box, { key: 'Enter' })
     expect(onSend).toHaveBeenCalledWith('/fix', undefined)
+  })
+  describe('@ file mentions', () => {
+    const files = ['src/app/main.ts', 'src/lib/util.ts', 'README.md', 'docs/main-notes.md']
+    it('typing @ offers workspace files, Enter inserts the path, and the list loads once', async () => {
+      const listFiles = vi.fn(async () => files)
+      render(<PromptInput {...base} listFiles={listFiles} />)
+      const box = screen.getByRole('textbox')
+      fireEvent.change(box, { target: { value: 'look at @mai' } })
+      const opts = await screen.findAllByRole('option')
+      expect(opts[0]).toHaveTextContent('main.ts')
+      expect(screen.getByRole('listbox', { name: 'Files' })).toBeInTheDocument()
+      fireEvent.keyDown(box, { key: 'Enter' })
+      expect(box).toHaveValue('look at @src/app/main.ts ')
+      fireEvent.change(box, { target: { value: 'and @READ' } })
+      await waitFor(() => expect(screen.getAllByRole('option')[0]).toHaveTextContent('README.md'))
+      expect(listFiles).toHaveBeenCalledTimes(1)
+    })
+    it('an email address or a plain word does not open the menu, and Escape closes it', async () => {
+      render(<PromptInput {...base} listFiles={async () => files} />)
+      const box = screen.getByRole('textbox')
+      fireEvent.change(box, { target: { value: 'mail me@example.com' } })
+      expect(screen.queryByRole('listbox')).toBeNull()
+      fireEvent.change(box, { target: { value: '@' } })
+      await screen.findAllByRole('option')
+      fireEvent.keyDown(box, { key: 'Escape' })
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+    it('the @ button starts a mention', async () => {
+      render(<PromptInput {...base} listFiles={async () => files} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Mention a file' }))
+      expect(screen.getByRole('textbox')).toHaveValue('@')
+      expect(await screen.findAllByRole('option')).toHaveLength(4)
+    })
+    it('rankFiles puts name prefixes first, then name and path matches, at most 8', () => {
+      expect(rankFiles(files, 'main')).toEqual(['src/app/main.ts', 'docs/main-notes.md'])
+      expect(rankFiles(files, 'lib')).toEqual(['src/lib/util.ts'])
+      expect(rankFiles(files, 'zzz')).toEqual([])
+      expect(rankFiles(Array.from({ length: 20 }, (_, i) => `f${i}.ts`), '')).toHaveLength(8)
+    })
+  })
+  it('dropping files highlights the composer, shows a hint and attaches them', async () => {
+    render(<PromptInput {...base} />)
+    const box = screen.getByTestId('composer')
+    fireEvent.dragOver(box)
+    expect(screen.getByRole('status')).toHaveTextContent('Drop images or files')
+    const file = new File(['hi'], 'note.txt', { type: 'text/plain' })
+    fireEvent.drop(box, { dataTransfer: { files: [file] } })
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(await screen.findByText('note.txt')).toBeInTheDocument()
   })
 })
