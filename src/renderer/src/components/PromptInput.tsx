@@ -12,6 +12,8 @@ const MODE_ICONS: Record<PermissionMode, LucideIcon> = { default: Shield, accept
 
 export interface PromptInputProps {
   busy: boolean
+  /** Moves the cursor into the field whenever this number changes (not on the first render). */
+  focusSignal?: number
   disabled?: boolean // e.g. no workspace yet
   mode: PermissionMode
   model: string
@@ -37,7 +39,7 @@ const toBase64 = (f: File) =>
     r.readAsDataURL(f)
   })
 
-export function PromptInput({ busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles }: PromptInputProps) {
+export function PromptInput({ focusSignal = 0, busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles }: PromptInputProps) {
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +51,9 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, effo
   const [dragging, setDragging] = useState(false)
   const [fileList, setFileList] = useState<string[] | null>(null)
   const area = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (focusSignal > 0) area.current?.focus()
+  }, [focusSignal])
   const prefix = /^\/([\w-]*)$/.exec(text)?.[1]
   const mention = /(?:^|\s)@([^\s@]*)$/.exec(text)?.[1]
   useEffect(() => {

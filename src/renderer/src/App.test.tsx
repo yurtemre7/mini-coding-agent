@@ -1,13 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import type { McaApi, ViewState } from '../../shared/types'
 
 const view: ViewState = { items: [], todos: [], changes: { turn: [], total: [] }, mode: 'default', provider: 'anthropic', model: 'm', workspace: null, mcp: [], busy: false, pending: null, seq: 0 }
 
-const api = (hasKey: boolean): McaApi => ({
-  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false }, keySource: { anthropic: hasKey ? 'env' : null, openrouter: null } } : ch === 'settings:models' ? { models: ['m'] } : ch === 'workspace:overview' ? [] : view)) as any,
-  on: vi.fn(() => () => {})
+const handlers = new Map<string, (p: any) => void>()
+const menu = (a: string) => act(() => handlers.get('menu:action')?.(a))
+const api = (hasKey: boolean, v: Partial<ViewState> = {}): McaApi => ({
+  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false }, keySource: { anthropic: hasKey ? 'env' : null, openrouter: null } } : ch === 'settings:models' ? { models: ['m'] } : ch === 'workspace:overview' ? [] : ch === 'skills:list' ? [] : { ...view, ...v })) as any,
+  on: vi.fn((ch: string, cb: (p: any) => void) => (handlers.set(ch, cb), () => void handlers.delete(ch))) as any
 })
 
 describe('App', () => {
@@ -50,7 +52,25 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /1 column/ }))
     expect(screen.queryByLabelText('Tools')).toBeNull()
     expect(screen.queryByLabelText('Sidebar')).toBeNull()
-    fireEvent.keyDown(window, { key: 'b', metaKey: true })
+    menu('toggleSidebar')
     expect(screen.getByLabelText('Sidebar')).toBeInTheDocument()
+    menu('togglePanel')
+    expect(screen.getByLabelText('Tools')).toBeInTheDocument()
+    menu('tabTerminal')
+    expect(screen.getByLabelText('Command')).toBeInTheDocument()
+  })
+
+  it('native menu actions: Settings opens the dialog, Focus Message Field moves the cursor, unknown actions are ignored', async () => {
+    localStorage.clear()
+    window.mca = api(true, { workspace: '/w' })
+    render(<App />)
+    await screen.findByLabelText('Message')
+    expect(screen.getByLabelText('Message')).not.toHaveFocus()
+    menu('focusPrompt')
+    expect(screen.getByLabelText('Message')).toHaveFocus()
+    menu('rm -rf' as any)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    menu('settings')
+    expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 })

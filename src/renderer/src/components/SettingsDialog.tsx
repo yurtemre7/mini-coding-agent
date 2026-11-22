@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Keyboard, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
 import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { comboOf, formatCombo, KEY_ACTIONS, type KeyAction, type KeyMap } from '@/lib/keybindings'
 import { THEME_PREFS, type ThemePref } from '@/lib/theme'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -250,9 +251,73 @@ export function SkillsPanel({ skills, onToggle }: { skills: SkillInfo[]; onToggl
   )
 }
 
-export type SettingsTab = 'general' | 'provider' | 'instructions' | 'skills' | 'mcp' | 'about'
+/** Shortcut settings: the current map, a setter that returns an error message (or null), and a reset. */
+export interface KeyEditor {
+  keys: KeyMap
+  set(action: KeyAction, combo: string): string | null
+  reset(): void
+}
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
+const MENU_SHORTCUTS: [string, string][] = [
+  ['Settings', 'Mod+,'], ['New chat', 'Mod+N'], ['Open workspace', 'Mod+O'], ['Focus the message field', 'Mod+L'], ['Stop the agent', 'Mod+.'],
+  ['Toggle sidebar', 'Mod+B'], ['Toggle tools panel', 'Mod+J'], ['Show Changes / Git / Terminal', 'Mod+1 / 2 / 3']
+]
+
+/** Dialog shortcuts are editable (press the new keys); the menu shortcuts are listed for reference. */
+export function ShortcutsPanel({ editor }: { editor: KeyEditor }) {
+  const [capturing, setCapturing] = useState<KeyAction | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!capturing) return
+    const h = (e: KeyboardEvent) => {
+      const combo = comboOf(e)
+      if (!combo) return // a bare modifier: keep waiting
+      e.preventDefault()
+      e.stopPropagation() // Escape must not close the settings dialog while capturing
+      const err = editor.set(capturing, combo)
+      setError(err)
+      if (!err) setCapturing(null)
+    }
+    window.addEventListener('keydown', h, true)
+    return () => window.removeEventListener('keydown', h, true)
+  }, [capturing, editor])
+  return (
+    <section className="space-y-4" aria-label="Keyboard shortcuts">
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Permission and plan dialogs</p>
+        <p className="text-xs text-muted-foreground">Dangerous commands and trusting a workspace can never be allowed with a key. Shortcuts need ⌘/Ctrl or Alt (or are Esc or a function key), so typing feedback still works.</p>
+        {KEY_ACTIONS.map(({ action, group, label }) => (
+          <div key={action} className="flex items-center justify-between gap-3">
+            <span className="min-w-0 text-sm">
+              {label} <span className="text-xs text-muted-foreground">({group})</span>
+            </span>
+            <Button size="sm" variant={capturing === action ? 'secondary' : 'outline'} className="min-w-28 shrink-0 font-mono" aria-label={`Change shortcut for ${label} (${group})`} onClick={() => (setError(null), setCapturing(capturing === action ? null : action))}>
+              {capturing === action ? 'Press keys…' : formatCombo(editor.keys[action])}
+            </Button>
+          </div>
+        ))}
+        {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+        <Button size="sm" variant="ghost" onClick={() => (setCapturing(null), setError(null), editor.reset())}>
+          Reset to defaults
+        </Button>
+      </div>
+      <Separator />
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Menu shortcuts</p>
+        {MENU_SHORTCUTS.map(([label, combo]) => (
+          <div key={label} className="flex justify-between text-sm">
+            <span>{label}</span>
+            <span className="font-mono text-xs text-muted-foreground">{combo.split(' / ').map((c) => formatCombo(c)).join(' / ')}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export type SettingsTab = 'general' | 'provider' | 'instructions' | 'skills' | 'mcp' | 'shortcuts' | 'about'
+
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, info, keyEditor, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; keyEditor?: KeyEditor; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(44rem,85vh)] flex-col gap-4 sm:max-w-3xl [&>*]:min-w-0">
@@ -282,6 +347,12 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
               <Plug aria-hidden />
               MCP servers
             </TabsTrigger>
+            {keyEditor && (
+              <TabsTrigger value="shortcuts">
+                <Keyboard aria-hidden />
+                Shortcuts
+              </TabsTrigger>
+            )}
             <TabsTrigger value="about">
               <Info aria-hidden />
               About
@@ -309,6 +380,11 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
               ))}
             </section>
           </TabsContent>
+          {keyEditor && (
+            <TabsContent value="shortcuts" className="min-h-0 min-w-0 overflow-y-auto pr-1">
+              <ShortcutsPanel editor={keyEditor} />
+            </TabsContent>
+          )}
           <TabsContent value="about" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <AboutPanel info={info} />
           </TabsContent>

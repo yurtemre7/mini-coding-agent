@@ -8,7 +8,7 @@ const v = validators as Record<string, (a: unknown[]) => unknown[]>
 describe('IPC validation', () => {
   it('has a validator for every invoke channel, and the preload allowlists match the contract', () => {
     expect(Object.keys(validators).sort()).toEqual([...INVOKE_CHANNELS].sort())
-    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event'])
+    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event', 'menu:action'])
   })
   it.each([
     ['session:send', [42]],

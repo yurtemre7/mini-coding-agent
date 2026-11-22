@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Columns2, Columns3, PanelLeft, PanelRight, Settings, Square } from 'lucide-react'
-import type { AppInfo, CommandInfo, ProviderId, SettingsInfo, SkillInfo, WorkspaceChats } from '../../shared/types'
+import { isMenuAction, type AppInfo, type CommandInfo, type MenuAction, type ProviderId, type SettingsInfo, type SkillInfo, type WorkspaceChats } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAgentSession } from '@/hooks/useAgentSession'
 import { useTheme } from '@/lib/theme'
+import { useKeys } from '@/lib/keybindings'
 
 const Drag = () => <div className="fixed inset-x-0 top-0 z-0 h-10" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
 
@@ -29,20 +30,8 @@ export default function App() {
   const theme = useTheme()
   const lay = useLayout()
   const term = useTerminal(api)
-  const { toggleSidebar, togglePanel } = lay
-  useEffect(() => {
-    // Cmd/Ctrl+B folds the sidebar, Cmd/Ctrl+J the tools column
-    const h = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
-      if (e.key === 'b' || e.key === 'j') {
-        e.preventDefault()
-        if (e.key === 'b') toggleSidebar()
-        else togglePanel()
-      }
-    }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [toggleSidebar, togglePanel])
+  const keys = useKeys()
+  const [focusN, setFocusN] = useState(0) // bumped to move the cursor into the message field
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
   const [info, setInfo] = useState<AppInfo | null>(null)
@@ -80,6 +69,25 @@ export default function App() {
   const newChatIn = async (path: string) => {
     if (await switchTo(path)) await s.newChat()
   }
+
+  const openSettings = () => (void s.skills().then(setSkills), setOpen(true))
+  // native menu items and their accelerators; the latest closure is kept in a ref so the subscription is made once
+  const onMenu = useRef<(a: MenuAction) => void>(() => {})
+  useEffect(() => {
+    onMenu.current = (a) => {
+      if (a === 'settings') openSettings()
+      else if (a === 'toggleSidebar') lay.toggleSidebar()
+      else if (a === 'togglePanel') lay.togglePanel()
+      else if (a === 'tabChanges') lay.showTab('changes')
+      else if (a === 'tabGit') lay.showTab('git')
+      else if (a === 'tabTerminal') lay.showTab('terminal')
+      else if (a === 'focusPrompt') setFocusN((n) => n + 1)
+      else if (a === 'openWorkspace') void s.selectWorkspace()
+      else if (a === 'newChat' && workspace) void newChatIn(workspace).then(() => setFocusN((n) => n + 1))
+      else if (a === 'stop' && busy) void s.abort()
+    }
+  })
+  useEffect(() => api?.on('menu:action', (a) => isMenuAction(a) && onMenu.current(a)), [api])
 
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
   const provider = settings?.provider
@@ -171,6 +179,7 @@ export default function App() {
             onForget={(w) => void s.forgetWorkspace(w).then(refreshWorkspaces)}
             onReveal={() => void s.reveal()}
             onChat={(path, id) => void openChatIn(path, id)}
+            onActivate={(path, id) => void openChatIn(path, id).then(() => setFocusN((n) => n + 1))}
             onNew={(path) => void newChatIn(path)}
             onDelete={(id) => void s.deleteChat(id).then(refreshWorkspaces)}
             onRename={(id, title) => void s.renameChat(id, title).then(refreshWorkspaces)}
@@ -179,7 +188,7 @@ export default function App() {
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
-        <Button variant="ghost" onClick={() => (void s.skills().then(setSkills), setOpen(true))}>
+        <Button variant="ghost" onClick={openSettings}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </Button>
@@ -205,7 +214,7 @@ export default function App() {
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} busy={v.busy} />}
-        <PromptInput key={v.workspace ?? ''} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <PromptInput key={v.workspace ?? ''} focusSignal={focusN} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (
         <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l bg-sidebar p-3 pt-12">
@@ -216,8 +225,8 @@ export default function App() {
           </SidePanel>
         </aside>
       )}
-      <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} skills={skills} onSkill={(n, e) => void s.setSkill(n, e).then((l) => (setSkills(l), api?.invoke('commands:list').then(setCommands, () => {})))} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} {...actions} />
+      <PromptDialog keys={keys.keys} request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} skills={skills} onSkill={(n, e) => void s.setSkill(n, e).then((l) => (setSkills(l), api?.invoke('commands:list').then(setCommands, () => {})))} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} keyEditor={keys} {...actions} />
     </main>
   )
 }

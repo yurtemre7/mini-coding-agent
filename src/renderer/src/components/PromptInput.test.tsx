@@ -121,4 +121,10 @@ describe('PromptInput', () => {
     expect(screen.queryByRole('status')).toBeNull()
     expect(await screen.findByText('note.txt')).toBeInTheDocument()
   })
+  it('moves the cursor into the field when the focus signal changes, but not on the first render', () => {
+    const { rerender } = render(<PromptInput {...base} focusSignal={0} />)
+    expect(screen.getByLabelText('Message')).not.toHaveFocus()
+    rerender(<PromptInput {...base} focusSignal={1} />)
+    expect(screen.getByLabelText('Message')).toHaveFocus()
+  })
 })
