@@ -1,39 +1,66 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SettingsDialog } from './SettingsDialog'
 
 describe('SettingsDialog', () => {
   it('never renders a stored key: the input is empty and only says "Key saved"', () => {
     // even if a key leaked into the settings object, nothing renders it
-    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null }, key: 'sk-secret-123' } as any
-    const { baseElement } = render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null }, key: 'sk-secret-123' } as any
+    const { baseElement } = render(<SettingsDialog tab="provider" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
     const input = screen.getByLabelText('API key') as HTMLInputElement
     expect(input.value).toBe('')
     expect(input.placeholder).toBe('Key saved')
     expect(baseElement.innerHTML).not.toContain('sk-secret-123')
   })
   it('shows where the key was found, or that it was rejected, or that there is none', () => {
-    const base = { provider: 'anthropic', model: 'm', effort: 'medium', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'dotenv', openrouter: null } } as const
+    const base = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'dotenv', openrouter: null } } as const
     const props = { open: true, onOpenChange: vi.fn(), onUpdate: vi.fn(), onSaveKey: vi.fn() }
-    const { rerender } = render(<SettingsDialog {...props} settings={base} />)
+    const { rerender } = render(<SettingsDialog tab="provider" {...props} settings={base} />)
     expect(screen.getByRole('status')).toHaveTextContent('Key found in .env')
-    rerender(<SettingsDialog {...props} settings={base} models={{ models: [], rejected: true, error: 'x' }} />)
+    rerender(<SettingsDialog tab="provider" {...props} settings={base} models={{ models: [], rejected: true, error: 'x' }} />)
     expect(screen.getByRole('status')).toHaveTextContent('Key rejected by Anthropic')
-    rerender(<SettingsDialog {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } }} />)
+    rerender(<SettingsDialog tab="provider" {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } }} />)
     expect(screen.getByRole('status')).toHaveTextContent('No key yet')
   })
   it('without a key it says where to get one, with a link to the right provider; with a key it does not', () => {
-    const base = { provider: 'openrouter', model: 'm', effort: 'medium', hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } } as const
+    const base = { provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: false, openrouter: false }, keySource: { anthropic: null, openrouter: null } } as const
     const props = { open: true, onOpenChange: vi.fn(), onUpdate: vi.fn(), onSaveKey: vi.fn() }
-    const { rerender } = render(<SettingsDialog {...props} settings={base} />)
+    const { rerender } = render(<SettingsDialog tab="provider" {...props} settings={base} />)
     expect(screen.getByTestId('key-help')).toHaveTextContent('OpenRouter')
     expect(screen.getByRole('link', { name: 'Open the key page' })).toHaveAttribute('href', 'https://openrouter.ai/keys')
-    rerender(<SettingsDialog {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: true }, keySource: { anthropic: null, openrouter: 'keychain' } }} />)
+    rerender(<SettingsDialog tab="provider" {...props} settings={{ ...base, hasKey: { anthropic: false, openrouter: true }, keySource: { anthropic: null, openrouter: 'keychain' } }} />)
     expect(screen.queryByTestId('key-help')).toBeNull()
   })
   it('save is disabled until a key is typed', () => {
-    render(<SettingsDialog open onOpenChange={vi.fn()} settings={{ provider: 'openrouter', model: 'm', effort: 'medium', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } }} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
+    render(<SettingsDialog tab="provider" open onOpenChange={vi.fn()} settings={{ provider: 'openrouter', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } }} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Save key' })).toBeDisabled()
     expect((screen.getByLabelText('API key') as HTMLInputElement).placeholder).toBe('Paste your API key')
+  })
+  describe('tabs', () => {
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null } } as const
+    const info = { name: 'mini-coding-agent', shortName: 'MCA', version: '0.1.0', platform: 'darwin', electronVersion: '40.0.0', license: 'MIT', repoUrl: 'https://github.com/yurtemre7/mini-coding-agent' } as const
+    it('General: theme buttons and the notifications switch report changes', () => {
+      const onChange = vi.fn()
+      const onUpdate = vi.fn()
+      render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={onUpdate} onSaveKey={vi.fn()} theme={{ pref: 'system', onChange }} />)
+      expect(screen.getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'true')
+      fireEvent.click(screen.getByRole('button', { name: 'Dark' }))
+      expect(onChange).toHaveBeenCalledWith('dark')
+      fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }))
+      expect(onUpdate).toHaveBeenCalledWith({ notifications: false })
+    })
+    it('About: version, license and the GitHub links', () => {
+      render(<SettingsDialog tab="about" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} info={info} />)
+      expect(screen.getByText('0.1.0')).toBeInTheDocument()
+      expect(screen.getByText('MIT')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: /Source code on GitHub/ })).toHaveAttribute('href', 'https://github.com/yurtemre7/mini-coding-agent')
+      expect(screen.getByRole('link', { name: /Report an issue/ })).toHaveAttribute('href', 'https://github.com/yurtemre7/mini-coding-agent/issues')
+    })
+    it('switching tabs shows that section', () => {
+      render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} info={info} />)
+      expect(screen.queryByLabelText('API key')).toBeNull()
+      fireEvent.mouseDown(screen.getByRole('tab', { name: 'Provider' }), { button: 0 })
+      expect(screen.getByLabelText('API key')).toBeInTheDocument()
+    })
   })
 })

@@ -44,6 +44,7 @@ export class Controller {
   private provider: ProviderId = 'anthropic'
   private model: string = DEFAULT_MODELS.anthropic.main
   private effort: Effort = DEFAULT_EFFORT
+  private notifications = true
   private workspace: string | null = null
   private session?: AgentSession
   private perms?: Permissions
@@ -86,7 +87,7 @@ export class Controller {
       hasKey[id] = !!(await this.keys.get(id))
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
-    return { provider: this.provider, model: this.model, effort: this.effort, hasKey, keySource: source }
+    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, hasKey, keySource: source }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -111,6 +112,7 @@ export class Controller {
     if (PROVIDER_IDS.includes(prefs.provider as ProviderId)) this.provider = prefs.provider as ProviderId
     if (prefs.model?.trim()) this.model = prefs.model
     if (EFFORT_LEVELS.includes(prefs.effort as Effort)) this.effort = prefs.effort as Effort
+    if (prefs.notifications === false) this.notifications = false
     const s = await this.getSettings()
     const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
     this.setProvider(id)
@@ -129,8 +131,9 @@ export class Controller {
     return this.getSettings()
   }
 
-  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort }): Promise<SettingsInfo> {
-    this.assertIdle('change the model or effort')
+  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }): Promise<SettingsInfo> {
+    if (patch.provider || patch.model || patch.effort) this.assertIdle('change the model or effort') // notifications can change any time
+    if (patch.notifications !== undefined) this.notifications = patch.notifications
     if (patch.provider) {
       if (!PROVIDER_IDS.includes(patch.provider)) throw new Error(`Unknown provider "${patch.provider}".`)
       this.setProvider(patch.provider)
@@ -140,7 +143,7 @@ export class Controller {
       if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
       this.effort = patch.effort
     }
-    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
+    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     return this.getSettings()
   }
 
@@ -162,7 +165,7 @@ export class Controller {
   private frontend: Frontend = {
     emit: (e) => {
       this.apply(e)
-      if (e.type === 'attention') this.d.notify?.(e.message)
+      if (e.type === 'attention') this.notify(e.message)
       if (e.type === 'turn_end') this.stopTimer('long')
       if (this.perms && this.perms.mode !== this.view.mode) this.announce() // ExitPlanMode changed the mode
     },
@@ -176,10 +179,14 @@ export class Controller {
       })
   }
 
+  private notify(message: string): void {
+    if (this.notifications) this.d.notify?.(message)
+  }
+
   private timers: Partial<Record<'prompt' | 'long', ReturnType<typeof setTimeout>>> = {}
   private startTimer(k: 'prompt' | 'long', ms: number, message: string): void {
     this.stopTimer(k)
-    if (this.d.notify) this.timers[k] = setTimeout(() => this.d.notify?.(message), ms)
+    if (this.d.notify) this.timers[k] = setTimeout(() => this.notify(message), ms)
   }
   private stopTimer(k: 'prompt' | 'long'): void {
     clearTimeout(this.timers[k])

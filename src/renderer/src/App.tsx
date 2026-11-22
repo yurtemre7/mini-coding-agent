@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FileDiff, FolderOpen, Settings } from 'lucide-react'
-import type { CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
+import type { AppInfo, CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
 import { DiffPanel } from './components/DiffPanel'
 import { TodoSidebar } from './components/TodoSidebar'
@@ -12,7 +13,6 @@ import { PromptInput } from '@/components/PromptInput'
 import { ProviderForm, SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ThemeToggle } from '@/components/ThemeToggle'
 import { useAgentSession } from '@/hooks/useAgentSession'
 import { useTheme } from '@/lib/theme'
 
@@ -25,6 +25,8 @@ export default function App() {
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
+  const [info, setInfo] = useState<AppInfo | null>(null)
+  useEffect(() => void api?.invoke('app:getInfo').then(setInfo, () => {}), [api])
   const [recent, setRecent] = useState<string[]>([])
   const [chats, setChats] = useState<SessionInfo[]>([])
   const [commands, setCommands] = useState<CommandInfo[]>([])
@@ -64,7 +66,7 @@ export default function App() {
   const models: ModelList = !modelsKey ? { models: [] } : fetched?.key === modelsKey ? fetched.list : { models: fetched?.list.models ?? [], loading: true }
 
   const actions = {
-    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort }) => {
+    onUpdate: async (patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean }) => {
       setSetupError(null)
       try {
         setSettings(await api!.invoke('settings:update', patch))
@@ -100,6 +102,7 @@ export default function App() {
         <Drag />
         <Card className="w-full max-w-md">
           <CardHeader>
+            <p className="text-sm font-medium text-muted-foreground">Welcome to MCA</p>
             <CardTitle>Set up a provider</CardTitle>
             <CardDescription>MCA uses your own API key. Choose a provider and paste its key to begin.</CardDescription>
           </CardHeader>
@@ -127,7 +130,6 @@ export default function App() {
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
-        <ThemeToggle pref={theme.pref} onChange={theme.setPref} />
         <Button variant="ghost" onClick={() => setOpen(true)}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
@@ -141,7 +143,7 @@ export default function App() {
           </Button>
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
-        <ChatTranscript items={v.items} />
+        {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
         <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {diffOpen && (
@@ -150,7 +152,7 @@ export default function App() {
         </aside>
       )}
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} {...actions} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} {...actions} />
     </main>
   )
 }

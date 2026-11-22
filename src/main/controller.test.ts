@@ -149,6 +149,22 @@ describe('Controller', () => {
       await idle()
       expect(sent).toEqual(['MCA may be stuck in a loop.'])
     })
+    it('the Notifications setting silences them, is remembered across launches and can change during a turn', async () => {
+      const sent: string[] = []
+      const { c, ws, prompts, idle } = await setup([[]], true, { notify: (m) => void sent.push(m), timings: { promptMs: 20 } })
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'q.txt')), say])
+      expect((await c.getSettings()).notifications).toBe(true)
+      c.send('go')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      expect((await c.update({ notifications: false })).notifications).toBe(false) // mid-turn: allowed
+      await new Promise((r) => setTimeout(r, 50))
+      expect(sent).toEqual([])
+      c.abort()
+      await idle()
+      const c2 = new Controller({ home: (c as any).d.home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} } })
+      await c2.init()
+      expect((await c2.getSettings()).notifications).toBe(false)
+    })
     it('notifies when a prompt waits too long, but not when it is answered in time', async () => {
       const sent: string[] = []
       const { c, ws, prompts, idle } = await setup([[]], true, { notify: (m) => void sent.push(m), timings: { promptMs: 30 } })
