@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from './trust'
+import { disabledSkills, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, setSkillEnabled, trustWorkspace } from './trust'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'mca-state-'))
 
@@ -52,5 +52,16 @@ describe('state.json', () => {
     writeFileSync(join(home, '.mca', 'state.json'), '{oops')
     await expect(rememberWorkspace(home, home)).rejects.toThrow(/corrupt/)
     expect(await recentWorkspaces(home)).toEqual([])
+  })
+  it('remembers switched-off skills without duplicates and keeps the other keys', async () => {
+    const home = tmp()
+    await savePrefs({ model: 'm' }, home)
+    await setSkillEnabled('a', false, home)
+    await setSkillEnabled('a', false, home)
+    await setSkillEnabled('b', false, home)
+    expect(await disabledSkills(home)).toEqual(['a', 'b'])
+    await setSkillEnabled('a', true, home)
+    expect(await disabledSkills(home)).toEqual(['b'])
+    expect((await loadPrefs(home)).model).toBe('m')
   })
 })

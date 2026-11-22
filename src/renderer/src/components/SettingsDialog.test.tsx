@@ -49,6 +49,25 @@ describe('SettingsDialog', () => {
       fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }))
       expect(onUpdate).toHaveBeenCalledWith({ notifications: false })
     })
+    it('Skills: lists what was found with its source and reports a switch', () => {
+      const onSkill = vi.fn()
+      const skills = [
+        { name: 'ponytail', description: 'ride', source: 'plugin', file: '/p/SKILL.md', enabled: true },
+        { name: 'agy', description: 'other', source: 'antigravity', file: '/a/SKILL.md', enabled: false }
+      ] as const
+      render(<SettingsDialog tab="skills" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} skills={[...skills]} onSkill={onSkill} />)
+      expect(screen.getByText('/ponytail')).toBeInTheDocument()
+      expect(screen.getByText('Claude plugin')).toBeInTheDocument()
+      expect(screen.getByText('Antigravity')).toBeInTheDocument()
+      expect(screen.getByRole('switch', { name: 'Enable ponytail' })).toBeChecked()
+      expect(screen.getByRole('switch', { name: 'Enable agy' })).not.toBeChecked()
+      fireEvent.click(screen.getByRole('switch', { name: 'Enable agy' }))
+      expect(onSkill).toHaveBeenCalledWith('agy', true)
+    })
+    it('Skills: says so when none were found', () => {
+      render(<SettingsDialog tab="skills" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} />)
+      expect(screen.getByText('No skills found.')).toBeInTheDocument()
+    })
     it('About: version, license and the GitHub links', () => {
       render(<SettingsDialog tab="about" open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} info={info} />)
       expect(screen.getByText('0.1.0')).toBeInTheDocument()

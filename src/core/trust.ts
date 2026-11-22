@@ -95,3 +95,14 @@ export const loadPrefs = async (home?: string): Promise<Prefs> => {
   return p && typeof p === 'object' ? (p as Prefs) : {}
 }
 export const savePrefs = (prefs: Prefs, home?: string) => updateState((s) => void (s.prefs = { ...(s.prefs as object), ...prefs }), home)
+
+/** Names of skills the user switched off in Settings. */
+export async function disabledSkills(home?: string): Promise<string[]> {
+  const v = (await readState(home)).disabledSkills
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+export const setSkillEnabled = (name: string, enabled: boolean, home?: string) =>
+  updateState((s) => {
+    const off = (Array.isArray(s.disabledSkills) ? s.disabledSkills : []).filter((x): x is string => typeof x === 'string' && x !== name)
+    s.disabledSkills = enabled ? off : [...off, name]
+  }, home)

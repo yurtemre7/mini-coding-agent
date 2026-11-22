@@ -3,7 +3,7 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { exec } from './exec'
-import { discoverSkills, skillsIndex } from './skill'
+import { enabledSkills, skillsIndex } from './skill'
 
 export const MAX_FILE_CHARS = 40_000
 export const MAX_TOTAL_CHARS = 100_000
@@ -147,7 +147,7 @@ export async function buildReminder(cwd: string, o: { home?: string; now?: Date;
     budget -= body.length
     sections.push(`Instructions from ${f.path}:\n${body}`)
   }
-  const skills = skillsIndex(await discoverSkills(cwd, { home: o.home }))
+  const skills = skillsIndex(await enabledSkills(cwd, { home: o.home }))
   if (skills) sections.push(skills)
   sections.push(...(o.extra ?? []))
   return `<system-reminder>\n${sections.join('\n\n')}\n</system-reminder>`

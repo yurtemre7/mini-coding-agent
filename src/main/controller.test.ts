@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -398,5 +398,15 @@ describe('main -> batcher -> renderer apply', () => {
       await expect(c.changeRevert('turn', 'b.txt')).rejects.toThrow(/while a turn is running/)
       c.abort()
     })
+  })
+  it('lists skills with their state and persists a switch', async () => {
+    const { c, ws } = await setup([[]])
+    await mkdir(join(ws, '.mca', 'skills', 'ponytail'), { recursive: true })
+    await writeFile(join(ws, '.mca', 'skills', 'ponytail', 'SKILL.md'), '---\ndescription: ride\n---\nbody')
+    expect(await c.skillList()).toMatchObject([{ name: 'ponytail', source: 'project', enabled: true }])
+    expect(await c.setSkill('ponytail', false)).toMatchObject([{ name: 'ponytail', enabled: false }])
+    expect((await c.commandList()).map((x) => x.name)).not.toContain('ponytail')
+    expect(await c.setSkill('ponytail', true)).toMatchObject([{ enabled: true }])
+    expect((await c.commandList()).map((x) => x.name)).toContain('ponytail')
   })
 })

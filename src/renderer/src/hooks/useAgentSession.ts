@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { applyBatch } from '../../../shared/reducer'
-import type { Attachment, Decision, McaApi, ViewState } from '../../../shared/types'
+import type { Attachment, Decision, McaApi, SkillInfo, ViewState } from '../../../shared/types'
 
 /** Main owns the conversation: mount asks for a snapshot, then the batched event stream is folded in with the same reducer main uses. */
 export function useAgentSession(api: McaApi | undefined = window.mca) {
@@ -40,6 +40,8 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     openChat: (id: string) => call((a) => a.invoke('session:open', id)),
     reorderWorkspaces: (order: string[]) => call((a) => a.invoke('workspace:reorder', order)),
     forgetWorkspace: (path: string) => call((a) => a.invoke('workspace:forget', path)),
+    skills: (): Promise<SkillInfo[]> => (api ? api.invoke('skills:list').catch(() => []) : Promise.resolve([])),
+    setSkill: (name: string, enabled: boolean): Promise<SkillInfo[]> => (api ? api.invoke('skills:set', name, enabled).catch(() => []) : Promise.resolve([])),
     deleteChat: (id: string) => call((a) => a.invoke('session:delete', id)),
     exportChat: (id: string): Promise<string | null> => (api ? api.invoke('session:export', id).catch(() => null) : Promise.resolve(null)),
     reveal: () => call((a) => a.invoke('workspace:reveal')),

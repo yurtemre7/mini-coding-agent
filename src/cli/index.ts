@@ -34,7 +34,7 @@ Inside a session type /help. Commands: /help /clear /compact [focus] /mode [m] /
 Customize (project files win over ~/ ones):
   Keys        ANTHROPIC_API_KEY / OPENROUTER_API_KEY, or the macOS Keychain entry saved by the desktop app
   Commands    <dir>/.mca/commands/<name>.md or .claude/commands (use $ARGUMENTS, $1-$9)
-  Skills      <dir>/.mca/skills/<name>/SKILL.md or .claude/skills (loaded on demand by the Skill tool)
+  Skills      Claude Code (~/.claude/skills and plugins), Antigravity (~/.gemini/antigravity/skills, <dir>/.agent/skills), ~/.mca/skills, <dir>/.mca/skills or .claude/skills; run one with /name, switch them off in the desktop Settings > Skills
   Settings    .mca/settings.json (permissions, hooks); MCP servers in .mcp.json`
 
 const fail = (msg: string): never => {

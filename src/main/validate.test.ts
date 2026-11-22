@@ -45,6 +45,8 @@ describe('IPC validation', () => {
     ['workspace:open', [{}]],
     ['workspace:forget', [5]],
     ['workspace:reorder', ['/a']],
+    ['skills:set', ['../x', true]],
+    ['skills:set', ['ok', 'yes']],
     ['workspace:reorder', [[5]]]
   ])('%s rejects %j', (ch, args) => {
     expect(() => v[ch](args as unknown[])).toThrow(/Invalid request/)

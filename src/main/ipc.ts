@@ -83,7 +83,9 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     'settings:update': (patch) => c.update(patch),
     'settings:models': (p) => c.models(p),
     'prompt:answer': (id, d) => c.answer(id, d),
-    'commands:list': () => c.commandList()
+    'commands:list': () => c.commandList(),
+    'skills:list': () => c.skillList(),
+    'skills:set': (name, enabled) => c.setSkill(name, enabled)
   }
   for (const ch of Object.keys(handlers) as (keyof Handlers)[]) {
     ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...validators[ch](args)))

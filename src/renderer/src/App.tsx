@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Columns2, Columns3, PanelLeft, PanelRight, Settings, Square } from 'lucide-react'
-import type { AppInfo, CommandInfo, ProviderId, SettingsInfo, WorkspaceChats } from '../../shared/types'
+import type { AppInfo, CommandInfo, ProviderId, SettingsInfo, SkillInfo, WorkspaceChats } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
@@ -49,6 +49,7 @@ export default function App() {
   useEffect(() => void api?.invoke('app:getInfo').then(setInfo, () => {}), [api])
   const [workspaces, setWorkspaces] = useState<WorkspaceChats[]>([])
   const [commands, setCommands] = useState<CommandInfo[]>([])
+  const [skills, setSkills] = useState<SkillInfo[]>([])
   const [setupError, setSetupError] = useState<string | null>(null)
 
   const [keyN, setKeyN] = useState(0) // bumped on every saved key so a replaced key is re-checked
@@ -177,7 +178,7 @@ export default function App() {
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
-        <Button variant="ghost" onClick={() => setOpen(true)}>
+        <Button variant="ghost" onClick={() => (void s.skills().then(setSkills), setOpen(true))}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </Button>
@@ -215,7 +216,7 @@ export default function App() {
         </aside>
       )}
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />
-      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} {...actions} />
+      <SettingsDialog key={settings.provider} open={open} onOpenChange={setOpen} settings={settings} models={models} disabled={v.busy} mcp={v.mcp} skills={skills} onSkill={(n, e) => void s.setSkill(n, e).then((l) => (setSkills(l), api?.invoke('commands:list').then(setCommands, () => {})))} theme={{ pref: theme.pref, onChange: theme.setPref }} info={info} {...actions} />
     </main>
   )
 }
