@@ -52,10 +52,12 @@ export async function* sseData(chunks: AsyncIterable<Uint8Array | string>): Asyn
 
 const FINISH: Record<string, StopReason> = { stop: 'end_turn', tool_calls: 'tool_use', length: 'max_tokens', error: 'error' }
 
+type Usage = { prompt_tokens?: number; completion_tokens?: number; cost?: number }
+
 /** The fields of an OpenRouter stream chunk that we read. */
 interface Chunk {
   error?: { code?: unknown; message?: string }
-  usage?: { prompt_tokens?: number; completion_tokens?: number }
+  usage?: Usage
   choices?: { delta?: { content?: string; tool_calls?: { index?: number; id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string }[]
 }
 
@@ -63,7 +65,7 @@ interface Chunk {
 export async function* openRouterEvents(data: AsyncIterable<string>, estimateIn = 0): AsyncGenerator<StreamEvent> {
   const calls = new Map<number, { id: string; name: string; args: string }>()
   let finish: string | undefined
-  let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined
+  let usage: Usage | undefined
   let chars = 0
   for await (const payload of data) {
     if (payload === '[DONE]') break
@@ -109,7 +111,8 @@ export async function* openRouterEvents(data: AsyncIterable<string>, estimateIn 
   yield {
     type: 'usage',
     contextTokens: usage?.prompt_tokens ?? estimateIn,
-    outputTokens: usage?.completion_tokens ?? Math.ceil(chars / 4)
+    outputTokens: usage?.completion_tokens ?? Math.ceil(chars / 4),
+    ...(typeof usage?.cost === 'number' && { costUsd: usage.cost })
   }
   const reason = FINISH[finish ?? 'stop'] ?? 'end_turn'
   yield { type: 'stop', reason: calls.size && reason === 'end_turn' ? 'tool_use' : reason }

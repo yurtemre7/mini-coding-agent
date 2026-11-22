@@ -73,7 +73,7 @@ export type AgentEvent =
   | { type: 'tool_end'; id: string; result: string; isError: boolean }
   | { type: 'todos'; todos: Todo[] }
   | { type: 'attention'; reason: 'loop' | 'long' | 'prompt'; message: string } // the user may be away: a frontend can notify them
-  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number }
+  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number; /** estimated or provider-reported cost of this request in USD; absent when the model has no known price */ costUsd?: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
   /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
@@ -107,7 +107,8 @@ export interface ViewState {
   todos: Todo[]
   changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
   /** totalIn/totalOut: tokens sent and received by this chat's requests since it was opened (subagent requests are not counted) */
-  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number }
+  /** totalCostUsd: summed cost of the requests that had a price; costPartial is true when some request had none (so the sum is a lower bound) */
+  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number; totalCostUsd?: number; costPartial?: boolean }
   mode: PermissionMode
   provider: ProviderId
   model: string

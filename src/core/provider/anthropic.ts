@@ -132,12 +132,16 @@ export class AnthropicProvider implements ModelProvider {
         { signal: req.signal }
       )
       let contextTokens = 0
+      let cacheRead = 0
+      let cacheWrite = 0
       let stop: StopReason = 'end_turn'
       // one open content block at a time
       let tool: { id: string; name: string; json: string } | undefined
       for await (const ev of events) {
         if (ev.type === 'message_start') {
           const u = ev.message?.usage ?? {}
+          cacheRead = u.cache_read_input_tokens ?? 0
+          cacheWrite = u.cache_creation_input_tokens ?? 0
           contextTokens =
             (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
         } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
@@ -150,7 +154,7 @@ export class AnthropicProvider implements ModelProvider {
           tool = undefined
         } else if (ev.type === 'message_delta') {
           if (ev.delta?.stop_reason === 'tool_use' || ev.delta?.stop_reason === 'max_tokens') stop = ev.delta.stop_reason
-          yield { type: 'usage', contextTokens, outputTokens: ev.usage?.output_tokens ?? 0 }
+          yield { type: 'usage', contextTokens, outputTokens: ev.usage?.output_tokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite }
         } else if (ev.type === 'error') {
           throw new ProviderError(ev.error?.message ?? 'stream error', ev.error?.type === 'overloaded_error' ? 529 : 500)
         }

@@ -35,7 +35,19 @@ describe('reduce', () => {
       { type: 'usage', contextTokens: 30, contextWindow: 100, inputTokens: 30, outputTokens: 5 },
       { type: 'usage', contextTokens: 12, contextWindow: 100 }
     ].reduce((st, e) => reduce(st, e as never), emptyView())
-    expect(s.usage).toEqual({ contextTokens: 12, contextWindow: 100, totalIn: 40, totalOut: 7 })
+    expect(s.usage).toEqual({ contextTokens: 12, contextWindow: 100, totalIn: 40, totalOut: 7, costPartial: true }) // no price for these requests
+  })
+  it('usage sums request costs, and marks the total partial when a priced chat meets an unpriced request', () => {
+    const priced = [
+      { type: 'usage', contextTokens: 10, contextWindow: 100, inputTokens: 10, outputTokens: 2, costUsd: 0.01 },
+      { type: 'usage', contextTokens: 30, contextWindow: 100, inputTokens: 30, outputTokens: 5, costUsd: 0.02 },
+      { type: 'usage', contextTokens: 12, contextWindow: 100 } // estimate after compaction: not a request
+    ].reduce((st, e) => reduce(st, e as never), emptyView())
+    expect(priced.usage?.totalCostUsd).toBeCloseTo(0.03, 10)
+    expect(priced.usage?.costPartial).toBeUndefined()
+    const mixed = reduce(priced, { type: 'usage', contextTokens: 5, contextWindow: 100, inputTokens: 5, outputTokens: 1 })
+    expect(mixed.usage).toMatchObject({ costPartial: true })
+    expect(mixed.usage?.totalCostUsd).toBeCloseTo(0.03, 10)
   })
   it('turn_end clears busy; usage, todos and notices are recorded', () => {
     const s = run([
