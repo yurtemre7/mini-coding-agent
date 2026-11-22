@@ -77,7 +77,7 @@
         <div class="eyebrow">Install</div>
         <h2>Up and running in a minute</h2>
         <p class="lead">Apple Silicon and Intel builds are available for macOS.</p>
-        <p class="note">Builds are not signed or notarized yet. Only install builds from the official Releases page.</p>
+        <p class="note">Builds are not signed or notarized yet. Only install builds from the official Releases page. The repository is currently private, so the Releases page and the source below need access to it (ask the maintainer); both become public once the repository is.</p>
       </div>
       <ol class="steps">
         <li>Download the <code>.dmg</code> for your Mac from the project’s <a href="https://github.com/yurtemre7/mini-coding-agent/releases">Releases page</a> (<code>arm64</code> for M1 and later, <code>x64</code> for Intel).</li>
@@ -96,7 +96,7 @@
     <div class="code"><pre><code>mca -p "explain src/main" --permission-mode plan
 git diff | mca -p "review this diff"
 mca --continue</code></pre><button class="copy" type="button">Copy</button></div>
-    <p class="lead">Install from source (Node 20.12 or newer):</p>
+    <p class="lead">Install from source (Node 20.12 or newer, repository access required):</p>
     <div class="code"><pre><code>git clone https://github.com/yurtemre7/mini-coding-agent
 cd mini-coding-agent &amp;&amp; npm install &amp;&amp; npm run build &amp;&amp; npm link
 mca --help</code></pre><button class="copy" type="button">Copy</button></div>
