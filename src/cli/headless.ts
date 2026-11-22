@@ -1,3 +1,5 @@
+import { loadPrefs } from '../core/trust'
+import { composeSystem } from '../core/system'
 import type { Decision, Effort, PermissionMode } from '../shared/types'
 import { AgentSession, type Frontend } from '../core/agent'
 import { createPermissions } from '../core/permissions'
@@ -49,7 +51,7 @@ export async function runHeadless(o: { prompt: string; provider: ModelProvider; 
     provider: o.provider,
     model: o.model,
     effort: o.effort,
-    system: SYSTEM_PROMPT,
+    system: composeSystem(SYSTEM_PROMPT, await loadPrefs(o.home)),
     tools: [...builtinTools, ...mcp.tools],
     cwd: o.cwd,
     frontend: plainFrontend(o.io),

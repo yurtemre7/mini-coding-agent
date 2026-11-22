@@ -175,7 +175,7 @@ Settings is a tabbed dialog (General: theme + notifications switch; Provider; MC
 
 ## Project management, instructions, notifications (batch 4)
 - Chats: delete (inline confirm; the open chat is replaced by a fresh one; idle only) and export to Markdown (`core/export.ts`, save dialog in main). `deleteSession` removes transcript, `.bak` and checkpoints. Sidebar also has "Show in Finder" for the workspace.
-- Custom instructions: Settings > Instructions. Stored in prefs (`systemPrompt`, `systemReplace`, capped at 20k chars), appended to the built-in prompt or replacing it; applied from the next turn via `AgentSession.setSystem`. Desktop only; the CLI still uses its own fixed prompt (backlog: share prefs with the CLI).
+- Custom instructions: Settings > Instructions. Stored in prefs (`systemPrompt`, `systemReplace`, capped at 20k chars), appended to the built-in prompt or replacing it; applied from the next turn via `AgentSession.setSystem`. The CLI (interactive and headless) reads the same prefs through `composeSystem`.
 - Notifications (desktop, only while the window is unfocused, one Settings switch): task finished (`turn_end` reason done), stopped by error, permission prompt waiting, looks stuck, long turn. Aborted turns do not notify.
 - Permission dialog buttons are now "Deny / Allow for this session / Allow once" (plan: "Reject plan / Approve plan"); dialogs scroll instead of overflowing.
 - Not yet: rename chat, project-level instructions UI, delete all chats of a workspace.

@@ -11,6 +11,7 @@ import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
+import { composeSystem } from '../core/system'
 import { exportMarkdown } from '../core/export'
 import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
@@ -159,11 +160,8 @@ export class Controller {
     return this.getSettings()
   }
 
-  /** Built-in prompt, plus the user's instructions, or only those when "replace" is on and they are not empty. */
   private system(): string {
-    const custom = this.systemPrompt.trim()
-    if (!custom) return DEFAULT_SYSTEM_PROMPT
-    return this.systemReplace ? custom : `${DEFAULT_SYSTEM_PROMPT}\n\n${custom}`
+    return composeSystem(DEFAULT_SYSTEM_PROMPT, { systemPrompt: this.systemPrompt, systemReplace: this.systemReplace })
   }
 
   /** Same shape as the CLI's provider, but resolved lazily from the credential store so a key saved mid-session just works. */
