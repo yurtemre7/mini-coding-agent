@@ -13,6 +13,15 @@ describe('PromptDialog (permission)', () => {
     expect(rule).toHaveClass('max-h-20', 'overflow-auto')
     expect(screen.getByTestId('subject').textContent!.length).toBeLessThanOrEqual(2001)
   })
+  it('a dangerous command shows a warning, offers no session grant and says Run anyway', () => {
+    const f = vi.fn()
+    render(<PromptDialog request={{ ...req, input: { command: 'sudo rm -rf /' }, danger: true, reason: 'this command can delete the whole system or your home directory', suggestion: undefined }} onDecision={f} />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/cannot be undone/)
+    expect(screen.getByText('Dangerous command')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /for this session/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Run anyway' }))
+    expect(f).toHaveBeenCalledWith({ allow: true, scope: 'once' })
+  })
   it('Yes -> once', () => {
     const f = vi.fn()
     render(<PromptDialog request={req} onDecision={f} />)

@@ -242,6 +242,49 @@ export function sessionRule(tool: Tool, input: unknown, root: string): string | 
 }
 
 
+// ---------- catastrophic commands ----------
+
+const SYSTEM_DIRS = new Set(['bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'opt', 'sbin', 'sys', 'usr', 'var', 'home', 'root', 'Users', 'System', 'Library', 'Applications', 'Volumes', 'private'])
+/** A target whose recursive deletion or permission change ruins the machine: the root, the home directory, or a top-level system directory. */
+function isVitalTarget(t: string): boolean {
+  if (t === '~' || t === '$HOME' || t === '${HOME}') return true
+  const home = t.replace(/^(~|\$HOME|\$\{HOME\})(?=\/)/, '')
+  if (home !== t) return /^\/(\*|\.\*|\.)?\/?$/.test(home) // ~/  ~/*  ~/.
+  if (!t.startsWith('/')) return false
+  const parts = t.split('/').filter(Boolean)
+  return parts.length === 0 || (parts.length === 1 && (SYSTEM_DIRS.has(parts[0]) || parts[0] === '*')) || (parts.length === 2 && parts[1] === '*' && SYSTEM_DIRS.has(parts[0]))
+}
+
+/**
+ * Built-in guard, independent of any allow rule or mode (even bypassPermissions): commands that can wipe the machine or the home directory,
+ * overwrite a disk, or run downloaded code as a shell. It only ever adds a prompt (never an auto-allow); a command whose words cannot be known
+ * statically already prompts. Over-matching is accepted: a false alarm costs one click.
+ */
+export function dangerOf(cmd: string): string | undefined {
+  const t = words(cmd.replace(/\\\n/g, '').replace(/\$\{?HOME\}?/g, '~'))
+  const base = (w: string) => w.slice(w.lastIndexOf('/') + 1) || w
+  for (let i = 0; i < t.length; i++) {
+    const prog = base(t[i])
+    const args = (() => {
+      const out: string[] = []
+      for (let j = i + 1; j < t.length && !['rm', 'dd', 'sudo', 'doas'].includes(base(t[j])); j++) out.push(t[j])
+      return out
+    })()
+    const flags = args.filter((a) => a.startsWith('-'))
+    const targets = args.filter((a) => !a.startsWith('-'))
+    const recursive = flags.some((f) => /^-[a-zA-Z]*[rR]/.test(f) || f === '--recursive')
+    if (prog === 'rm' && (flags.includes('--no-preserve-root') || (recursive && targets.some(isVitalTarget)))) return 'this command can delete the whole system or your home directory'
+    if ((prog === 'chmod' || prog === 'chown' || prog === 'chgrp') && recursive && targets.some(isVitalTarget)) return 'this command recursively changes permissions or ownership across the whole system or your home directory'
+    if (prog === 'dd' && args.some((a, k) => a === 'of' && /^\/dev\/(sd|hd|nvme|disk|mmcblk|rdisk)/.test(args[k + 1] ?? ''))) return 'this command can overwrite a disk'
+    if ((/^mkfs(\..+)?$|^(fdisk|parted|wipefs|shred)$/.test(prog) || (prog === 'diskutil' && /^(erase|partition|zero|secure|reformat)/i.test(args[0] ?? '')))) return 'this command can erase or repartition a disk'
+    if (['shutdown', 'reboot', 'halt', 'poweroff', 'init'].includes(prog) && (prog !== 'init' || /^[06]$/.test(args[0] ?? ''))) return 'this command shuts the machine down'
+  }
+  if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/.test(cmd)) return 'this looks like a fork bomb'
+  if (/>\s*\/dev\/(sd|hd|nvme|disk|rdisk)/.test(cmd)) return 'this command can overwrite a disk'
+  if (/\b(curl|wget|fetch)\b[^|;&]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b/.test(cmd)) return 'this pipes a download straight into a shell'
+  return undefined
+}
+
 // ---------- decide() ----------
 
 export interface PermissionOptions {
@@ -316,7 +359,9 @@ export class Permissions implements PlanControl {
     if (matches(this.rules.deny, tool, input, ctx, 'any')) return `${tool.name} is blocked by a deny rule in your settings.` // 1
     if (this.mode === 'plan' && !readOnly && tool.name !== 'WebFetch') return 'plan mode: present a plan with ExitPlanMode before making changes.' // 2 (WebFetch only reads: it still asks per domain)
     if (INTERNAL_TOOLS.has(tool.name)) return undefined
-    if (matches(this.rules.ask, tool, input, ctx, 'any')) reason = 'this path is marked as sensitive' // 3
+    const danger = tool.name === 'Bash' ? dangerOf(stringField(input, 'command') ?? '') : undefined
+    if (danger) reason = danger // 3: dangerous commands always need an explicit answer, in every mode
+    else if (matches(this.rules.ask, tool, input, ctx, 'any')) reason = 'this path is marked as sensitive' // 3
     else if (isWrite && path && this.mode !== 'bypassPermissions' && isProtectedPath(path)) reason = 'this file can change permissions or run code'
     if (reason) hard = true // only explicit/built-in ask rules and protected paths in non-bypass modes reach here
     else {
@@ -326,15 +371,15 @@ export class Permissions implements PlanControl {
       if (this.mode === 'acceptEdits' && isWrite && inside) return undefined // 7
       reason = !inside ? 'it is outside the workspace' : undefined // 8
     }
-    return this.prompt(tool, input, ctx, reason, hard)
+    return this.prompt(tool, input, ctx, reason, hard, !!danger)
   }
 
-  private async prompt(tool: Tool, input: unknown, ctx: ToolContext, reason: string | undefined, hard: boolean): Promise<string | undefined> {
+  private async prompt(tool: Tool, input: unknown, ctx: ToolContext, reason: string | undefined, hard: boolean, danger = false): Promise<string | undefined> {
     if (!this.canAsk)
       return `${tool.name} needs approval${reason ? ` (${reason})` : ''}, which this session cannot ask for.` +
         (hard ? ' It always needs interactive approval; make the change yourself.' : ` Re-run with --permission-mode acceptEdits (file edits) or bypassPermissions, or allow it with --allowed-tools "${sessionRule(tool, input, ctx.root) ?? tool.name}".`)
-    const suggestion = sessionRule(tool, input, ctx.root)
-    const req: PermissionRequest = { kind: 'permission', toolName: tool.name, input, ...(reason && { reason }), ...(suggestion && { suggestion }) }
+    const suggestion = danger ? undefined : sessionRule(tool, input, ctx.root) // a dangerous command is never remembered
+    const req: PermissionRequest = { kind: 'permission', toolName: tool.name, input, ...(reason && { reason }), ...(danger && { danger: true as const }), ...(suggestion && { suggestion }) }
     const d = await this.serialized(req, ctx)
     if (!d.allow && ctx.signal.aborted) return 'Aborted.'
     if (!d.allow) return d.feedback ? `The user declined and said: ${d.feedback}` : 'The user declined this action.'

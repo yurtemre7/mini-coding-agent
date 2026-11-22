@@ -46,6 +46,7 @@ export interface PermissionRequest {
   toolName: string
   input: unknown
   reason?: string // why a prompt is needed (protected path, outside workspace, ...)
+  danger?: true // a catastrophic command: shown as a warning, never remembered for the session
   suggestion?: string // the rule "Yes for this session" would store
 }
 export interface PlanRequest {

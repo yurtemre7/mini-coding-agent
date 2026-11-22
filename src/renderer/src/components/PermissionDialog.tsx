@@ -21,11 +21,16 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
     <>
       <AlertDialogHeader>
         <AlertDialogTitle className="flex items-center gap-2">
-          <ShieldQuestion className="h-4 w-4" aria-hidden />
-          Allow {request.toolName}?
+          {request.danger ? <ShieldAlert className="h-4 w-4 text-destructive" aria-hidden /> : <ShieldQuestion className="h-4 w-4" aria-hidden />}
+          {request.danger ? 'Dangerous command' : `Allow ${request.toolName}?`}
         </AlertDialogTitle>
         <AlertDialogDescription className="[overflow-wrap:anywhere]">{request.reason ? `Needs approval: ${request.reason}.` : 'Do you want to proceed?'}</AlertDialogDescription>
       </AlertDialogHeader>
+      {request.danger && (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          This can cause damage that cannot be undone. Check the command carefully. It is asked every time and is never remembered.
+        </p>
+      )}
       <pre data-testid="subject" className="max-h-48 overflow-auto rounded-md border bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">{(toolSubject(request.input) || JSON.stringify(request.input) || '').slice(0, 2000)}</pre>
       <Textarea placeholder="Optional: tell the model what to do instead (sent with Deny)" value={feedback} onChange={(e) => setFeedback(e.target.value)} />
       {request.suggestion && (
@@ -37,10 +42,14 @@ function PermissionBody({ request, onDecision }: { request: PermissionRequest; o
         <Button variant="outline" onClick={() => onDecision({ allow: false, ...(text && { feedback: text }) })}>
           Deny
         </Button>
-        <Button variant="secondary" onClick={() => onDecision({ allow: true, scope: 'session' })} title={request.suggestion}>
-          Allow for this session
+        {!request.danger && (
+          <Button variant="secondary" onClick={() => onDecision({ allow: true, scope: 'session' })} title={request.suggestion}>
+            Allow for this session
+          </Button>
+        )}
+        <Button variant={request.danger ? 'destructive' : 'default'} onClick={() => onDecision({ allow: true, scope: 'once' })}>
+          {request.danger ? 'Run anyway' : 'Allow once'}
         </Button>
-        <Button onClick={() => onDecision({ allow: true, scope: 'once' })}>Allow once</Button>
       </AlertDialogFooter>
     </>
   )
