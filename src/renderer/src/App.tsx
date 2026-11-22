@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { FileDiff, FolderOpen, Settings } from 'lucide-react'
 import type { AppInfo, CommandInfo, Effort, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
+import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
 import { DiffPanel } from './components/DiffPanel'
 import { TodoSidebar } from './components/TodoSidebar'
@@ -101,6 +102,7 @@ export default function App() {
         <Drag />
         <Card className="w-full max-w-md">
           <CardHeader>
+            <p className="text-sm font-medium text-muted-foreground">Welcome to MCA</p>
             <CardTitle>Set up a provider</CardTitle>
             <CardDescription>MCA uses your own API key. Choose a provider and paste its key to begin.</CardDescription>
           </CardHeader>
@@ -141,7 +143,7 @@ export default function App() {
           </Button>
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
-        <ChatTranscript items={v.items} />
+        {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
         <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {diffOpen && (

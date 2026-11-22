@@ -169,3 +169,6 @@ Ordered by value. Pull from the top; each item should end as a PR.
 - Restart `npm run dev` after editing anything in `src/main`, `src/preload` or `src/core` if `--watch` did not pick it up; a stale main process shows "No handler registered for ..." in the app.
 - Core tests run with a throwaway `HOME` (`src/core/test-home.ts`); new tests that touch `~/.mca` need nothing extra.
 - The implementation ledger, task briefs and review packages are in `.superpowers/sdd/PLAN/` (git-ignored, local to this machine). `progress.md` there records every ruling with its reason.
+
+## UI polish batch (JURA-7, partial)
+Settings is a tabbed dialog (General: theme + notifications switch; Provider; MCP servers; About: version, license, platform, GitHub/issues/releases links from `REPO_URL`). The theme toggle moved out of the sidebar. New `EmptyState` guides first use (choose a folder, then "What should we work on?"); the provider setup card has a welcome line. Visual checks: build the renderer and load `out/renderer` in Playwright Chromium with a mocked `window.mca` (no Electron needed). Still open: sidebar restructure, first-run walkthrough, dark-mode review on a real Mac.
