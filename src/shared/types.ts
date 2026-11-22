@@ -159,6 +159,27 @@ export interface SettingsInfo {
   keySource: Record<ProviderId, KeySource | null>
 }
 
+export interface GitFile {
+  path: string
+  /** porcelain codes: index column and worktree column ('?' = untracked) */
+  index: string
+  worktree: string
+}
+export interface GitStatus {
+  repo: boolean
+  branch: string | null
+  upstream: string | null
+  ahead: number
+  behind: number
+  files: GitFile[]
+}
+export interface GitBranches {
+  current: string | null
+  branches: string[]
+}
+
+export type TerminalEvent = { type: 'start'; command: string } | { type: 'out'; text: string } | { type: 'exit'; code: number | null; signal: string | null }
+
 export interface IpcContract {
   invoke: {
     'app:getInfo': { args: []; result: AppInfo }
@@ -188,6 +209,20 @@ export interface IpcContract {
     'session:export': { args: [id: string]; result: string | null }
     /** Shows the workspace folder in Finder. */
     'workspace:reveal': { args: []; result: void }
+    'git:status': { args: []; result: GitStatus }
+    /** Unified diff of one changed file, staged or not. */
+    'git:diff': { args: [path: string, staged: boolean]; result: string }
+    'git:stage': { args: [paths: string[], stage: boolean]; result: void }
+    /** Commits what is staged; resolves to the short hash. */
+    'git:commit': { args: [message: string]; result: string }
+    /** Plain push of the current branch (never forced); resolves to git's output. */
+    'git:push': { args: []; result: string }
+    'git:branches': { args: []; result: GitBranches }
+    /** Switch to a branch, or create it from HEAD and switch. */
+    'git:switch': { args: [name: string, create: boolean]; result: void }
+    /** Runs a shell command in the workspace; output arrives as terminal:event. One at a time. */
+    'terminal:run': { args: [command: string]; result: void }
+    'terminal:kill': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
     'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }]; result: SettingsInfo }
@@ -200,12 +235,13 @@ export interface IpcContract {
   events: {
     'agent:events': EventBatch
     'prompt:request': { id: string; request: PromptRequest }
+    'terminal:event': TerminalEvent
   }
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
-const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]
 

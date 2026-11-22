@@ -150,9 +150,9 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, effo
           }
         }}
       />
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Select value={mode} disabled={disabled} onValueChange={(m) => onMode(m as PermissionMode)}>
-          <SelectTrigger aria-label="Permission mode" className="w-48">
+          <SelectTrigger aria-label="Permission mode" className="w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -169,7 +169,7 @@ export function PromptInput({ busy, disabled, mode, model, models, onModel, effo
             ))}
           </SelectContent>
         </Select>
-        <ModelCombobox value={model} list={models} disabled={busy} onSelect={onModel} className="w-56" />
+        <ModelCombobox value={model} list={models} disabled={busy} onSelect={onModel} className="w-44" />
         <Select value={effort} disabled={busy} onValueChange={(e) => onEffort(e as Effort)}>
           <SelectTrigger aria-label="Effort" className="w-36 min-w-0 shrink">
             <Gauge className="h-4 w-4 shrink-0" aria-hidden />

@@ -11,6 +11,8 @@ import { createProvider, PROVIDER_IDS } from '../core/provider/factory'
 import { ProviderError } from '../core/provider/retry'
 import type { Block, ModelProvider } from '../core/provider/types'
 import { builtinTools } from '../core/registry'
+import { gitBranches, gitCommit, gitDiff, gitPush, gitStage, gitStatus, gitSwitch } from '../core/git'
+import { Terminal } from '../core/terminal'
 import { composeSystem } from '../core/system'
 import { exportMarkdown } from '../core/export'
 import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
@@ -18,7 +20,7 @@ import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
 import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type TerminalEvent, type ViewEvent, type ViewState } from '../shared/types'
 
 const MAX_SYSTEM_PROMPT = 20_000
 export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
@@ -30,6 +32,8 @@ export interface ControllerDeps {
   prompt(p: { id: string; request: PromptRequest }): void
   /** The user may be away: a prompt waits, the model looks stuck, or a turn runs long. The frontend decides how to tell them. */
   notify?(message: string): void
+  /** Output of the terminal panel's command. */
+  terminal?(e: TerminalEvent): void
   /** Test hooks: how long a prompt waits, and how long a turn runs, before notifying. */
   timings?: { promptMs?: number; longTurnMs?: number }
   home?: string
@@ -469,7 +473,51 @@ export class Controller {
   }
 
   /** Window closed or app quitting: abort the turn (denies pending asks, kills children). */
+  private repoDir(): string {
+    if (!this.workspace) throw new Error('Open a workspace first.')
+    return this.workspace
+  }
+  gitStatus() {
+    return this.workspace ? gitStatus(this.workspace) : Promise.resolve({ repo: false, branch: null, upstream: null, ahead: 0, behind: 0, files: [] })
+  }
+  gitDiff(path: string, staged: boolean) {
+    return gitDiff(this.repoDir(), path, staged)
+  }
+  gitStage(paths: string[], stage: boolean) {
+    return gitStage(this.repoDir(), paths, stage)
+  }
+  /** Commit, push and branch switches wait for the agent: it may be editing the same files. */
+  gitCommit(message: string) {
+    this.assertIdle('commit')
+    return gitCommit(this.repoDir(), message)
+  }
+  gitPush() {
+    this.assertIdle('push')
+    return gitPush(this.repoDir())
+  }
+  gitBranches() {
+    return this.workspace ? gitBranches(this.workspace) : Promise.resolve({ current: null, branches: [] })
+  }
+  gitSwitch(name: string, create: boolean) {
+    this.assertIdle('switch branches')
+    return gitSwitch(this.repoDir(), name, create)
+  }
+
+  private terminal?: { dir: string; t: Terminal }
+  terminalRun(command: string): void {
+    const dir = this.repoDir()
+    if (this.terminal?.dir !== dir) {
+      this.terminal?.t.kill()
+      this.terminal = { dir, t: new Terminal(dir, (e) => this.d.terminal?.(e)) }
+    }
+    this.terminal.t.run(command)
+  }
+  terminalKill(): void {
+    this.terminal?.t.kill()
+  }
+
   dispose(): void {
+    this.terminal?.t.kill()
     this.abort()
     void this.mcp?.close()
   }

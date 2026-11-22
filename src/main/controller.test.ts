@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -6,7 +7,7 @@ import { FakeProvider } from '../core/provider/fake'
 import { ProviderError } from '../core/provider/retry'
 import type { StreamEvent } from '../core/provider/types'
 import { applyBatch } from '../shared/reducer'
-import type { EventBatch, ProviderId, ViewEvent, ViewState } from '../shared/types'
+import type { EventBatch, ProviderId, TerminalEvent, ViewEvent, ViewState } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
 
@@ -182,6 +183,44 @@ describe('Controller', () => {
       await c2.init()
       expect(await c2.getSettings()).toMatchObject({ systemPrompt: 'Answer in German.', systemReplace: true })
       void ws
+    })
+  })
+
+  describe('git and terminal', () => {
+    const git = (cwd: string, ...a: string[]) => execFileSync('git', a, { cwd, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } })
+    it('is empty without a workspace and works on the open one', async () => {
+      const { c, ws } = await setup([[]])
+      git(ws, 'init', '-q', '-b', 'main')
+      await writeFile(join(ws, 'f.txt'), 'hi\n')
+      expect((await c.gitStatus()).files.map((f) => f.path)).toEqual(['f.txt'])
+      await c.gitStage(['f.txt'], true)
+      git(ws, 'config', 'user.email', 't@t')
+      git(ws, 'config', 'user.name', 't')
+      git(ws, 'config', 'commit.gpgsign', 'false')
+      expect(await c.gitCommit('add f')).toMatch(/^[0-9a-f]+$/)
+      await c.gitSwitch('topic', true)
+      expect((await c.gitBranches()).current).toBe('topic')
+      const none = new Controller({ home: await mkdtemp(join(tmpdir(), 'mca-home-')), emit: () => {}, prompt: () => {}, keys: { get: async () => null, set: async () => {} } })
+      expect((await none.gitStatus()).repo).toBe(false)
+      expect(() => none.terminalRun('ls')).toThrow(/Open a workspace/)
+    })
+    it('blocks commit, push and branch switches while a turn runs', async () => {
+      const { c, ws, prompts, idle } = await setup([[]])
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'q.txt')), say])
+      c.send('go')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      expect(() => c.gitCommit('x')).toThrow(/while a turn is running/)
+      expect(() => c.gitPush()).toThrow(/while a turn is running/)
+      expect(() => c.gitSwitch('b', true)).toThrow(/while a turn is running/)
+      c.abort()
+      await idle()
+    })
+    it('streams terminal output to the frontend', async () => {
+      const out: TerminalEvent[] = []
+      const { c } = await setup([[]], true, { terminal: (e) => void out.push(e) })
+      c.terminalRun('echo from-terminal')
+      while (!out.some((e) => e.type === 'exit')) await new Promise((r) => setTimeout(r, 5))
+      expect(out.some((e) => e.type === 'out' && e.text.includes('from-terminal'))).toBe(true)
     })
   })
 

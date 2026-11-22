@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLink, FileDiff, FolderOpen, Settings } from 'lucide-react'
+import { Columns2, Columns3, ExternalLink, FolderOpen, PanelLeft, PanelRight, Settings, Square } from 'lucide-react'
 import type { AppInfo, CommandInfo, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
 import { DiffPanel } from './components/DiffPanel'
+import { GitPanel } from './components/GitPanel'
+import { SidePanel } from './components/SidePanel'
+import { TerminalPanel } from './components/TerminalPanel'
+import { useTerminal } from './hooks/useTerminal'
+import { columns, useLayout } from './lib/layout'
 import { TodoSidebar } from './components/TodoSidebar'
 import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
@@ -22,9 +27,24 @@ export default function App() {
   const api = window.mca
   const s = useAgentSession(api)
   const theme = useTheme()
+  const lay = useLayout()
+  const term = useTerminal(api)
+  const { toggleSidebar, togglePanel } = lay
+  useEffect(() => {
+    // Cmd/Ctrl+B folds the sidebar, Cmd/Ctrl+J the tools column
+    const h = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
+      if (e.key === 'b' || e.key === 'j') {
+        e.preventDefault()
+        if (e.key === 'b') toggleSidebar()
+        else togglePanel()
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [toggleSidebar, togglePanel])
   const [settings, setSettings] = useState<SettingsInfo | null>(null)
   const [open, setOpen] = useState(false)
-  const [diffOpen, setDiffOpen] = useState(false)
   const [info, setInfo] = useState<AppInfo | null>(null)
   useEffect(() => void api?.invoke('app:getInfo').then(setInfo, () => {}), [api])
   const [recent, setRecent] = useState<string[]>([])
@@ -122,7 +142,8 @@ export default function App() {
   return (
     <main className="flex h-screen bg-background text-foreground">
       <Drag />
-      <aside className="flex w-60 shrink-0 flex-col gap-3 border-r p-3 pt-12">
+      {lay.layout.sidebar && (
+      <aside aria-label="Sidebar" className="flex w-60 shrink-0 flex-col gap-3 border-r p-3 pt-12">
         <div className="flex gap-1">
           <Button variant="outline" className="min-w-0 flex-1" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
             <FolderOpen className="mr-2 h-4 w-4 shrink-0" />
@@ -144,20 +165,36 @@ export default function App() {
           Settings
         </Button>
       </aside>
+      )}
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-10 shrink-0 items-center justify-end px-3">
-          <Button size="sm" variant={diffOpen ? 'secondary' : 'ghost'} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties} aria-pressed={diffOpen} onClick={() => setDiffOpen((d) => !d)}>
-            <FileDiff className="mr-1 h-4 w-4" />
-            Changes ({v.changes.total.length})
+        <div className={`flex h-10 shrink-0 items-center justify-between gap-2 px-3 ${lay.layout.sidebar ? '' : 'pl-20'}`} style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.sidebar ? 'Hide the sidebar' : 'Show the sidebar'} title="Sidebar (Cmd/Ctrl+B)" aria-pressed={lay.layout.sidebar} onClick={lay.toggleSidebar}>
+            <PanelLeft className="h-4 w-4" />
           </Button>
+          <div className="flex items-center gap-1">
+            <div role="group" aria-label="Layout" className="flex rounded-md border p-0.5">
+              {([[1, Square, '1 column: chat only'], [2, Columns2, '2 columns: chat and tools'], [3, Columns3, '3 columns: sidebar, chat and tools']] as const).map(([n, Icon, label]) => (
+                <Button key={n} size="icon" variant={columns(lay.layout) === n ? 'secondary' : 'ghost'} className="h-7 w-7" aria-label={label} title={label} aria-pressed={columns(lay.layout) === n} onClick={() => lay.setColumns(n)}>
+                  <Icon className="h-4 w-4" />
+                </Button>
+              ))}
+            </div>
+            <Button size="icon" variant="ghost" className="h-8 w-8" aria-label={lay.layout.panel ? 'Hide the tools panel' : 'Show the tools panel'} title="Tools (Cmd/Ctrl+J)" aria-pressed={lay.layout.panel} onClick={lay.togglePanel}>
+              <PanelRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} />}
         <PromptInput busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
-      {diffOpen && (
-        <aside className="flex w-96 shrink-0 flex-col border-l p-3 pt-12">
-          <DiffPanel changes={v.changes} busy={v.busy} loadDiff={s.changeDiff} onRevert={s.changeRevert} />
+      {lay.layout.panel && (
+        <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l p-3 pt-12">
+          <SidePanel tab={lay.layout.tab} onTab={lay.setTab} badge={{ changes: v.changes.total.length }}>
+            {lay.layout.tab === 'changes' && <DiffPanel changes={v.changes} busy={v.busy} loadDiff={s.changeDiff} onRevert={s.changeRevert} />}
+            {lay.layout.tab === 'git' && api && <GitPanel api={api} workspace={v.workspace} busy={v.busy} refreshKey={`${v.busy}:${v.changes.total.length}`} />}
+            {lay.layout.tab === 'terminal' && <TerminalPanel log={term.log} running={term.running} hasWorkspace={!!v.workspace} onRun={(c) => void term.run(c)} onStop={term.kill} onClear={term.clear} />}
+          </SidePanel>
         </aside>
       )}
       <PromptDialog request={v.pending?.request ?? null} onDecision={(d) => v.pending && s.answer(v.pending.id, d)} />

@@ -2,11 +2,10 @@ import { ChevronDown, ChevronRight, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import type { ChangeSummary } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
+import { DiffText } from './DiffText'
 
 type Scope = 'turn' | 'all'
 const MARK = { added: 'A', modified: 'M', deleted: 'D' } as const
-
-const lineClass = (line: string): string => (line.startsWith('+') && !line.startsWith('+++') ? 'text-green-600' : line.startsWith('-') && !line.startsWith('---') ? 'text-red-600' : line.startsWith('@@') ? 'text-muted-foreground' : '')
 
 /** What the agent changed: this turn or the whole chat, one expandable unified diff per file, and a confirmed per-file revert. */
 export function DiffPanel(p: { changes: { turn: ChangeSummary[]; total: ChangeSummary[] }; busy: boolean; loadDiff(scope: Scope, path: string): Promise<string>; onRevert(scope: Scope, path: string): Promise<void> }) {
@@ -81,19 +80,9 @@ export function DiffPanel(p: { changes: { turn: ChangeSummary[]; total: ChangeSu
                 </div>
               )}
               {open === f.path && (
-                <pre className="max-h-80 overflow-auto border-t bg-muted/30 p-2 font-mono text-xs">
-                  {error ? (
-                    <span className="text-destructive">{error}</span>
-                  ) : diffs[key] === undefined ? (
-                    'Loading…'
-                  ) : (
-                    diffs[key].split('\n').map((line, i) => (
-                      <div key={i} className={lineClass(line)}>
-                        {line || ' '}
-                      </div>
-                    ))
-                  )}
-                </pre>
+                <div className="max-h-80 overflow-auto border-t bg-muted/30 p-2">
+                  {error ? <span className="text-xs text-destructive">{error}</span> : diffs[key] === undefined ? <span className="text-xs">Loading…</span> : <DiffText text={diffs[key]} />}
+                </div>
               )}
             </li>
           )
