@@ -36,10 +36,11 @@ describe('Terminal', () => {
     await exited()
     expect(t.running).toBe(false)
   })
-  it('stop ends a long command with a signal', async () => {
+  // taskkill on a loaded Windows runner can take several seconds, so this test gets a longer budget there
+  it('stop ends a long command with a signal', { timeout: process.platform === 'win32' ? 30_000 : 5000 }, async () => {
     const { events, t, exited } = await setup()
     t.run('sleep 30')
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 1000 : 100)) // let the shell start before stopping it
     t.kill()
     await exited()
     expect(events.at(-1)).toMatchObject({ type: 'exit', ...(process.platform === 'win32' ? {} : { signal: 'SIGTERM' }) }) // taskkill leaves no signal
