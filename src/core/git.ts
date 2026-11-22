@@ -14,7 +14,7 @@ async function git(cwd: string, args: string[], timeoutMs = TIMEOUT): Promise<st
 
 /** A path from the renderer must stay inside the repo and can never look like an option. */
 const safePath = (p: string): string => {
-  if (!p || p.startsWith('/') || p.startsWith('-') || p.split(/[\\/]/).includes('..') || p.includes('\0')) throw new Error(`Invalid path: ${p}`)
+  if (!p || p.startsWith('/') || /^[A-Za-z]:|^\\/.test(p) || p.startsWith('-') || p.split(/[\\/]/).includes('..') || p.includes('\0')) throw new Error(`Invalid path: ${p}`)
   return p
 }
 

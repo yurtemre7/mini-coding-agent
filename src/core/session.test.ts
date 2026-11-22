@@ -1,6 +1,6 @@
 import { appendFileSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { AgentSession } from './agent'
 import { FakeProvider } from './provider/fake'
@@ -20,12 +20,12 @@ describe('session transcripts', () => {
     t.append({ role: 'assistant', content: [{ type: 'text', text: 'ok' }] })
     const lines = readFileSync(t.path, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
     expect(lines.map((l) => l.type)).toEqual(['meta', 'message', 'message'])
-    expect(lines[0]).toMatchObject({ version: 1, cwd: '/w', provider: 'fake', model: 'm', title: 'x'.repeat(80) })
-    expect(statSync(t.path).mode & 0o777).toBe(0o600)
+    expect(lines[0]).toMatchObject({ version: 1, cwd: resolve('/w'), provider: 'fake', model: 'm', title: 'x'.repeat(80) })
+    if (process.platform !== 'win32') expect(statSync(t.path).mode & 0o777).toBe(0o600) // Windows has no POSIX modes
   })
   it('two cwds that sanitize alike get different directories', () => {
     expect(sessionDir('/a/b-c', '/h')).not.toBe(sessionDir('/a-b/c', '/h'))
-    expect(sessionDir('/a/b', '/h')).toMatch(/\.mca\/projects\/-a-b-[0-9a-f]{8}$/)
+    expect(sessionDir('/a/b', '/h').replace(/\\/g, '/')).toMatch(/\.mca\/projects\/(?:[A-Z]-)?-a-b-[0-9a-f]{8}$/)
   })
   it('resumes through a truncated last line and a dangling tool_use, then keeps appending cleanly', () => {
     const home = tmp()
@@ -40,7 +40,7 @@ describe('session transcripts', () => {
     const again = loadSession('/w', t.id, meta, home).messages
     expect(again).toHaveLength(4)
     expect(JSON.stringify(again[3])).toContain('next')
-    expect(statSync(t.path).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') expect(statSync(t.path).mode & 0o777).toBe(0o600) // Windows has no POSIX modes
   })
   it('refuses an unknown version with a clear message', () => {
     const home = tmp()

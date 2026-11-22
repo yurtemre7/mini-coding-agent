@@ -78,15 +78,57 @@ jobs:
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
+  build-win:
+    name: Build unsigned Windows installer
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: npm run build
+
+      - name: Package (x64, unsigned)
+        run: npx electron-builder --win nsis --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Checksums
+        shell: bash
+        working-directory: dist
+        run: sha256sum *.exe > SHA256SUMS-windows.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mini-coding-agent-windows
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS-windows.txt
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub release
-    needs: build-mac
+    needs: [build-mac, build-win]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: mini-coding-agent-macos
+          path: release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: mini-coding-agent-windows
           path: release
 
       - name: Create the release with the GitHub CLI
@@ -105,6 +147,11 @@ jobs:
           2. Remove the quarantine flag once: `xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"`
              (or right-click the app, choose Open, then Open again; on macOS 15 use System Settings > Privacy & Security > Open Anyway).
           3. Verify the download against `SHA256SUMS.txt` if you like: `shasum -a 256 -c SHA256SUMS.txt`.
+
+          ## Install (Windows, unsigned)
+
+          Run the `.exe` installer. SmartScreen warns about unsigned apps: choose **More info**, then **Run anyway**.
+          Install [Git for Windows](https://git-scm.com/download/win) so MCA can run commands in Git Bash; without it MCA falls back to PowerShell and asks before every command.
 
           ## Changes
           NOTES

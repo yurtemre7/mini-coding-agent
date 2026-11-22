@@ -9,6 +9,8 @@ import { testCtx } from './testutil'
 // the real login-shell environment is cached for the whole run; these tests change PATH, so read it fresh
 vi.mock('../env', () => ({ loginEnv: async () => ({ ...process.env }) }))
 
+/** Same directory, whatever the spelling (C:/ vs C:\\, short vs long names on Windows). */
+const same = (a: string, b: string) => expect(realpathSync.native(a)).toBe(realpathSync.native(b))
 const mk = () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mca-bash-')))
   return { dir, ctx: testCtx(dir) }
@@ -29,7 +31,7 @@ describe('Bash', () => {
     expect(await run(ctx, 'echo out; echo err >&2')).toContain('out')
     expect(await run(ctx, 'echo hi; exit 3')).toBe('hi\n\nExit code 3')
   })
-  it('reports a signal-killed command', async () => {
+  it.skipIf(process.platform === 'win32')('reports a signal-killed command', async () => {
     const { ctx } = mk()
     expect(await run(ctx, 'kill -9 $$')).toContain('Terminated by signal SIGKILL')
   })
@@ -37,13 +39,13 @@ describe('Bash', () => {
     const { dir, ctx } = mk()
     mkdirSync(join(dir, 'sub'))
     await run(ctx, 'cd sub; exit 3')
-    expect(ctx.cwd).toBe(join(dir, 'sub'))
-    expect(await run(ctx, 'pwd')).toBe(join(dir, 'sub') + '\n')
+    same(ctx.cwd, join(dir, 'sub'))
+    if (process.platform !== 'win32') expect(await run(ctx, 'pwd')).toBe(join(dir, 'sub') + '\n')
   })
   it('output cannot forge the cwd; env vars do not persist', async () => {
     const { dir, ctx } = mk()
     await run(ctx, 'FOO=1; echo /etc')
-    expect(ctx.cwd).toBe(dir)
+    same(ctx.cwd, dir)
     expect(await run(ctx, 'echo "[$FOO]"')).toBe('[]\n')
   })
   it('resets to the workspace root, with a notice, when the stored cwd was deleted', async () => {
@@ -53,12 +55,12 @@ describe('Bash', () => {
     rmSync(join(dir, 'gone'), { recursive: true })
     const out = await run(ctx, 'pwd')
     expect(out).toContain('no longer exists')
-    expect(ctx.cwd).toBe(dir)
+    same(ctx.cwd, dir)
   })
   it('keeps the cwd when the trap file is never written (exec)', async () => {
     const { dir, ctx } = mk()
     await run(ctx, 'exec true')
-    expect(ctx.cwd).toBe(dir)
+    same(ctx.cwd, dir)
   })
   it('timeout kills the whole process group and returns partial output', async () => {
     const { ctx } = mk()
@@ -83,7 +85,7 @@ describe('Bash', () => {
     expect(out).toContain('characters truncated')
     expect(out.length).toBeLessThan(31_000)
   })
-  it('runs the RTK form of a command when rtk is on PATH', async () => {
+  it.skipIf(process.platform === 'win32')('runs the RTK form of a command when rtk is on PATH', async () => {
     const { dir, ctx } = mk()
     const bin = join(dir, 'bin')
     mkdirSync(bin)

@@ -13,6 +13,7 @@ let cached: Promise<NodeJS.ProcessEnv> | undefined
 
 /** Login-shell environment, resolved once. GUI launches get a minimal PATH without Homebrew/nvm. */
 export function loginEnv(): Promise<NodeJS.ProcessEnv> {
+  if (process.platform === 'win32') return Promise.resolve(process.env) // no login shell to ask
   cached ??= exec(process.env.SHELL || '/bin/zsh', ['-ilc', 'env -0'], { cwd: process.cwd(), timeoutMs: 3000, maxChars: 1_000_000 })
     .then((r) => (r.code === 0 && !r.timedOut ? { ...process.env, ...parseEnv0(r.stdout) } : process.env))
     .catch(() => process.env)

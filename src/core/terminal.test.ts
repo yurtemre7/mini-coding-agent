@@ -3,12 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../shared/types'
+import { getShell } from './shell'
 import { Terminal } from './terminal'
 
 const setup = async () => {
   const cwd = await realpath(await mkdtemp(join(tmpdir(), 'mca-term-')))
   const events: TerminalEvent[] = []
-  const t = new Terminal(cwd, (e) => void events.push(e), '/bin/sh')
+  const t = new Terminal(cwd, (e) => void events.push(e), getShell())
   const exited = () => new Promise<void>((res) => { const i = setInterval(() => { if (events.some((e) => e.type === 'exit')) { clearInterval(i); res() } }, 5) })
   return { cwd, events, t, exited }
 }
@@ -20,7 +21,7 @@ describe('Terminal', () => {
     t.run('pwd; echo err 1>&2; exit 3')
     await exited()
     expect(events[0]).toEqual({ type: 'start', command: 'pwd; echo err 1>&2; exit 3' })
-    expect(text(events)).toContain(cwd)
+    if (process.platform !== 'win32') expect(text(events)).toContain(cwd) // Git Bash prints /c/… paths
     expect(text(events)).toContain('err')
     expect(events.at(-1)).toEqual({ type: 'exit', code: 3, signal: null })
     expect(t.running).toBe(false)
@@ -41,7 +42,7 @@ describe('Terminal', () => {
     await new Promise((r) => setTimeout(r, 100))
     t.kill()
     await exited()
-    expect(events.at(-1)).toMatchObject({ type: 'exit', signal: 'SIGTERM' })
+    expect(events.at(-1)).toMatchObject({ type: 'exit', ...(process.platform === 'win32' ? {} : { signal: 'SIGTERM' }) }) // taskkill leaves no signal
   })
   it('truncates runaway output', async () => {
     const { events, t, exited } = await setup()

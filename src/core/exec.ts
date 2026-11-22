@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { killTree } from './shell'
 
 export interface ExecOptions {
   cwd: string
@@ -49,20 +50,14 @@ export function exec(cmd: string, args: string[], o: ExecOptions): Promise<ExecR
     const out = new Bounded(half)
     const err = o.merge ? out : new Bounded(half)
     // detached: own process group, so killing -pid also reaches npm -> node children
-    const child = spawn(cmd, args, { cwd: o.cwd, env: o.env ?? process.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(cmd, args, { cwd: o.cwd, env: o.env ?? process.env, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     child.stdout.setEncoding('utf8').on('data', (d: string) => out.push(d))
     child.stderr.setEncoding('utf8').on('data', (d: string) => err.push(d))
     let timedOut = false
     let aborted = false
     let killTimer: NodeJS.Timeout
     const kill = () => {
-      const signalGroup = (s: NodeJS.Signals) => {
-        try {
-          process.kill(-child.pid!, s)
-        } catch {
-          // already gone
-        }
-      }
+      const signalGroup = (s: NodeJS.Signals) => killTree(child.pid!, s)
       signalGroup('SIGTERM')
       killTimer = setTimeout(() => signalGroup('SIGKILL'), 2000)
       killTimer.unref()

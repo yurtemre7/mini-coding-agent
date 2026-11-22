@@ -1,3 +1,4 @@
+import { getShell, killTree } from './shell'
 import { spawn } from 'node:child_process'
 import { field, stringField } from '../shared/guards'
 
@@ -92,13 +93,12 @@ function runCommand(def: HookDef, stdin: string, cwd: string, signal?: AbortSign
     let stderr = ''
     let done = false
     let timedOut = false
-    const child = spawn(def.command, { cwd, shell: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, MCA_PROJECT_DIR: cwd } })
+    // on Windows hooks run in Git Bash when it is installed (cmd.exe cannot run POSIX hook commands); otherwise, and elsewhere, in the platform default shell
+    const sh = getShell()
+    const opts = { cwd, detached: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'], env: { ...process.env, MCA_PROJECT_DIR: cwd } }
+    const child = process.platform === 'win32' && sh.kind === 'bash' ? spawn(sh.path, ['-c', def.command], opts) : spawn(def.command, { ...opts, shell: true })
     const killGroup = () => {
-      try {
-        process.kill(-child.pid!, 'SIGKILL')
-      } catch {
-        // already gone
-      }
+      killTree(child.pid!, 'SIGKILL')
     }
     const finish = (r: Ran) => {
       if (done) return

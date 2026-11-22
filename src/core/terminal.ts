@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import type { TerminalEvent } from '../shared/types'
+import { getShell, killTree } from './shell'
 
 
 const MAX_OUTPUT = 1_000_000 // characters streamed per command; the rest is dropped with a note
@@ -10,7 +11,7 @@ const MAX_OUTPUT = 1_000_000 // characters streamed per command; the rest is dro
  */
 export class Terminal {
   private child?: ChildProcess
-  constructor(private cwd: string, private emit: (e: TerminalEvent) => void, private shell = process.env.SHELL || '/bin/bash') {}
+  constructor(private cwd: string, private emit: (e: TerminalEvent) => void, private shell = process.platform === 'win32' ? getShell() : { kind: 'bash' as const, path: process.env.SHELL || '/bin/bash' }) {}
 
   get running(): boolean {
     return !!this.child
@@ -34,7 +35,7 @@ export class Terminal {
       this.emit({ type: 'out', text })
     }
     // login shell so a GUI-launched app sees the user's PATH; own process group so Stop reaches child processes too
-    const child = spawn(this.shell, ['-lc', cmd], { cwd: this.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TERM: 'dumb', NO_COLOR: '1', GIT_PAGER: 'cat', PAGER: 'cat' } })
+    const child = spawn(this.shell.path, this.shell.kind === 'powershell' ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', cmd] : ['-lc', cmd], { cwd: this.cwd, detached: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TERM: 'dumb', NO_COLOR: '1', GIT_PAGER: 'cat', PAGER: 'cat' } })
     this.child = child
     child.stdout?.on('data', push)
     child.stderr?.on('data', push)
@@ -56,10 +57,6 @@ export class Terminal {
   kill(): void {
     const pid = this.child?.pid
     if (!pid) return
-    try {
-      process.kill(-pid, 'SIGTERM')
-    } catch {
-      this.child?.kill('SIGTERM')
-    }
+    killTree(pid, 'SIGTERM')
   }
 }

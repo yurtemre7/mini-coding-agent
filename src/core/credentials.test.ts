@@ -10,7 +10,9 @@ const fakeKeychain = (store: Record<string, string> = {}): Keychain => ({
   set: async (p, k) => void (store[p] = k)
 })
 beforeEach(() => {
-  vi.stubEnv('HOME', mkdtempSync(join(tmpdir(), 'mca-home-')))
+  const home = mkdtempSync(join(tmpdir(), 'mca-home-'))
+  vi.stubEnv('HOME', home)
+  vi.stubEnv('USERPROFILE', home) // os.homedir() on Windows
   vi.stubEnv('ANTHROPIC_API_KEY', '')
   vi.stubEnv('OPENROUTER_API_KEY', '')
 })
@@ -47,7 +49,8 @@ describe('credentials', () => {
   it('returns null when nothing is set', async () => expect(await getKey('openrouter', fakeKeychain(), mkdtempSync(join(tmpdir(), 'mca-empty-')))).toBeNull())
   it('writes the file store with mode 0600', async () => {
     await setKey('openrouter', 'k', { get: async () => null, set: async () => Promise.reject(new Error('no keychain')) })
-    expect(statSync(join(process.env.HOME!, '.mca', 'credentials.json')).mode & 0o777).toBe(0o600)
+    const mode = statSync(join(process.env.HOME!, '.mca', 'credentials.json')).mode & 0o777
+    if (process.platform !== 'win32') expect(mode).toBe(0o600) // Windows has no POSIX modes
   })
   it('writes through the keychain when it works', async () => {
     const store: Record<string, string> = {}

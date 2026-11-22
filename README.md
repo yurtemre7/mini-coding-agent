@@ -6,7 +6,7 @@ Desktop coding agent built with [Electron](https://www.electronjs.org/), React, 
 
 - Node.js 22+
 - npm 10+
-- macOS (primary target)
+- macOS (primary target) and Windows 10/11 (x64). On Windows commands run in Git Bash when Git for Windows is installed, otherwise in PowerShell (every command then asks first). Windows support is new and CI-built, not yet checked by hand on a real PC.
 
 ## Getting Started
 
@@ -67,6 +67,10 @@ Download the build for your Mac from the [Releases page](https://github.com/yurt
 
 The flag comes back only when you download a new build, so repeat step 2 after each update.
 
+## Installing on Windows
+
+Download the `.exe` installer from the Releases page and run it. It is unsigned: in the SmartScreen warning choose **More info**, then **Run anyway**. Install [Git for Windows](https://git-scm.com/download/win) so MCA can use Git Bash (set `MCA_BASH` to a `bash.exe` to pick another). API keys are stored in `%USERPROFILE%\.mca\credentials.json` (no Keychain on Windows), or set `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`.
+
 ## Releasing (unsigned macOS app)
 
 Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tags`. The release workflow builds arm64 and x64 `.dmg`/`.zip` and publishes a GitHub release with checksums. The app is **not signed or notarized**: on first launch right-click the app and choose Open (or run `xattr -dr com.apple.quarantine /Applications/mini-coding-agent.app`).
@@ -84,6 +88,7 @@ Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tag
 - `npm run build` — Build main, preload, and renderer bundles
 - `npm run typecheck` — Run TypeScript typechecking for Node and Web targets
 - `npm test` — Run unit and component tests with Vitest
+- `npm run package:win` — Build the Windows NSIS installer (run on Windows)
 - `npm run package:mac` — Build and package macOS `.dmg` and `.zip` artifacts via `electron-builder`
 
 ## Notifications

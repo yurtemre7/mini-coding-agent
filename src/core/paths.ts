@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 
 /** Absolute, `~`-expanded path. Relative inputs resolve against the session cwd. */
-export const resolvePath = (cwd: string, p: string): string => resolve(cwd, p.replace(/^~(?=$|\/)/, homedir()))
+export const resolvePath = (cwd: string, p: string): string => resolve(cwd, p.replace(/^~(?=$|[\\/])/, homedir()))
 
 /** realpath of the nearest existing ancestor plus the not-yet-existing remainder, so a symlinked parent cannot hide an escape. */
 export function realpathNearest(p: string): string {
@@ -22,7 +22,7 @@ export function realpathNearest(p: string): string {
 }
 
 // folding only ever makes checks stricter, so it is used for protection but never for the workspace check
-const fold = (s: string): string => (process.platform === 'darwin' ? s.toLowerCase() : s)
+const fold = (s: string): string => (process.platform === 'darwin' || process.platform === 'win32' ? s.toLowerCase() : s)
 
 export function isInsideWorkspace(workspace: string, p: string): boolean {
   const rel = relative(realpathNearest(workspace), realpathNearest(p))

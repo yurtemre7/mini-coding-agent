@@ -12,7 +12,8 @@ function fake(script: string) {
   return { cwd: bin, env: { PATH: `${bin}:/usr/bin:/bin` } as NodeJS.ProcessEnv }
 }
 
-describe('rtkRewrite', () => {
+// the fake rtk is a #!/bin/sh script, which Windows cannot execute directly
+describe.skipIf(process.platform === 'win32')('rtkRewrite', () => {
   beforeEach(resetRtk)
   it('uses the rewrite for exit 0 and exit 3', async () => {
     for (const code of [0, 3]) {

