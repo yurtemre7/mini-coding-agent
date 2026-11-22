@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { exec } from '../exec'
 import { loginEnv } from '../env'
 import { isReadOnlyCommand } from '../permissions'
+import { rtkRewrite } from '../rtk'
 import type { Tool } from '../tool'
 
 const DEFAULT_TIMEOUT = 120_000
@@ -35,13 +36,9 @@ export const Bash: Tool<z.infer<typeof schema>> = {
     const ms = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const cwdFile = join(tmpdir(), `mca-cwd-${randomUUID()}`)
     // an EXIT trap records the final cwd even after `exit N`, and command output cannot forge it
-    const r = await exec('/bin/bash', ['-c', `trap 'pwd -P > "$MCA_CWD_FILE"' EXIT; ${command}`], {
-      cwd,
-      signal: ctx.signal,
-      timeoutMs: ms,
-      merge: true,
-      env: { ...(await loginEnv()), MCA_CWD_FILE: cwdFile, GIT_TERMINAL_PROMPT: '0', PAGER: 'cat', GIT_PAGER: 'cat' }
-    })
+    const env = { ...(await loginEnv()), MCA_CWD_FILE: cwdFile, GIT_TERMINAL_PROMPT: '0', PAGER: 'cat', GIT_PAGER: 'cat' }
+    const run = await rtkRewrite(command, { cwd, env, signal: ctx.signal }) // the permission check already ran on `command`
+    const r = await exec('/bin/bash', ['-c', `trap 'pwd -P > "$MCA_CWD_FILE"' EXIT; ${run}`], { cwd, signal: ctx.signal, timeoutMs: ms, merge: true, env })
     let next: string
     try {
       next = (await readFile(cwdFile, 'utf8').catch(() => '')).trim()
