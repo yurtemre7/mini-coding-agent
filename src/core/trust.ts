@@ -46,17 +46,37 @@ export async function trustWorkspace(workspace: string, home?: string): Promise<
   await updateState((s) => void (s.trusted.includes(ws) || s.trusted.push(ws)), home)
 }
 
-const MAX_RECENT = 10
+const MAX_RECENT = 30
 const isDir = (p: string) => statSync(p, { throwIfNoEntry: false })?.isDirectory() ?? false
+const list = (s: State): string[] => (Array.isArray(s.recent) ? s.recent : []).filter((p): p is string => typeof p === 'string')
 
-/** Most recent first; folders that no longer exist are dropped. */
+/** The user's workspace list in the order they arranged it (a newly opened folder goes on top); folders that no longer exist are dropped. */
 export async function recentWorkspaces(home?: string): Promise<string[]> {
-  const r = (await readState(home)).recent
-  return (Array.isArray(r) ? r : []).filter((p): p is string => typeof p === 'string' && isDir(p)).slice(0, MAX_RECENT)
+  return list(await readState(home)).filter(isDir).slice(0, MAX_RECENT)
 }
 
+/** Adds a folder on top of the list (an existing entry keeps its place) and records it as the one to reopen at launch. */
 export const rememberWorkspace = (dir: string, home?: string) =>
-  updateState((s) => void (s.recent = [dir, ...(Array.isArray(s.recent) ? s.recent : []).filter((p) => p !== dir && isDir(p))].slice(0, MAX_RECENT)), home)
+  updateState((s) => {
+    const rest = list(s).filter(isDir)
+    s.recent = (rest.includes(dir) ? rest : [dir, ...rest]).slice(0, MAX_RECENT)
+    s.last = dir
+  }, home)
+
+/** The workspace that was open last, if it still exists; otherwise the top of the list. */
+export async function lastWorkspace(home?: string): Promise<string | undefined> {
+  const s = await readState(home)
+  const all = await recentWorkspaces(home)
+  return typeof s.last === 'string' && all.includes(s.last) ? s.last : all[0]
+}
+
+/** Saves a new order. Unknown paths are ignored and entries missing from `order` keep their relative order at the end, so nothing is ever lost. */
+export const reorderWorkspaces = (order: string[], home?: string) =>
+  updateState((s) => {
+    const cur = list(s)
+    const first = [...new Set(order)].filter((p) => cur.includes(p))
+    s.recent = [...first, ...cur.filter((p) => !first.includes(p))]
+  }, home)
 
 /** Removes a workspace from the recent list only; its files, saved chats and trust decision are left alone. */
 export const forgetWorkspace = (dir: string, home?: string) => updateState((s) => void (s.recent = (Array.isArray(s.recent) ? s.recent : []).filter((p) => p !== dir)), home)

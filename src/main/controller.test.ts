@@ -139,6 +139,18 @@ describe('Controller', () => {
     expect(await c.recent()).toEqual([other])
     expect((await stat(ws)).isDirectory()).toBe(true) // the folder itself is still there
   })
+  it('lists every workspace with its chats in the saved order, and saves a new order', async () => {
+    const { c, ws, idle } = await setup([[]])
+    ;(c as any).d.makeProvider = () => new FakeProvider([say])
+    c.send('in the first workspace')
+    await idle()
+    const other = await mkdtemp(join(tmpdir(), 'mca-ws2-'))
+    await c.selectWorkspace(other)
+    expect((await c.overview()).map((w) => w.path)).toEqual([other, ws])
+    expect((await c.overview()).find((w) => w.path === ws)!.chats.map((x) => x.title)).toEqual(['in the first workspace'])
+    await c.reorderRecent([ws, other, '/etc'])
+    expect((await c.overview()).map((w) => w.path)).toEqual([ws, other])
+  })
   describe('chat management and instructions', () => {
     it('deletes a chat (replacing the open one) and exports a chat as Markdown', async () => {
       const { c, idle } = await setup([say])

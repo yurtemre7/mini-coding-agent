@@ -6,7 +6,7 @@ import type { McaApi, ViewState } from '../../shared/types'
 const view: ViewState = { items: [], todos: [], changes: { turn: [], total: [] }, mode: 'default', provider: 'anthropic', model: 'm', workspace: null, mcp: [], busy: false, pending: null, seq: 0 }
 
 const api = (hasKey: boolean): McaApi => ({
-  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false }, keySource: { anthropic: hasKey ? 'env' : null, openrouter: null } } : ch === 'settings:models' ? { models: ['m'] } : ch === 'workspace:recent' || ch === 'session:list' ? [] : view)) as any,
+  invoke: vi.fn(async (ch: string) => (ch === 'settings:get' ? { provider: 'anthropic', model: 'm', hasKey: { anthropic: hasKey, openrouter: false }, keySource: { anthropic: hasKey ? 'env' : null, openrouter: null } } : ch === 'settings:models' ? { models: ['m'] } : ch === 'workspace:overview' ? [] : view)) as any,
   on: vi.fn(() => () => {})
 })
 
@@ -30,7 +30,7 @@ describe('App', () => {
   it('shows the workspace chat once a key exists; send is disabled until a workspace is open', async () => {
     window.mca = api(true)
     render(<App />)
-    expect(await screen.findByText('Open workspace')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'New workspace' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Open a workspace to start')).toBeDisabled()
   })
 

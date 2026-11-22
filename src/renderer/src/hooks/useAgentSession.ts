@@ -38,6 +38,7 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     selectWorkspace: () => call((a) => a.invoke('workspace:select')),
     openWorkspace: (path: string) => call((a) => a.invoke('workspace:open', path)),
     openChat: (id: string) => call((a) => a.invoke('session:open', id)),
+    reorderWorkspaces: (order: string[]) => call((a) => a.invoke('workspace:reorder', order)),
     forgetWorkspace: (path: string) => call((a) => a.invoke('workspace:forget', path)),
     deleteChat: (id: string) => call((a) => a.invoke('session:delete', id)),
     exportChat: (id: string): Promise<string | null> => (api ? api.invoke('session:export', id).catch(() => null) : Promise.resolve(null)),

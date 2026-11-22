@@ -1,97 +1,214 @@
 import { useState } from 'react'
-import { Download, FolderClock, History, MessageSquare, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
-import type { SessionInfo } from '../../../shared/types'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
+import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ago } from '@/lib/ago'
 
 const base = (p: string) => p.split('/').filter(Boolean).at(-1) ?? p
-const Head = ({ icon: Icon, children }: { icon: typeof History; children: string }) => (
-  <h2 className="flex items-center gap-1 text-xs font-medium uppercase text-muted-foreground">
-    <Icon className="h-3 w-3 shrink-0" />
-    {children}
-  </h2>
-)
+const KEY = 'mca.collapsed'
+const load = (): Record<string, boolean> => {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
+  } catch {
+    return {}
+  }
+}
 
-/** Recent workspaces and the current workspace's saved chats. Everything is disabled while a turn runs. */
-export function ChatsSidebar(p: { workspace: string | null; recent: string[]; chats: SessionInfo[]; current?: string; disabled: boolean; onWorkspace(path: string): void; onForget(path: string): void; onChat(id: string): void; onNew(): void; onDelete?(id: string): void; onExport?(id: string): void }) {
-  const [confirm, setConfirm] = useState<string | null>(null)
+/** Moves `from` next to `to` (before it when dragging up, after it when dragging down). */
+function moved(order: string[], from: string, to: string): string[] {
+  const a = order.indexOf(from)
+  const b = order.indexOf(to)
+  if (a < 0 || b < 0 || a === b) return order
+  const out = order.filter((p) => p !== from)
+  out.splice(out.indexOf(to) + (a < b ? 1 : 0), 0, from)
+  return out
+}
+
+interface Props {
+  workspaces: WorkspaceChats[]
+  /** The open workspace. */
+  workspace: string | null
+  /** The open chat. */
+  current?: string
+  disabled: boolean
+  onNewWorkspace(): void
+  onReorder(order: string[]): void
+  /** Opens another workspace (its newest chat continues). */
+  onWorkspace(path: string): void
+  onForget(path: string): void
+  onReveal?(): void
+  /** Opens the chat; the workspace is opened first when it is not the open one. */
+  onChat(path: string, id: string): void
+  onNew(path: string): void
+  onDelete?(id: string): void
+  onExport?(id: string): void
+}
+
+/** Workspaces as collapsible tiles (reorderable by drag and drop or the menu), each holding its saved chats. Everything is disabled while a turn runs. */
+export function ChatsSidebar(p: Props) {
+  const [collapsed, setCollapsed] = useState(load)
   const [menu, setMenu] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<string | null>(null)
+  const [drag, setDrag] = useState<string | null>(null)
+  const [over, setOver] = useState<string | null>(null)
+  const order = p.workspaces.map((w) => w.path)
+  // the open workspace starts expanded, the others collapsed; the user's own choice wins
+  const isCollapsed = (path: string) => collapsed[path] ?? path !== p.workspace
+  const toggle = (path: string) =>
+    setCollapsed((c) => {
+      const next = { ...c, [path]: !isCollapsed(path) }
+      try {
+        localStorage.setItem(KEY, JSON.stringify(next))
+      } catch {
+        // private mode or blocked storage: the choice just is not remembered
+      }
+      return next
+    })
+  const move = (path: string, by: -1 | 1) => {
+    const i = order.indexOf(path)
+    const j = i + by
+    if (i < 0 || j < 0 || j >= order.length) return
+    const next = [...order]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    p.onReorder(next)
+  }
+
   return (
-    <>
-      <div className="space-y-1">
-        <Head icon={FolderClock}>Recent workspaces</Head>
-        {p.recent.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}
-        {p.recent.map((w) => (
-          <div key={w} className="flex items-center">
-            <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start" disabled={p.disabled || w === p.workspace} title={w} onClick={() => p.onWorkspace(w)}>
-              <span className="min-w-0 truncate">{base(w)}</span>
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={`Remove ${base(w)} from the list`} title="Remove from the list (files and chats are kept)" disabled={p.disabled || w === p.workspace} onClick={() => p.onForget(w)}>
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-        ))}
-      </div>
-      {p.workspace && (
-        <div className="space-y-1">
-          <Head icon={History}>Chats</Head>
-          <Button variant="outline" size="sm" className="w-full" disabled={p.disabled} onClick={p.onNew}>
-            <Plus className="mr-1 h-4 w-4" />
-            New chat
-          </Button>
-          {p.chats.length === 0 && <p className="text-xs text-muted-foreground">No saved chats yet.</p>}
-          {p.chats.map((c) =>
-            confirm === c.id ? (
-              <div key={c.id} className="space-y-1 rounded-md border p-2 text-xs">
-                <p className="[overflow-wrap:anywhere]">Delete &quot;{c.title}&quot;? This cannot be undone.</p>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="destructive" className="h-7" onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
-                    Delete chat
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div key={c.id} className={`group relative flex items-center rounded-md ${c.id === p.current ? 'bg-accent text-accent-foreground' : ''}`} aria-current={c.id === p.current ? 'true' : undefined}>
-                {c.id === p.current && <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary" />}
-                <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(c.id)}>
-                  <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate ${c.id === p.current ? 'font-medium' : ''}`}>{c.title}</span>
-                    <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
-                  </span>
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" className="w-full" disabled={p.disabled} onClick={p.onNewWorkspace}>
+        <FolderPlus className="mr-1 h-4 w-4" />
+        New workspace
+      </Button>
+      {p.workspaces.length === 0 && <p className="text-xs text-muted-foreground">No workspaces yet. Open a folder to start.</p>}
+      <ul className="space-y-1">
+        {p.workspaces.map(({ path, chats }, i) => {
+          const open = path === p.workspace
+          const shut = isCollapsed(path)
+          return (
+            <li
+              key={path}
+              data-testid={`workspace-${base(path)}`}
+              className={`rounded-md border ${open ? 'border-border bg-surface' : 'border-transparent'} ${over === path && drag && drag !== path ? 'ring-2 ring-primary/50' : ''}`}
+              onDragOver={(e) => {
+                if (!drag) return
+                e.preventDefault()
+                setOver(path)
+              }}
+              onDragLeave={() => setOver((o) => (o === path ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (drag && drag !== path) p.onReorder(moved(order, drag, path))
+                setDrag(null)
+                setOver(null)
+              }}
+            >
+              <div className="group flex items-center" draggable={!p.disabled} onDragStart={(e) => {
+                setDrag(path)
+                e.dataTransfer?.setData('text/plain', path)
+              }} onDragEnd={() => { setDrag(null); setOver(null) }}>
+                <Button variant="ghost" size="icon" className="h-7 w-6 shrink-0" aria-expanded={!shut} aria-label={`${shut ? 'Expand' : 'Collapse'} ${base(path)}`} onClick={() => toggle(path)}>
+                  {shut ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
-                {(p.onExport || p.onDelete) && (
-                  <Popover open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
-                    <PopoverTrigger asChild>
-                      <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`}>
-                        <MoreHorizontal className="h-4 w-4" />
+                <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start px-1" disabled={p.disabled} title={path} onClick={() => (open ? toggle(path) : (shut && toggle(path), p.onWorkspace(path)))}>
+                  <Folder className="mr-1 h-4 w-4 shrink-0" />
+                  <span className={`min-w-0 truncate ${open ? 'font-medium' : ''}`}>{base(path)}</span>
+                </Button>
+                <Popover open={menu === path} onOpenChange={(o) => setMenu(o ? path : null)}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-60 p-1">
+                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" disabled={p.disabled || i === 0} onClick={() => { setMenu(null); move(path, -1) }}>
+                      <ArrowUp className="mr-2 h-3.5 w-3.5" />
+                      Move up
+                    </Button>
+                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" disabled={p.disabled || i === p.workspaces.length - 1} onClick={() => { setMenu(null); move(path, 1) }}>
+                      <ArrowDown className="mr-2 h-3.5 w-3.5" />
+                      Move down
+                    </Button>
+                    {open && p.onReveal && (
+                      <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); p.onReveal?.() }}>
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        Show in Finder
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-44 p-1">
-                      {p.onExport && (
-                        <Button variant="ghost" size="sm" className="w-full justify-start" aria-label={`Export "${c.title}" as Markdown`} onClick={() => { setMenu(null); p.onExport?.(c.id) }}>
-                          <Download className="mr-2 h-3.5 w-3.5" />
-                          Export as Markdown
-                        </Button>
-                      )}
-                      {p.onDelete && (
-                        <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onClick={() => { setMenu(null); setConfirm(c.id) }}>
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          Delete chat…
-                        </Button>
-                      )}
-                    </PopoverContent>
-                  </Popover>
-                )}
+                    )}
+                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Remove ${base(path)} from the list`} title="Removes it from this list only; the folder and its chats are kept" disabled={p.disabled || open} onClick={() => { setMenu(null); p.onForget(path) }}>
+                      <X className="mr-2 h-3.5 w-3.5" />
+                      Remove from the list
+                    </Button>
+                    {open && <p className="px-2 pb-1 text-xs text-muted-foreground">The open workspace cannot be removed. Open another one first.</p>}
+                  </PopoverContent>
+                </Popover>
               </div>
-            )
-          )}
-        </div>
-      )}
-    </>
+              {!shut && (
+                <div className="space-y-1 px-1 pb-1">
+                  <Button variant="ghost" size="sm" className="h-7 w-full justify-start text-muted-foreground" disabled={p.disabled} aria-label={`New chat in ${base(path)}`} onClick={() => p.onNew(path)}>
+                    <Plus className="mr-1 h-3.5 w-3.5" />
+                    New chat
+                  </Button>
+                  {chats.length === 0 && <p className="px-2 text-xs text-muted-foreground">No saved chats yet.</p>}
+                  {chats.map((c) => {
+                    const here = open && c.id === p.current
+                    if (open && confirm === c.id)
+                      return (
+                        <div key={c.id} className="space-y-1 rounded-md border p-2 text-xs">
+                          <p className="[overflow-wrap:anywhere]">Delete &quot;{c.title}&quot;? This cannot be undone.</p>
+                          <div className="flex gap-1">
+                            <Button size="sm" variant="destructive" className="h-7" onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
+                              Delete chat
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    return (
+                      <div key={c.id} className={`group relative flex items-center rounded-md ${here ? 'bg-accent text-accent-foreground' : ''}`} aria-current={here ? 'true' : undefined}>
+                        {here && <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary" />}
+                        <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(path, c.id)}>
+                          <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
+                          <span className="min-w-0 flex-1">
+                            <span className={`block truncate ${here ? 'font-medium' : ''}`}>{c.title}</span>
+                            <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
+                          </span>
+                        </Button>
+                        {open && (p.onExport || p.onDelete) && (
+                          <Popover open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
+                            <PopoverTrigger asChild>
+                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-56 p-1">
+                              {p.onExport && (
+                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Export "${c.title}" as Markdown`} onClick={() => { setMenu(null); p.onExport?.(c.id) }}>
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  Export as Markdown
+                                </Button>
+                              )}
+                              {p.onDelete && (
+                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap text-destructive hover:text-destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onClick={() => { setMenu(null); setConfirm(c.id) }}>
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  Delete chat…
+                                </Button>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

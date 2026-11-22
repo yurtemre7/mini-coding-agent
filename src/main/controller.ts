@@ -19,9 +19,9 @@ import { exportMarkdown } from '../core/export'
 import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
-import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
+import { forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type TerminalEvent, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
 
 const MAX_SYSTEM_PROMPT = 20_000
 export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
@@ -283,7 +283,7 @@ export class Controller {
 
   /** Launch: reopen the last workspace (the trust prompt still applies). */
   async openLast(): Promise<void> {
-    const [dir] = await recentWorkspaces(this.d.home)
+    const dir = await lastWorkspace(this.d.home)
     if (dir) await this.selectWorkspace(dir)
   }
 
@@ -302,6 +302,16 @@ export class Controller {
     if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace.')
     if (dir === this.workspace) throw new Error('Open another workspace first; this one is in use.')
     await forgetWorkspace(dir, this.d.home)
+  }
+
+  /** Saves the order the user arranged. Paths that are not in the list are ignored. */
+  async reorderRecent(order: string[]): Promise<void> {
+    await reorderWorkspaces(order, this.d.home)
+  }
+
+  /** Every listed workspace with its saved chats (newest first), in the user's order: the sidebar tree. */
+  async overview(): Promise<WorkspaceChats[]> {
+    return (await this.recent()).map((path) => ({ path, chats: listSessions(path, this.d.home) }))
   }
 
   chats(): SessionInfo[] {

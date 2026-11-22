@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Columns2, Columns3, ExternalLink, FolderOpen, PanelLeft, PanelRight, Settings, Square } from 'lucide-react'
-import type { AppInfo, CommandInfo, ProviderId, SessionInfo, SettingsInfo } from '../../shared/types'
+import { Columns2, Columns3, PanelLeft, PanelRight, Settings, Square } from 'lucide-react'
+import type { AppInfo, CommandInfo, ProviderId, SettingsInfo, WorkspaceChats } from '../../shared/types'
 import type { ModelList } from '@/components/ModelCombobox'
 import { EmptyState } from './components/EmptyState'
 import { UsageMeter } from './components/UsageMeter'
@@ -47,8 +47,7 @@ export default function App() {
   const [open, setOpen] = useState(false)
   const [info, setInfo] = useState<AppInfo | null>(null)
   useEffect(() => void api?.invoke('app:getInfo').then(setInfo, () => {}), [api])
-  const [recent, setRecent] = useState<string[]>([])
-  const [chats, setChats] = useState<SessionInfo[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceChats[]>([])
   const [commands, setCommands] = useState<CommandInfo[]>([])
   const [setupError, setSetupError] = useState<string | null>(null)
 
@@ -63,12 +62,23 @@ export default function App() {
   const busy = s.state?.busy
   useEffect(() => {
     if (!api || busy) return
-    api.invoke('workspace:recent').then(setRecent, () => {})
-    api.invoke('session:list').then(setChats, () => {})
+    api.invoke('workspace:overview').then(setWorkspaces, () => {})
     api.invoke('commands:list').then(setCommands, () => {})
   }, [api, workspace, busy])
 
-  const refreshChats = () => api?.invoke('session:list').then(setChats, () => {})
+  const refreshWorkspaces = () => api?.invoke('workspace:overview').then(setWorkspaces, () => {})
+  // a chat or a new chat in another workspace opens that workspace first; if that fails (trust declined, busy) nothing else happens
+  const switchTo = async (path: string) => {
+    if (path === workspace) return true
+    await s.openWorkspace(path)
+    return (await api!.invoke('session:getState')).workspace === path
+  }
+  const openChatIn = async (path: string, id: string) => {
+    if (await switchTo(path)) await s.openChat(id)
+  }
+  const newChatIn = async (path: string) => {
+    if (await switchTo(path)) await s.newChat()
+  }
 
   // the provider's model list (fetched in main with the stored key); refetched when the provider or its key changes
   const provider = settings?.provider
@@ -145,19 +155,25 @@ export default function App() {
       <Drag />
       {lay.layout.sidebar && (
       <aside aria-label="Sidebar" className="flex w-60 shrink-0 flex-col gap-3 border-r bg-sidebar p-3 pt-12">
-        <div className="flex gap-1">
-          <Button variant="outline" className="min-w-0 flex-1" disabled={v.busy} onClick={s.selectWorkspace} title={v.workspace ?? undefined}>
-            <FolderOpen className="mr-2 h-4 w-4 shrink-0" />
-            <span className="min-w-0 truncate">{v.workspace ? v.workspace.split('/').filter(Boolean).at(-1) : 'Open workspace'}</span>
-          </Button>
-          {v.workspace && (
-            <Button variant="outline" size="icon" className="shrink-0" aria-label="Show the workspace in Finder" title="Show in Finder" onClick={() => void s.reveal()}>
-              <ExternalLink className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
         <div className="flex-1 space-y-4 overflow-y-auto text-sm">
-          <ChatsSidebar workspace={v.workspace} recent={recent} chats={chats} current={v.chat} disabled={v.busy} onWorkspace={s.openWorkspace} onForget={(w) => void s.forgetWorkspace(w).then(() => api.invoke('workspace:recent').then(setRecent))} onChat={s.openChat} onNew={s.newChat} onDelete={(id) => void s.deleteChat(id).then(refreshChats)} onExport={(id) => void s.exportChat(id)} />
+          <ChatsSidebar
+            workspaces={workspaces}
+            workspace={v.workspace}
+            current={v.chat}
+            disabled={v.busy}
+            onNewWorkspace={s.selectWorkspace}
+            onWorkspace={(path) => void s.openWorkspace(path)}
+            onReorder={(order) => {
+              setWorkspaces((ws) => order.flatMap((p) => ws.filter((w) => w.path === p))) // show the new order at once
+              void s.reorderWorkspaces(order).then(refreshWorkspaces)
+            }}
+            onForget={(w) => void s.forgetWorkspace(w).then(refreshWorkspaces)}
+            onReveal={() => void s.reveal()}
+            onChat={(path, id) => void openChatIn(path, id)}
+            onNew={(path) => void newChatIn(path)}
+            onDelete={(id) => void s.deleteChat(id).then(refreshWorkspaces)}
+            onExport={(id) => void s.exportChat(id)}
+          />
           <TodoSidebar todos={todos} />
         </div>
         {v.usage && <UsageMeter usage={v.usage} />}
