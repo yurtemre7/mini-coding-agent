@@ -1,3 +1,4 @@
+import { killTree } from './shell'
 import { spawn } from 'node:child_process'
 import { field, stringField } from '../shared/guards'
 
@@ -92,13 +93,9 @@ function runCommand(def: HookDef, stdin: string, cwd: string, signal?: AbortSign
     let stderr = ''
     let done = false
     let timedOut = false
-    const child = spawn(def.command, { cwd, shell: true, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, MCA_PROJECT_DIR: cwd } })
+    const child = spawn(def.command, { cwd, shell: true, detached: true, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, MCA_PROJECT_DIR: cwd } })
     const killGroup = () => {
-      try {
-        process.kill(-child.pid!, 'SIGKILL')
-      } catch {
-        // already gone
-      }
+      killTree(child.pid!, 'SIGKILL')
     }
     const finish = (r: Ran) => {
       if (done) return

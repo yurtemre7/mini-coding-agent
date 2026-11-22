@@ -1,10 +1,11 @@
 import { homedir } from 'node:os'
-import { relative } from 'node:path'
+import { isAbsolute, relative } from 'node:path'
 import picomatch from 'picomatch'
 import { field, stringField } from '../shared/guards'
 import { PERMISSION_MODES, type Decision, type PermissionMode, type PermissionRequest, type PlanRequest, type TrustRequest } from '../shared/types'
 import { isInsideWorkspace, isProtectedPath, realpathNearest, resolvePath } from './paths'
 import { Hooks } from './hooks'
+import { getShell } from './shell'
 import type { McpConfig } from './mcp'
 import { loadSettings, type Rules } from './settings'
 import type { PlanControl, Tool, ToolContext } from './tool'
@@ -127,7 +128,7 @@ function parseRule(rule: string): { tool: string; spec?: string } {
   return m ? { tool: alias(m[1]), spec: m[2] } : { tool: alias(rule.trim()) }
 }
 
-const expandHome = (s: string): string => s.replace(/^~(?=$|\/)/, homedir())
+const expandHome = (s: string): string => s.replace(/^~(?=$|\/)/, homedir().replace(/\\/g, '/')) // picomatch patterns use forward slashes
 
 function pathOf(tool: Tool, input: unknown, ctx: ToolContext): string | undefined {
   const p = tool.name === 'Glob' || tool.name === 'Grep' ? (field(input, 'path') ?? ctx.cwd) : tool.name === 'Read' || tool.name === 'Write' || tool.name === 'Edit' ? field(input, 'file_path') : undefined
@@ -136,11 +137,11 @@ function pathOf(tool: Tool, input: unknown, ctx: ToolContext): string | undefine
 
 function globMatches(spec: string, abs: string, root: string, realOnly: boolean): boolean {
   const pat = expandHome(spec)
-  const opts = { dot: true, nocase: !realOnly && process.platform === 'darwin' } // deny/ask fold case on macOS (cat .ENV); allow stays exact
+  const opts = { dot: true, nocase: !realOnly && (process.platform === 'darwin' || process.platform === 'win32') } // deny/ask fold case on macOS and Windows (cat .ENV); allow stays exact
   const rootReal = realpathNearest(root)
   // deny/ask: lexical or real path matches (stricter). allow: only the real path, so a symlink inside the workspace cannot borrow an allowed glob
   return (realOnly ? [realpathNearest(abs)] : [abs, realpathNearest(abs)]).some((p) => {
-    const target = pat.startsWith('/') ? p : relative(p === abs ? root : rootReal, p) // relative globs are workspace-relative
+    const target = (isAbsolute(pat) ? p : relative(p === abs ? root : rootReal, p)).replace(/\\/g, '/') // relative globs are workspace-relative
     return picomatch(pat, opts)(target) || picomatch(pat, opts)(target + '/x') // a directory search (Grep ~/.ssh) matches `dir/**`
   })
 }
@@ -200,6 +201,8 @@ function bashRuleMatches(rules: string[], cmd: string, mode: 'any' | 'all'): boo
   const p = parseCommand(cmd)
   const whole = specs.some((r) => r.spec === cmd.trim()) // exact-string rules (session grants of compound commands); a prefix rule must never match a whole chain
   if (mode === 'all') {
+    // PowerShell has other quoting, escaping, aliases and operators than the POSIX parser understands: only a bare `Bash` rule or the exact command is trusted there
+    if (getShell().kind === 'powershell') return whole
     const hit = (seg: string) => specs.some((r) => bashSpecMatches(r.spec!, seg))
     return !p.subst && (whole || (p.segments.length > 0 && p.segments.map((g) => g.replace(/\s+/g, ' ').trim()).every(hit)))
   }
@@ -259,6 +262,18 @@ function isVitalTarget(t: string): boolean {
   return parts.length === 0 || (parts.length === 1 && (SYSTEM_DIRS.has(parts[0]) || parts[0] === '*')) || (parts.length === 2 && parts[1] === '*' && SYSTEM_DIRS.has(parts[0]))
 }
 
+const PS_DELETE = '(?:remove-item|rm|ri|del|erase|rd|rmdir)'
+const PS_VITAL = String.raw`(?:~|\$env:(?:userprofile|homepath|systemroot|windir|systemdrive|programfiles)|\$home|[a-z]:[\\/]?\*?|[a-z]:[\\/](?:windows|users|program files(?: \(x86\))?)[\\/]?\*?)`
+/** Windows/PowerShell commands that can wipe a drive or the user's profile, run downloaded code, or shut the machine down. Checked for every command, whatever the shell. */
+function powershellDanger(cmd: string): string | undefined {
+  const t = cmd.replace(/['"`]/g, '')
+  if (new RegExp(String.raw`\b${PS_DELETE}\b[^;&|]*-r(?:ecurse)?\b[^;&|]*\s${PS_VITAL}(?=\s|$)`, 'i').test(t) || new RegExp(String.raw`\b${PS_DELETE}\b[^;&|]*\s${PS_VITAL}(?=\s|$)[^;&|]*-r(?:ecurse)?\b`, 'i').test(t)) return 'this command can delete a whole drive, the system folders or your user profile'
+  if (/\b(rd|rmdir)\b[^;&|]*\/s\b[^;&|]*\s(?:[a-z]:[\\/]?\*?|%userprofile%|%systemroot%|%windir%)(?=\s|$)/i.test(t)) return 'this command can delete a whole drive, the system folders or your user profile'
+  if (/\b(format-volume|clear-disk|initialize-disk|remove-partition|stop-computer|restart-computer)\b|\bformat\s+[a-z]:|\bdiskpart\b/i.test(t)) return 'this command can erase a disk or shut the machine down'
+  if (/\b(iwr|irm|invoke-webrequest|invoke-restmethod|curl|wget)\b[^;&]*\|\s*(iex|invoke-expression)\b/i.test(t) || /\b(iex|invoke-expression)\b[^;&]*\b(downloadstring|iwr|irm|invoke-webrequest|invoke-restmethod)\b/i.test(t)) return 'this runs downloaded code'
+  return undefined
+}
+
 /**
  * Built-in guard, independent of any allow rule or mode (even bypassPermissions): commands that can wipe the machine or the home directory,
  * overwrite a disk, or run downloaded code as a shell. It only ever adds a prompt (never an auto-allow). Commands are split on shell syntax
@@ -286,6 +301,8 @@ export function dangerOf(cmd: string): string | undefined {
       if (['shutdown', 'reboot', 'halt', 'poweroff', 'init'].includes(prog) && (prog !== 'init' || /^[06]$/.test(args[0] ?? ''))) return 'this command shuts the machine down'
     }
   }
+  const ps = powershellDanger(cmd)
+  if (ps) return ps
   const unquoted = plain.replace(/['"\\]/g, '') // bash removes quotes before it opens a target or starts a program
   if (/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/.test(unquoted)) return 'this looks like a fork bomb'
   if (/>\s*\/dev\/(sd|hd|nvme|disk|rdisk)/.test(unquoted)) return 'this command can overwrite a disk'

@@ -19,6 +19,16 @@ mac:
     - dmg
     - zip
   artifactName: '${productName}-${version}-${arch}.${ext}'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: '${productName}-${version}-setup.${ext}'
+  signAndEditExecutable: false # unsigned: no code-signing certificate is used
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 dmg:
   title: '${productName}'
 asarUnpack:

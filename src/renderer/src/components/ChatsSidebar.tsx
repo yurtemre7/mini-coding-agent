@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ago } from '@/lib/ago'
 
-const base = (p: string) => p.split('/').filter(Boolean).at(-1) ?? p
+const base = (p: string) => p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
 const KEY = 'mca.collapsed'
 const load = (): Record<string, boolean> => {
   try {

@@ -8,7 +8,7 @@ import { Terminal } from './terminal'
 const setup = async () => {
   const cwd = await realpath(await mkdtemp(join(tmpdir(), 'mca-term-')))
   const events: TerminalEvent[] = []
-  const t = new Terminal(cwd, (e) => void events.push(e), '/bin/sh')
+  const t = new Terminal(cwd, (e) => void events.push(e), { kind: 'bash', path: '/bin/sh' })
   const exited = () => new Promise<void>((res) => { const i = setInterval(() => { if (events.some((e) => e.type === 'exit')) { clearInterval(i); res() } }, 5) })
   return { cwd, events, t, exited }
 }
