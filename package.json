@@ -8,11 +8,14 @@
     "mca": "./out/cli/index.js"
   },
   "author": "MCA",
+  "engines": {
+    "node": ">=26.13.1"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev --watch",
     "build": "electron-vite build && npm run build:cli",
-    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node22 --format=cjs --packages=external --banner:js=\"#!/usr/bin/env node\" --outfile=out/cli/index.js",
+    "build:cli": "esbuild src/cli/index.ts --bundle --platform=node --target=node26 --format=cjs --packages=external --banner:js=\"#!/usr/bin/env node\" --outfile=out/cli/index.js",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
@@ -44,7 +47,7 @@
     "@tailwindcss/vite": "^4.1.7",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@types/node": "^22.15.21",
+    "@types/node": "^26.6.6",
     "@types/picomatch": "^4.0.3",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
