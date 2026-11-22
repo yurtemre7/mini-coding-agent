@@ -55,6 +55,10 @@ describe('openRouterEvents', () => {
     expect(events[0]).toEqual({ type: 'tool_use', id: 'c', name: 'Read', input: '{oops' })
   })
 
+  it('passes through the cost OpenRouter reports', async () => {
+    const events = await run(delta({ content: 'x' }), sse({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 1, cost: 0.0042 } }), 'data: [DONE]\n\n')
+    expect(events).toContainEqual({ type: 'usage', contextTokens: 5, outputTokens: 1, costUsd: 0.0042 })
+  })
   it('maps length to max_tokens and estimates usage (chars/4) when none is sent', async () => {
     const events = await run(delta({ content: 'abcdefgh' }, 'length'), 'data: [DONE]\n\n')
     expect(events).toContainEqual({ type: 'usage', contextTokens: 0, outputTokens: 2 })

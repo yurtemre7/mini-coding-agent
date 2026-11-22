@@ -55,7 +55,7 @@ describe('AnthropicProvider', () => {
       { type: 'text_delta', text: 'Hel' },
       { type: 'text_delta', text: 'lo' },
       { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'x' } },
-      { type: 'usage', contextTokens: 115, outputTokens: 7 },
+      { type: 'usage', contextTokens: 115, outputTokens: 7, cacheReadTokens: 100, cacheWriteTokens: 5 },
       { type: 'stop', reason: 'tool_use' }
     ])
   })

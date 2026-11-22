@@ -5,6 +5,7 @@ import { diffFor, summarizeChanges } from './changes'
 import type { AgentSession } from './agent'
 import { parseFrontmatter } from './frontmatter'
 import { MODES, parseMode, type Permissions } from './permissions'
+import { enabledSkills } from './skill'
 
 export const BUILTINS = ['help', 'clear', 'compact', 'mode', 'model', 'provider', 'rewind', 'diff', 'trust', 'resume', 'mcp', 'exit'] as const
 
@@ -42,6 +43,11 @@ export async function loadCommands(cwd: string, o: { home?: string } = {}): Prom
         // unreadable file: not a command
       }
     }
+  }
+  // an enabled skill is also a command: `/name request` makes the model load it first. Commands and built-ins win a name clash.
+  for (const s of await enabledSkills(cwd, { home }).catch(() => [])) {
+    if (found.has(s.name) || (BUILTINS as readonly string[]).includes(s.name)) continue
+    found.set(s.name, { name: s.name, description: `Skill: ${s.description}`, body: `Load the "${s.name}" skill with the Skill tool, then follow it for this request.`, file: s.file })
   }
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
 }

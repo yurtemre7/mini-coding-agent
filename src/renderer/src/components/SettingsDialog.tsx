@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, SlidersHorizontal, Sun } from 'lucide-react'
+import { Check, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
-import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo } from '../../../shared/types'
+import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -220,9 +220,39 @@ function AboutPanel({ info }: { info?: AppInfo | null }) {
   )
 }
 
-export type SettingsTab = 'general' | 'provider' | 'instructions' | 'mcp' | 'about'
+const SKILL_SOURCES: Record<SkillInfo['source'], string> = { claude: 'Claude Code', plugin: 'Claude plugin', antigravity: 'Antigravity', mca: 'MCA', project: 'This project' }
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
+/** Every skill found on disk with a switch. A switched-off skill is neither offered to the model nor runnable as /name. */
+export function SkillsPanel({ skills, onToggle }: { skills: SkillInfo[]; onToggle(name: string, enabled: boolean): void }) {
+  return (
+    <section className="space-y-3" aria-label="Skills">
+      <p className="text-sm text-muted-foreground">
+        Found in Claude Code (<code>~/.claude/skills</code> and plugins), Antigravity, <code>~/.mca/skills</code> and this project. Type <code>/name</code> in a chat to run one; the model also sees the enabled ones and can load them itself.
+      </p>
+      {skills.length === 0 && <p className="text-sm text-muted-foreground">No skills found.</p>}
+      <ul className="space-y-2">
+        {skills.map((s) => (
+          <li key={s.name} className="flex items-start gap-3 rounded-md border p-2">
+            <Switch checked={s.enabled} aria-label={`Enable ${s.name}`} onCheckedChange={(v) => onToggle(s.name, v)} />
+            <div className="min-w-0 flex-1">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium [overflow-wrap:anywhere]">
+                /{s.name}
+                <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{SKILL_SOURCES[s.source]}</span>
+              </p>
+              <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]" title={s.file}>
+                {s.description}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+export type SettingsTab = 'general' | 'provider' | 'instructions' | 'skills' | 'mcp' | 'about'
+
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, info, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(44rem,85vh)] flex-col gap-4 sm:max-w-3xl [&>*]:min-w-0">
@@ -244,6 +274,10 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
               <ScrollText aria-hidden />
               Instructions
             </TabsTrigger>
+            <TabsTrigger value="skills">
+              <Sparkles aria-hidden />
+              Skills
+            </TabsTrigger>
             <TabsTrigger value="mcp">
               <Plug aria-hidden />
               MCP servers
@@ -261,6 +295,9 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
           </TabsContent>
           <TabsContent value="instructions" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <InstructionsPanel settings={settings} onUpdate={actions.onUpdate} />
+          </TabsContent>
+          <TabsContent value="skills" className="min-h-0 min-w-0 overflow-y-auto pr-1">
+            <SkillsPanel skills={skills} onToggle={onSkill} />
           </TabsContent>
           <TabsContent value="mcp" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <section className="space-y-1" aria-label="MCP servers">

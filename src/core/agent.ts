@@ -4,6 +4,7 @@ import { CheckpointStore } from './checkpoints'
 import { summarizeChanges } from './changes'
 import { FileState } from './filestate'
 import { Hooks, MAX_STOP_BLOCKS } from './hooks'
+import { estimateCostUsd } from './provider/pricing'
 import type { Block, Message, ModelProvider } from './provider/types'
 import type { Transcript } from './session'
 import { LoopDetector } from './watchdog'
@@ -294,7 +295,10 @@ export async function runTurn(history: Message[], userText: string, opts: TurnOp
           } else if (ev.type === 'tool_use') content.push(ev)
           else if (ev.type === 'usage') {
             context.tokens = ev.contextTokens
-            fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow, inputTokens: ev.contextTokens, outputTokens: ev.outputTokens })
+            const cacheRead = ev.cacheReadTokens ?? 0
+            const cacheWrite = ev.cacheWriteTokens ?? 0
+            const costUsd = ev.costUsd ?? estimateCostUsd(opts.model, { input: Math.max(0, ev.contextTokens - cacheRead - cacheWrite), cacheRead, cacheWrite, output: ev.outputTokens })
+            fe.emit({ type: 'usage', contextTokens: ev.contextTokens, contextWindow, inputTokens: ev.contextTokens, outputTokens: ev.outputTokens, ...(costUsd !== undefined && { costUsd }) })
           } else stop = ev.reason
         }
       } catch (e) {

@@ -1,9 +1,13 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Bash } from './bash'
+import { resetRtk } from '../rtk'
 import { testCtx } from './testutil'
+
+// the real login-shell environment is cached for the whole run; these tests change PATH, so read it fresh
+vi.mock('../env', () => ({ loginEnv: async () => ({ ...process.env }) }))
 
 const mk = () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'mca-bash-')))
@@ -78,5 +82,21 @@ describe('Bash', () => {
     const out = await run(ctx, 'yes abcdefghij | head -c 200000')
     expect(out).toContain('characters truncated')
     expect(out.length).toBeLessThan(31_000)
+  })
+  it('runs the RTK form of a command when rtk is on PATH', async () => {
+    const { dir, ctx } = mk()
+    const bin = join(dir, 'bin')
+    mkdirSync(bin)
+    writeFileSync(join(bin, 'rtk'), '#!/bin/sh\n[ "$1" = rewrite ] && echo "echo REWRITTEN" && exit 0\nexit 1\n')
+    chmodSync(join(bin, 'rtk'), 0o755)
+    const old = process.env.PATH
+    resetRtk()
+    process.env.PATH = `${bin}:${old}`
+    try {
+      expect(await run(ctx, 'echo original')).toContain('REWRITTEN')
+    } finally {
+      process.env.PATH = old
+      resetRtk()
+    }
   })
 })

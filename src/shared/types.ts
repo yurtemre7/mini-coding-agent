@@ -73,7 +73,7 @@ export type AgentEvent =
   | { type: 'tool_end'; id: string; result: string; isError: boolean }
   | { type: 'todos'; todos: Todo[] }
   | { type: 'attention'; reason: 'loop' | 'long' | 'prompt'; message: string } // the user may be away: a frontend can notify them
-  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number }
+  | { type: 'usage'; contextTokens: number; contextWindow: number; /** this request only; absent on estimates */ inputTokens?: number; outputTokens?: number; /** estimated or provider-reported cost of this request in USD; absent when the model has no known price */ costUsd?: number }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'turn_end'; reason: 'done' | 'aborted' | 'error' | 'max_iterations' }
   /** Files the agent changed: in the turn that just ended, and in the whole chat. Summaries only; diffs are fetched on demand. */
@@ -107,7 +107,8 @@ export interface ViewState {
   todos: Todo[]
   changes: { turn: ChangeSummary[]; total: ChangeSummary[] }
   /** totalIn/totalOut: tokens sent and received by this chat's requests since it was opened (subagent requests are not counted) */
-  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number }
+  /** totalCostUsd: summed cost of the requests that had a price; costPartial is true when some request had none (so the sum is a lower bound) */
+  usage?: { contextTokens: number; contextWindow: number; totalIn: number; totalOut: number; totalCostUsd?: number; costPartial?: boolean }
   mode: PermissionMode
   provider: ProviderId
   model: string
@@ -131,6 +132,12 @@ export interface EventBatch {
   events: ViewEvent[]
 }
 
+/** A workspace in the sidebar with its saved chats (newest first). */
+export interface WorkspaceChats {
+  path: string
+  chats: SessionInfo[]
+}
+
 /** A saved chat of the current workspace. */
 export interface SessionInfo {
   id: string
@@ -145,6 +152,15 @@ export interface CommandInfo {
   name: string
   description: string
   custom: boolean
+}
+
+/** A skill found on disk (Claude Code, its plugins, Antigravity, MCA or the project) and whether it is switched on. */
+export interface SkillInfo {
+  name: string
+  description: string
+  source: 'claude' | 'plugin' | 'antigravity' | 'mca' | 'project'
+  file: string
+  enabled: boolean
 }
 
 export interface SettingsInfo {
@@ -201,6 +217,10 @@ export interface IpcContract {
     /** Only a path from the recent list is opened; anything else is refused. */
     'workspace:open': { args: [path: string]; result: void }
     'workspace:forget': { args: [path: string]; result: void }
+    /** Saves the order of the workspace list (drag and drop, move up/down). */
+    'workspace:reorder': { args: [order: string[]]; result: void }
+    /** Every listed workspace with its saved chats, in the user's order. */
+    'workspace:overview': { args: []; result: WorkspaceChats[] }
     /** Saved chats of the current workspace, newest first. */
     'session:list': { args: []; result: SessionInfo[] }
     /** Resume a listed chat: main rebuilds the view and keeps appending to its file. */
@@ -235,6 +255,8 @@ export interface IpcContract {
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
     /** Slash commands of the current workspace (built-in and custom) for autocomplete. */
     'commands:list': { args: []; result: CommandInfo[] }
+    'skills:list': { args: []; result: SkillInfo[] }
+    'skills:set': { args: [name: string, enabled: boolean]; result: SkillInfo[] }
   }
   events: {
     'agent:events': EventBatch
@@ -244,7 +266,7 @@ export interface IpcContract {
 }
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]

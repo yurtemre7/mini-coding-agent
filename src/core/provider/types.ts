@@ -12,7 +12,8 @@ export type ToolDef = { name: string; description: string; input_schema: JsonSch
 export type StreamEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown } // emitted once, fully parsed
-  | { type: 'usage'; contextTokens: number; outputTokens: number } // contextTokens includes cached tokens
+  // contextTokens includes cached tokens; the cache fields split them out for pricing; costUsd is the provider's own figure when it reports one
+  | { type: 'usage'; contextTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; costUsd?: number }
   | { type: 'stop'; reason: StopReason }
 
 export interface StreamRequest {

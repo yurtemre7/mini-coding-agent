@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -138,6 +138,18 @@ describe('Controller', () => {
     await c.forgetRecent(ws)
     expect(await c.recent()).toEqual([other])
     expect((await stat(ws)).isDirectory()).toBe(true) // the folder itself is still there
+  })
+  it('lists every workspace with its chats in the saved order, and saves a new order', async () => {
+    const { c, ws, idle } = await setup([[]])
+    ;(c as any).d.makeProvider = () => new FakeProvider([say])
+    c.send('in the first workspace')
+    await idle()
+    const other = await mkdtemp(join(tmpdir(), 'mca-ws2-'))
+    await c.selectWorkspace(other)
+    expect((await c.overview()).map((w) => w.path)).toEqual([other, ws])
+    expect((await c.overview()).find((w) => w.path === ws)!.chats.map((x) => x.title)).toEqual(['in the first workspace'])
+    await c.reorderRecent([ws, other, '/etc'])
+    expect((await c.overview()).map((w) => w.path)).toEqual([ws, other])
   })
   describe('chat management and instructions', () => {
     it('deletes a chat (replacing the open one) and exports a chat as Markdown', async () => {
@@ -386,5 +398,15 @@ describe('main -> batcher -> renderer apply', () => {
       await expect(c.changeRevert('turn', 'b.txt')).rejects.toThrow(/while a turn is running/)
       c.abort()
     })
+  })
+  it('lists skills with their state and persists a switch', async () => {
+    const { c, ws } = await setup([[]])
+    await mkdir(join(ws, '.mca', 'skills', 'ponytail'), { recursive: true })
+    await writeFile(join(ws, '.mca', 'skills', 'ponytail', 'SKILL.md'), '---\ndescription: ride\n---\nbody')
+    expect(await c.skillList()).toMatchObject([{ name: 'ponytail', source: 'project', enabled: true }])
+    expect(await c.setSkill('ponytail', false)).toMatchObject([{ name: 'ponytail', enabled: false }])
+    expect((await c.commandList()).map((x) => x.name)).not.toContain('ponytail')
+    expect(await c.setSkill('ponytail', true)).toMatchObject([{ enabled: true }])
+    expect((await c.commandList()).map((x) => x.name)).toContain('ponytail')
   })
 })

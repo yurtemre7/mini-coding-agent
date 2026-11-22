@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { AgentSession, type Frontend } from '../core/agent'
@@ -19,9 +20,10 @@ import { exportMarkdown } from '../core/export'
 import { deleteSession, listSessions, loadSession, parseTranscript, sessionDir, Transcript } from '../core/session'
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
-import { forgetWorkspace, isTrusted, loadPrefs, recentWorkspaces, rememberWorkspace, savePrefs, trustWorkspace } from '../core/trust'
+import { discoverSkills } from '../core/skill'
+import { disabledSkills, setSkillEnabled, forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type TerminalEvent, type ViewEvent, type ViewState } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
 
 const MAX_SYSTEM_PROMPT = 20_000
 export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
@@ -283,7 +285,7 @@ export class Controller {
 
   /** Launch: reopen the last workspace (the trust prompt still applies). */
   async openLast(): Promise<void> {
-    const [dir] = await recentWorkspaces(this.d.home)
+    const dir = await lastWorkspace(this.d.home)
     if (dir) await this.selectWorkspace(dir)
   }
 
@@ -302,6 +304,16 @@ export class Controller {
     if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace.')
     if (dir === this.workspace) throw new Error('Open another workspace first; this one is in use.')
     await forgetWorkspace(dir, this.d.home)
+  }
+
+  /** Saves the order the user arranged. Paths that are not in the list are ignored. */
+  async reorderRecent(order: string[]): Promise<void> {
+    await reorderWorkspaces(order, this.d.home)
+  }
+
+  /** Every listed workspace with its saved chats (newest first), in the user's order: the sidebar tree. */
+  async overview(): Promise<WorkspaceChats[]> {
+    return (await this.recent()).map((path) => ({ path, chats: listSessions(path, this.d.home) }))
   }
 
   chats(): SessionInfo[] {
@@ -453,6 +465,18 @@ export class Controller {
     const builtin = Controller.COMMANDS.map((name) => ({ name, description: BUILTIN_INFO[name as keyof typeof BUILTIN_INFO], custom: false }))
     const custom = this.workspace ? await loadCommands(this.workspace, { home: this.d.home }) : []
     return [...builtin, ...custom.map((c) => ({ name: c.name, description: c.description, custom: true }))]
+  }
+
+  /** Every skill found for this workspace, with its on/off state (Settings > Skills). */
+  async skillList(): Promise<SkillInfo[]> {
+    const off = new Set(await disabledSkills(this.d.home))
+    const skills = await discoverSkills(this.workspace ?? this.d.home ?? homedir(), { home: this.d.home })
+    return skills.map((s) => ({ name: s.name, description: s.description, source: s.source, file: s.file, enabled: !off.has(s.name) }))
+  }
+
+  async setSkill(name: string, enabled: boolean): Promise<SkillInfo[]> {
+    await setSkillEnabled(name, enabled, this.d.home)
+    return this.skillList()
   }
 
   /** Never trusts silently: the user answers the same TrustRequest prompt as on workspace open. */

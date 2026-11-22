@@ -14,4 +14,13 @@ describe('UsageMeter', () => {
     expect(screen.getByRole('progressbar').firstElementChild).toHaveClass('bg-destructive')
     expect(screen.queryByText(/This chat/)).toBeNull()
   })
+  it('shows the estimated cost, a lower bound when partial, and nothing when no request was priced', () => {
+    const base = { contextTokens: 1, contextWindow: 100, totalIn: 10, totalOut: 1 }
+    const { rerender } = render(<UsageMeter usage={{ ...base, totalCostUsd: 0.0042 }} />)
+    expect(screen.getByText('Est. cost $0.0042')).toBeInTheDocument()
+    rerender(<UsageMeter usage={{ ...base, totalCostUsd: 1.236, costPartial: true }} />)
+    expect(screen.getByText('Est. cost ≥ $1.24')).toBeInTheDocument()
+    rerender(<UsageMeter usage={{ ...base, costPartial: true }} />)
+    expect(screen.queryByText(/Est. cost/)).toBeNull()
+  })
 })

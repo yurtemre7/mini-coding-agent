@@ -86,6 +86,19 @@ describe('runTurn', () => {
     expect(results(s.history)[0].content).toBe('(no output)')
   })
 
+  it('usage events carry a cost: estimated from the model price, or the provider\'s own figure', async () => {
+    const u = { type: 'usage' as const, contextTokens: 1_100_000, outputTokens: 100_000, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 }
+    const priced = setup([[text('a'), u, stop('end_turn')]], [], { model: 'claude-sonnet-5-5' })
+    await priced.go()
+    // 100k uncached in x $2 + 1M cached x $0.10 + 100k out x $10 per million
+    expect(events.find((e) => e.type === 'usage')).toMatchObject({ costUsd: 0.2 + 0.1 + 1 })
+    const reported = setup([[text('a'), { ...u, costUsd: 0.5 }, stop('end_turn')]], [], { model: 'claude-sonnet-5-5' })
+    await reported.go()
+    expect(events.find((e) => e.type === 'usage')).toMatchObject({ costUsd: 0.5 })
+    const unknown = setup([[text('a'), u, stop('end_turn')]], [])
+    await unknown.go()
+    expect(events.find((e) => e.type === 'usage')).not.toHaveProperty('costUsd')
+  })
   it('max_tokens: drops the truncated tool_use (never runs it) and asks the model to continue in smaller steps', async () => {
     let ran = 0
     const s = setup([[text('part'), use('1', 'Echo', { msg: 'x' }), stop('max_tokens')], [text('ok'), stop('end_turn')]], [echo({ run: async () => (ran++, 'r') })])

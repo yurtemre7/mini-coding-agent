@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { discoverSkills, loadSkill } from '../skill'
+import { enabledSkills, loadSkill } from '../skill'
 import type { Tool } from '../tool'
 
 const schema = z.object({ name: z.string().min(1).describe('The skill name from the "Available skills" list') })
@@ -10,7 +10,7 @@ export const Skill: Tool<z.infer<typeof schema>> = {
   schema,
   readOnly: true,
   async run({ name }, ctx) {
-    const skills = await discoverSkills(ctx.root)
+    const skills = await enabledSkills(ctx.root)
     const skill = skills.find((s) => s.name === name)
     if (!skill) throw new Error(`Unknown skill "${name}". ${skills.length ? `Available: ${skills.map((s) => s.name).join(', ')}.` : 'No skills are installed.'}`)
     return loadSkill(skill)
