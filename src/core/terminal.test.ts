@@ -15,7 +15,10 @@ const setup = async () => {
 }
 const text = (ev: TerminalEvent[]) => ev.flatMap((e) => (e.type === 'out' ? [e.text] : [])).join('')
 
-describe('Terminal', () => {
+// process spawn and taskkill on a loaded Windows runner can take several seconds
+const SLOW = process.platform === 'win32' ? 30_000 : 5000
+
+describe('Terminal', { timeout: SLOW }, () => {
   it('runs in the workspace, streams output and reports the exit code', async () => {
     const { cwd, events, t, exited } = await setup()
     t.run('pwd; echo err 1>&2; exit 3')
@@ -32,12 +35,12 @@ describe('Terminal', () => {
     expect(t.running).toBe(false)
     t.run('sleep 5')
     expect(() => t.run('echo no')).toThrow(/already running/)
+    await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 1000 : 0))
     t.kill()
     await exited()
     expect(t.running).toBe(false)
   })
-  // taskkill on a loaded Windows runner can take several seconds, so this test gets a longer budget there
-  it('stop ends a long command with a signal', { timeout: process.platform === 'win32' ? 30_000 : 5000 }, async () => {
+  it('stop ends a long command with a signal', async () => {
     const { events, t, exited } = await setup()
     t.run('sleep 30')
     await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 1000 : 100)) // let the shell start before stopping it
