@@ -166,6 +166,19 @@ describe('Controller', () => {
       expect(() => c.deleteChat(chat.id)).toThrow(/Unknown chat/)
       expect(() => c.exportChat(chat.id)).toThrow(/Unknown chat/)
     })
+    it('renames a chat, keeps its position in the list, and rejects bad input', async () => {
+      const { c, idle } = await setup([say])
+      c.send('first question')
+      await idle()
+      const [chat] = c.chats()
+      c.renameChat(chat.id, '  My   plan \n')
+      const [after] = c.chats()
+      expect(after).toMatchObject({ id: chat.id, title: 'My plan', messageCount: chat.messageCount })
+      expect(Math.abs(after.updated - chat.updated)).toBeLessThan(5) // timestamp kept (the filesystem rounds it)
+      expect(c.exportChat(chat.id).markdown).toContain('# My plan')
+      expect(() => c.renameChat(chat.id, '   ')).toThrow(/empty/)
+      expect(() => c.renameChat('nope', 'x')).toThrow(/Unknown chat/)
+    })
     it('refuses to delete a chat while a turn runs', async () => {
       const { c, ws, prompts, idle } = await setup([[]])
       ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'z.txt')), say])
@@ -264,6 +277,17 @@ describe('Controller', () => {
       const c2 = new Controller({ home: (c as any).d.home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} } })
       await c2.init()
       expect((await c2.getSettings()).notifications).toBe(false)
+    })
+    it('notifies when the task finishes, and not once notifications are switched off', async () => {
+      const sent: string[] = []
+      const { c, idle } = await setup([say, say], true, { notify: (m) => void sent.push(m) })
+      c.send('one')
+      await idle()
+      expect(sent).toEqual(['MCA finished the task.'])
+      await c.update({ notifications: false })
+      c.send('two')
+      await idle()
+      expect(sent).toEqual(['MCA finished the task.'])
     })
     it('notifies when a prompt waits too long, but not when it is answered in time', async () => {
       const sent: string[] = []

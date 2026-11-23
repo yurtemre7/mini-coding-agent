@@ -43,6 +43,7 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     skills: (): Promise<SkillInfo[]> => (api ? api.invoke('skills:list').catch(() => []) : Promise.resolve([])),
     setSkill: (name: string, enabled: boolean): Promise<SkillInfo[]> => (api ? api.invoke('skills:set', name, enabled).catch(() => []) : Promise.resolve([])),
     deleteChat: (id: string) => call((a) => a.invoke('session:delete', id)),
+    renameChat: (id: string, title: string) => call((a) => a.invoke('session:rename', id, title)),
     exportChat: (id: string): Promise<string | null> => (api ? api.invoke('session:export', id).catch(() => null) : Promise.resolve(null)),
     reveal: () => call((a) => a.invoke('workspace:reveal')),
     newChat: () => call((a) => a.invoke('session:new')),

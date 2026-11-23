@@ -1,4 +1,5 @@
-import { app, BrowserWindow, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme, shell } from 'electron'
+import { menuTemplate } from './menu'
 import { isExternalUrl } from './urls'
 import { join } from 'path'
 import { REPO_URL, type AppInfo } from '../shared/types'
@@ -65,6 +66,19 @@ app.whenReady().then(async () => {
 
   ipc = await registerIpc(() => BrowserWindow.getAllWindows()[0], getAppInfo)
   createWindow()
+  // native menu: its items and accelerators are sent to the window, which owns what they do
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(
+      menuTemplate({
+        platform: process.platform,
+        name: app.name,
+        send: (action) => {
+          const w = BrowserWindow.getAllWindows()[0]
+          if (w && !w.isDestroyed()) w.webContents.send('menu:action', action)
+        }
+      })
+    )
+  )
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

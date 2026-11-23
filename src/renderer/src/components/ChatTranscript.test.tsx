@@ -1,6 +1,26 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ChatTranscript, PREVIEW_CHARS } from './ChatTranscript'
+
+describe('ChatTranscript working indicator', () => {
+  afterEach(() => vi.useRealTimers())
+  it('is shown only while busy, names the current activity and counts seconds live', () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<ChatTranscript items={[]} busy={false} />)
+    expect(screen.queryByTestId('working')).toBeNull()
+    rerender(<ChatTranscript items={[{ kind: 'user', text: 'hi' }]} busy />)
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking…')
+    expect(screen.getByRole('status')).toHaveTextContent('0s')
+    act(() => void vi.advanceTimersByTime(3000))
+    expect(screen.getByRole('status')).toHaveTextContent('3s')
+    rerender(<ChatTranscript items={[{ kind: 'user', text: 'hi' }, { kind: 'tool', id: 't', name: 'Bash', input: { command: 'npm test' }, done: false }]} busy />)
+    expect(screen.getByRole('status')).toHaveTextContent('Running Bash · npm test')
+    rerender(<ChatTranscript items={[{ kind: 'text', text: 'partial' }]} busy />)
+    expect(screen.getByRole('status')).toHaveTextContent('Writing…')
+    rerender(<ChatTranscript items={[]} busy={false} />)
+    expect(screen.queryByTestId('working')).toBeNull()
+  })
+})
 
 describe('ChatTranscript', () => {
   it('renders GFM but not raw HTML; links open in a new window', () => {

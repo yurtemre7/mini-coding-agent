@@ -23,7 +23,36 @@ const props = () => ({
 
 describe('ChatsSidebar', () => {
   beforeEach(() => localStorage.clear())
+  it('double-click on a chat activates it (open + focus the message field)', () => {
+    const onActivate = vi.fn()
+    render(<ChatsSidebar {...props()} onActivate={onActivate} />)
+    fireEvent.doubleClick(screen.getByTitle('Fix the bug'))
+    expect(onActivate).toHaveBeenCalledWith('/w/app', 'c1')
+    expect(screen.queryByLabelText(/^Rename/)).toBeNull() // no inline editing from a double-click
+  })
+  it('renames a chat in place from its menu (Enter saves, Escape cancels, empty is ignored)', () => {
+    const onRename = vi.fn()
+    render(<ChatsSidebar {...props()} onRename={onRename} />)
+    const edit = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Rename "Fix the bug"' }))
+      return screen.getByLabelText('Rename "Fix the bug"') as HTMLInputElement
+    }
+    const input = edit()
+    expect(input.value).toBe('Fix the bug')
+    fireEvent.change(input, { target: { value: '  Better   name ' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onRename).toHaveBeenCalledWith('c1', 'Better name')
+    expect(screen.queryByLabelText('Rename "Fix the bug"')).toBeNull()
 
+    const second = edit()
+    fireEvent.change(second, { target: { value: 'Nope' } })
+    fireEvent.keyDown(second, { key: 'Escape' })
+    const third = edit()
+    fireEvent.change(third, { target: { value: '   ' } })
+    fireEvent.blur(third)
+    expect(onRename).toHaveBeenCalledTimes(1)
+  })
   it('has a New workspace button on top; the open workspace is expanded, the others are collapsed tiles', () => {
     const p = props()
     render(<ChatsSidebar {...p} />)

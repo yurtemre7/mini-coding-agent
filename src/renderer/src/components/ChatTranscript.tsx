@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Paperclip, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -89,12 +89,40 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
   )
 }
 
-export function ChatTranscript({ items }: { items: Item[] }) {
+/** What the agent is doing right now, from the newest running tool or the last item. */
+function activityOf(items: Item[]): string {
+  const tool = [...items].reverse().find((i): i is ToolItem => i.kind === 'tool' && !i.done)
+  if (tool) {
+    const subject = toolSubject(tool.input)
+    return `Running ${tool.name}${subject ? ` · ${subject.length > 60 ? `${subject.slice(0, 60)}…` : subject}` : ''}`
+  }
+  return items.at(-1)?.kind === 'text' ? 'Writing…' : 'Thinking…'
+}
+
+/** Live "the agent is working" row: spinner, current activity and the seconds since the turn started. */
+export function WorkingIndicator({ items }: { items: Item[] }) {
+  const [start] = useState(Date.now)
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  const s = Math.max(0, Math.floor((now - start) / 1000))
+  return (
+    <div role="status" aria-live="polite" data-testid="working" className="flex items-center gap-2 text-xs text-muted-foreground">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+      <span className="min-w-0 truncate">{activityOf(items)}</span>
+      <span className="shrink-0 tabular-nums">{s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`}</span>
+    </div>
+  )
+}
+
+export function ChatTranscript({ items, busy = false }: { items: Item[]; busy?: boolean }) {
   const end = useRef<HTMLDivElement>(null)
   const stick = useRef(true) // follow the stream only while the user is already at the bottom
   useEffect(() => {
     if (stick.current) end.current?.scrollIntoView?.({ block: 'end' })
-  }, [items])
+  }, [items, busy])
   return (
     <div
       className="flex-1 space-y-3 overflow-y-auto p-4"
@@ -104,6 +132,7 @@ export function ChatTranscript({ items }: { items: Item[] }) {
       }}
     >
       {items.map((item, i) => (!('parentId' in item) || !item.parentId ? <Row key={keyOf(item, i)} item={item} items={items} /> : null))}
+      {busy && <WorkingIndicator items={items} />}
       <div ref={end} />
     </div>
   )

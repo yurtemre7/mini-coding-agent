@@ -96,4 +96,37 @@ describe('SettingsDialog instructions', () => {
     expect(onUpdate).toHaveBeenCalledWith({ systemReplace: true })
     expect(screen.getByText('Base prompt.')).toBeInTheDocument()
   })
+  it('shortcuts tab: captures the pressed keys, shows conflicts, resets', () => {
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'x', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as any
+    const keys = { permAllowOnce: 'Mod+Enter', permAllowSession: 'Mod+Shift+Enter', permDeny: 'Escape', planApprove: 'Mod+Enter', planReject: 'Escape' }
+    const set = vi.fn((_a: string, c: string) => (c === 'Y' ? 'needs a modifier' : null))
+    const reset = vi.fn()
+    const onOpenChange = vi.fn()
+    render(<SettingsDialog tab="shortcuts" open onOpenChange={onOpenChange} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} keyEditor={{ keys, set, reset }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Allow once (permission)' }))
+    expect(screen.getByText('Press keys…')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Shift', shiftKey: true }) // a bare modifier is ignored
+    expect(set).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'y' })
+    expect(screen.getByRole('alert')).toHaveTextContent('needs a modifier')
+    fireEvent.keyDown(window, { key: 'y', altKey: true })
+    expect(set).toHaveBeenLastCalledWith('permAllowOnce', 'Alt+Y')
+    expect(screen.queryByText('Press keys…')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Deny (permission)' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(set).toHaveBeenLastCalledWith('permDeny', 'Escape')
+    expect(onOpenChange).not.toHaveBeenCalled() // capturing Escape does not close the dialog
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+    expect(reset).toHaveBeenCalled()
+    expect(screen.getByText('Menu shortcuts')).toBeInTheDocument()
+  })
+  it('general tab: the message field highlight is adjustable', () => {
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'x', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as any
+    const onChange = vi.fn()
+    render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} focus={{ value: 60, onChange }} />)
+    const slider = screen.getByLabelText('Message field highlight') as HTMLInputElement
+    expect(slider.value).toBe('60')
+    fireEvent.change(slider, { target: { value: '30' } })
+    expect(onChange).toHaveBeenCalledWith(30)
+  })
 })

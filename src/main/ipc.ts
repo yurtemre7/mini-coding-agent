@@ -17,7 +17,16 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
   const batcher = createBatcher((batch) => send('agent:events', batch))
   const notify = createNotifier({
     desktop: (title, body) => {
-      if (Notification.isSupported()) new Notification({ title, body }).show()
+      if (!Notification.isSupported()) return
+      const n = new Notification({ title, body })
+      n.on('click', () => {
+        const w = getWindow()
+        if (!w || w.isDestroyed()) return
+        if (w.isMinimized()) w.restore()
+        w.show()
+        w.focus()
+      })
+      n.show()
     },
     focused: () => !!getWindow()?.isFocused()
   })
@@ -55,6 +64,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     'session:open': (id) => c.openChat(id),
     'session:new': () => c.newChat(),
     'session:delete': (id) => c.deleteChat(id),
+    'session:rename': (id, title) => c.renameChat(id, title),
     'session:export': async (id) => {
       const { title, markdown } = c.exportChat(id)
       const w = getWindow()

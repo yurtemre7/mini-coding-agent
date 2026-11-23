@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ago } from '@/lib/ago'
 
@@ -43,6 +44,10 @@ interface Props {
   onChat(path: string, id: string): void
   onNew(path: string): void
   onDelete?(id: string): void
+  /** Double-click on a chat: it is opened and the message field gets the cursor. */
+  onActivate?(path: string, id: string): void
+  /** "Rename" in a chat's menu edits its title in place. */
+  onRename?(id: string, title: string): void
   onExport?(id: string): void
 }
 
@@ -51,6 +56,7 @@ export function ChatsSidebar(p: Props) {
   const [collapsed, setCollapsed] = useState(load)
   const [menu, setMenu] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [edit, setEdit] = useState<{ id: string; value: string } | null>(null)
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const order = p.workspaces.map((w) => w.path)
@@ -167,17 +173,42 @@ export function ChatsSidebar(p: Props) {
                           </div>
                         </div>
                       )
+                    if (open && edit?.id === c.id) {
+                      const done = (save: boolean) => {
+                        const title = edit.value.replace(/\s+/g, ' ').trim()
+                        setEdit(null)
+                        if (save && title && title !== c.title) p.onRename?.(c.id, title)
+                      }
+                      return (
+                        <div key={c.id} className="px-1 py-0.5">
+                          <Input
+                            autoFocus
+                            aria-label={`Rename "${c.title}"`}
+                            className="h-7 text-sm"
+                            maxLength={80}
+                            value={edit.value}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => setEdit({ id: c.id, value: e.target.value })}
+                            onBlur={() => done(true)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') done(true)
+                              else if (e.key === 'Escape') done(false)
+                            }}
+                          />
+                        </div>
+                      )
+                    }
                     return (
                       <div key={c.id} className={`group relative flex items-center rounded-md ${here ? 'bg-accent text-accent-foreground' : ''}`} aria-current={here ? 'true' : undefined}>
                         {here && <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary" />}
-                        <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(path, c.id)}>
+                        <Button variant="ghost" size="sm" className="h-auto min-w-0 flex-1 justify-start py-1 text-left hover:bg-transparent" disabled={p.disabled} title={c.title} onClick={() => p.onChat(path, c.id)} onDoubleClick={() => p.onActivate?.(path, c.id)}>
                           <MessageSquare className="mr-1 h-3 w-3 shrink-0" />
                           <span className="min-w-0 flex-1">
                             <span className={`block truncate ${here ? 'font-medium' : ''}`}>{c.title}</span>
                             <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
                           </span>
                         </Button>
-                        {open && (p.onExport || p.onDelete) && (
+                        {open && (p.onExport || p.onDelete || p.onRename) && (
                           <Popover open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
                             <PopoverTrigger asChild>
                               <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`}>
@@ -185,6 +216,12 @@ export function ChatsSidebar(p: Props) {
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent align="end" className="w-56 p-1">
+                              {p.onRename && (
+                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Rename "${c.title}"`} onClick={() => { setMenu(null); setEdit({ id: c.id, value: c.title }) }}>
+                                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                                  Rename
+                                </Button>
+                              )}
                               {p.onExport && (
                                 <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Export "${c.title}" as Markdown`} onClick={() => { setMenu(null); p.onExport?.(c.id) }}>
                                   <Download className="mr-2 h-3.5 w-3.5" />
