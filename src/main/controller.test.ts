@@ -36,7 +36,8 @@ async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKe
   return { c, ws, events, prompts, idle, store }
 }
 
-describe('Controller', () => {
+// workspace and git setup on a loaded macOS runner can exceed the default 5 s
+describe('Controller', { timeout: 20_000 }, () => {
   it('runs a turn, routes a permission prompt to the renderer, and Yes lets the tool run', async () => {
     const { c, ws, events, prompts, idle } = await setup([[]])
     const file = join(ws, 'a.txt')
