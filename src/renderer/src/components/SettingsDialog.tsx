@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Keyboard, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
-import { EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
+import { CONTEXT_LIMITS, EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -16,11 +16,41 @@ import { THEME_PREFS, type ThemePref } from '@/lib/theme'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export interface SettingsActions {
-  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }): Promise<unknown> | void
+  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }): Promise<unknown> | void
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
 const SOURCE_LABELS: Record<KeySource, string> = { env: 'environment', dotenv: '.env', keychain: 'Keychain', file: '~/.mca/credentials.json' }
+
+const tokenLabel = (n: number): string => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`)
+const CONTEXT_NAMES: Record<number, string> = { 0: 'Automatic', 100_000: 'Small', 200_000: 'Standard', 500_000: 'Large', 1_000_000: 'Maximum' }
+
+/** How much of a conversation the model keeps in view before MCA summarizes the older part. A cap can lower the model's own size, never raise it. */
+function ContextSize({ settings, onUpdate }: { settings: SettingsInfo } & Pick<SettingsActions, 'onUpdate'>) {
+  const max = settings.contextMax ?? 0
+  const current = settings.contextLimit ?? 0
+  const label = (n: number) => (n === 0 ? `Automatic${max ? ` (${tokenLabel(max)})` : ''}` : `${CONTEXT_NAMES[n]} (${tokenLabel(n)})`)
+  return (
+    <div className="space-y-2">
+      <Label>Context size</Label>
+      <Select value={String(current)} onValueChange={(v) => void onUpdate({ contextLimit: Number(v) })}>
+        <SelectTrigger aria-label="Context size">
+          <SelectValue>{label(current)}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {CONTEXT_LIMITS.map((n) => (
+            <SelectItem key={n} value={String(n)} disabled={n > 0 && max > 0 && n > max}>
+              {label(n)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        How much of the chat the model keeps in view. {max ? `This model supports up to ${tokenLabel(max)}. ` : ''}A smaller size is faster and cheaper; when it is 80 % full, older messages are summarized.
+      </p>
+    </div>
+  )
+}
 
 function KeyStatus({ settings, models }: { settings: SettingsInfo; models: ModelList }) {
   const p = settings.provider
@@ -160,6 +190,8 @@ function GeneralPanel({ settings, theme, focus, onUpdate }: { settings: Settings
           </Row>
         </>
       )}
+      <Separator />
+      <ContextSize settings={settings} onUpdate={onUpdate} />
       <Separator />
       <Row title="Notifications" description="While MCA is in the background: a macOS notification when a task finishes, a permission prompt waits for you, or MCA looks stuck.">
         <Switch aria-label="Notifications" checked={settings.notifications} onCheckedChange={(notifications) => void onUpdate({ notifications })} />

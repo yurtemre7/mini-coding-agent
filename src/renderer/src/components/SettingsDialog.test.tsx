@@ -130,3 +130,23 @@ describe('SettingsDialog instructions', () => {
     expect(onChange).toHaveBeenCalledWith(30)
   })
 })
+
+describe('SettingsDialog context size', () => {
+  const base = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'x', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as const
+  it('shows the automatic size, explains it and offers smaller sizes', () => {
+    Element.prototype.scrollIntoView ??= () => {} // jsdom lacks it; Radix Select calls it when opening
+    const onUpdate = vi.fn()
+    render(<SettingsDialog open onOpenChange={() => {}} settings={{ ...base, contextLimit: 0, contextMax: 200_000 }} onUpdate={onUpdate} onSaveKey={() => {}} />)
+    const trigger = screen.getByRole('combobox', { name: 'Context size' })
+    expect(trigger).toHaveTextContent('Automatic (200k)')
+    expect(screen.getByText(/This model supports up to 200k/)).toBeInTheDocument()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(screen.getByRole('option', { name: 'Maximum (1M)' })).toHaveAttribute('aria-disabled', 'true') // above what the model supports
+    fireEvent.click(screen.getByRole('option', { name: 'Small (100k)' }))
+    expect(onUpdate).toHaveBeenCalledWith({ contextLimit: 100_000 })
+  })
+  it('shows the chosen cap', () => {
+    render(<SettingsDialog open onOpenChange={() => {}} settings={{ ...base, contextLimit: 500_000, contextMax: 1_000_000 }} onUpdate={vi.fn()} onSaveKey={() => {}} />)
+    expect(screen.getByRole('combobox', { name: 'Context size' })).toHaveTextContent('Large (500k)')
+  })
+})

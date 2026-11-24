@@ -14,5 +14,5 @@ Electron + React + TypeScript desktop app and `mca` CLI sharing one agent runtim
 - English only in UI, CLI output, errors and docs. Prefer shadcn/ui components.
 - Every new behaviour gets a test; tests never touch the network (use `FakeProvider`) and use a throwaway `HOME`.
 - Security-sensitive code (permissions, trust, paths, Bash rules) is fail-closed: unknown means ask or deny.
-- Work on a branch and open a PR to `main`; CI (Ubuntu + macOS + package) must be green. Don't push tags or release without being asked.
+- Work on a branch and open a PR to `main`; CI (Ubuntu + macOS + Windows check job) must be green; packaging is manual-dispatch only. Don't push tags or release without being asked.
 - Keep `docs/HANDOVER.md` current (decisions, known gaps, backlog). Known container-only failure: `bash.test.ts` process-group timeout.

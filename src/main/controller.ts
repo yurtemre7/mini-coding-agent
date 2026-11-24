@@ -23,7 +23,8 @@ import { describeStatus, McpManager } from '../core/mcp'
 import { discoverSkills } from '../core/skill'
 import { disabledSkills, setSkillEnabled, forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
+import { estimateTokens } from '../core/compact'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, isContextLimit, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
 
 const MAX_SYSTEM_PROMPT = 20_000
 export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
@@ -58,6 +59,7 @@ export class Controller {
   private notifications = true
   private systemPrompt = ''
   private systemReplace = false
+  private contextLimit = 0
   private workspace: string | null = null
   private session?: AgentSession
   private perms?: Permissions
@@ -74,7 +76,7 @@ export class Controller {
       get id() {
         return currentProvider()
       },
-      contextWindow: async () => (await this.current()).contextWindow(this.model),
+      contextWindow: async () => this.capContext(await (await this.current()).contextWindow(this.model)),
       stream: (req) => this.stream(req)
     }
   }
@@ -100,7 +102,8 @@ export class Controller {
       hasKey[id] = !!(await this.keys.get(id))
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
-    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
+    const contextMax = await this.modelWindow()
+    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, contextMax, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -128,6 +131,7 @@ export class Controller {
     if (prefs.notifications === false) this.notifications = false
     if (typeof prefs.systemPrompt === 'string') this.systemPrompt = prefs.systemPrompt
     this.systemReplace = prefs.systemReplace === true
+    if (isContextLimit(prefs.contextLimit)) this.contextLimit = prefs.contextLimit
     const s = await this.getSettings()
     const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
     this.setProvider(id)
@@ -146,9 +150,13 @@ export class Controller {
     return this.getSettings()
   }
 
-  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }): Promise<SettingsInfo> {
+  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }): Promise<SettingsInfo> {
     if (patch.provider || patch.model || patch.effort) this.assertIdle('change the model or effort') // notifications can change any time
     if (patch.notifications !== undefined) this.notifications = patch.notifications
+    if (patch.contextLimit !== undefined) {
+      if (!isContextLimit(patch.contextLimit)) throw new Error('Choose a context size between 20k and 10M, or Automatic.')
+      this.contextLimit = patch.contextLimit // read at the start of each turn; the meter follows at once
+    }
     if (patch.systemPrompt !== undefined || patch.systemReplace !== undefined) {
       if (patch.systemPrompt !== undefined) this.systemPrompt = patch.systemPrompt.slice(0, MAX_SYSTEM_PROMPT)
       if (patch.systemReplace !== undefined) this.systemReplace = patch.systemReplace
@@ -163,8 +171,42 @@ export class Controller {
       if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
       this.effort = patch.effort
     }
-    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
+    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
+    if (patch.contextLimit !== undefined || patch.model || patch.provider) void this.showContext()
     return this.getSettings()
+  }
+
+  /** The model's own context window, or 0 when it cannot be known yet (no key). */
+  private async modelWindow(): Promise<number> {
+    try {
+      return await (await this.current()).contextWindow(this.model)
+    } catch {
+      return 0
+    }
+  }
+
+  /** The user's cap on the context window; it can lower the model's own size, never raise it. */
+  private capContext(modelWindow: number): number {
+    if (this.contextLimit <= 0) return modelWindow
+    return modelWindow > 0 ? Math.min(this.contextLimit, modelWindow) : this.contextLimit
+  }
+
+  /**
+   * Puts the context meter on screen for the open chat. Without this it only appears after the next answer,
+   * so a chat that was just opened (or a new one) showed nothing. A figure from a real answer is kept; only the window follows the setting.
+   */
+  private async showContext(): Promise<void> {
+    const s = this.session
+    if (!s || !this.workspace) return
+    let contextWindow: number
+    try {
+      contextWindow = await this.proxy.contextWindow(this.model)
+    } catch {
+      return // no key yet: the meter appears with the first answer
+    }
+    if (this.session !== s || s.busy) return
+    const contextTokens = this.view.usage?.contextTokens ?? estimateTokens(s.history)
+    this.apply({ type: 'usage', contextTokens, contextWindow })
   }
 
   private system(): string {
@@ -269,6 +311,7 @@ export class Controller {
     this.announce()
     const [latest] = this.chats()
     if (latest) this.openChat(latest.id) // a workspace switch continues where that workspace left off
+    else void this.showContext()
     for (const w of built.warnings) this.notice('warn', w)
   }
 
@@ -353,6 +396,7 @@ export class Controller {
     this.session.clear() // moves to a fresh transcript file
     this.apply({ type: 'clear' })
     this.announce()
+    void this.showContext()
   }
 
   /** Loads a saved chat of this workspace, rebuilds the view from its messages and keeps appending to its file. */
@@ -365,6 +409,7 @@ export class Controller {
     this.apply({ type: 'clear' })
     this.announce()
     for (const e of messagesToEvents(messages)) this.apply(e)
+    void this.showContext()
     void this.refreshChanges()
   }
 

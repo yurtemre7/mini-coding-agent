@@ -29,6 +29,9 @@ async function setup(turns: ConstructorParameters<typeof FakeProvider>[0], hasKe
     ...extra
   })
   await c.selectWorkspace(ws)
+  // opening a workspace shows the context meter, which builds the provider; tests below swap `makeProvider` afterwards
+  if (hasKey) while (!c.getState().usage) await new Promise((r) => setTimeout(r, 5))
+  ;(c as any).cache = undefined
   const idle = async () => { while (c.getState().busy || events.at(-1)?.type !== 'turn_end') await new Promise((r) => setTimeout(r, 5)) }
   return { c, ws, events, prompts, idle, store }
 }
@@ -208,6 +211,39 @@ describe('Controller', () => {
       await c2.init()
       expect(await c2.getSettings()).toMatchObject({ systemPrompt: 'Answer in German.', systemReplace: true })
       void ws
+    })
+  })
+
+  describe('context size', () => {
+    const until = async (ok: () => boolean) => {
+      for (let i = 0; i < 200 && !ok(); i++) await new Promise((r) => setTimeout(r, 5))
+      expect(ok()).toBe(true)
+    }
+    it('shows the context meter when a workspace opens, a chat is opened and a new chat starts', async () => {
+      const { c, idle } = await setup([say])
+      await until(() => c.getState().usage?.contextWindow === 200_000) // a fresh workspace already shows the meter
+      c.send('hello there')
+      await idle()
+      const id = c.getState().chat!
+      c.newChat()
+      await until(() => c.getState().usage?.contextTokens === 0 && c.getState().usage?.contextWindow === 200_000)
+      c.openChat(id)
+      await until(() => (c.getState().usage?.contextTokens ?? 0) > 0) // estimated from the saved messages
+      expect(c.getState().usage?.contextWindow).toBe(200_000)
+    })
+    it('a cap lowers the window but never raises it, is validated and is remembered', async () => {
+      const { c, home } = await setup([say]).then((r) => ({ c: r.c, home: (r.c as any).d.home as string }))
+      expect(await c.getSettings()).toMatchObject({ contextLimit: 0, contextMax: 200_000 })
+      expect(await c.update({ contextLimit: 100_000 })).toMatchObject({ contextLimit: 100_000, contextMax: 200_000 })
+      await until(() => c.getState().usage?.contextWindow === 100_000) // the meter follows at once
+      await c.update({ contextLimit: 1_000_000 })
+      await until(() => c.getState().usage?.contextWindow === 200_000) // the model only supports 200k
+      await expect(c.update({ contextLimit: 5 })).rejects.toThrow(/between 20k and 10M/)
+      await c.update({ contextLimit: 500_000 })
+      await c.update({ contextLimit: 100_000 })
+      const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, makeProvider: () => new FakeProvider([]) })
+      await c2.init()
+      expect(await c2.getSettings()).toMatchObject({ contextLimit: 100_000 })
     })
   })
 

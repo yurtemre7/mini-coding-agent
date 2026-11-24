@@ -173,6 +173,10 @@ export interface SettingsInfo {
   systemPrompt: string
   /** use systemPrompt instead of the built-in prompt */
   systemReplace: boolean
+  /** the user's cap on the context window in tokens; 0 or absent = automatic (the model's own size) */
+  contextLimit?: number
+  /** the model's own context window in tokens; 0 or absent = unknown (no key yet) */
+  contextMax?: number
   defaultSystemPrompt: string
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
@@ -251,7 +255,7 @@ export interface IpcContract {
     'terminal:kill': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
-    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean }]; result: SettingsInfo }
+    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
     'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
@@ -288,3 +292,11 @@ export type McaApi = {
 
 /** Context the agent injects into a user message (date, git, instruction files, hook output). Never shown as something the user typed. */
 export const isReminder = (text: string): boolean => text.startsWith('<system-reminder>')
+
+/** Context sizes offered in Settings (tokens); 0 means automatic. */
+export const CONTEXT_LIMITS = [0, 100_000, 200_000, 500_000, 1_000_000] as const
+/** Smallest and largest cap `settings:update` accepts. */
+export const MIN_CONTEXT_LIMIT = 20_000
+export const MAX_CONTEXT_LIMIT = 10_000_000
+/** 0 (automatic) or a whole number of tokens within the accepted range. */
+export const isContextLimit = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && (v === 0 || (v >= MIN_CONTEXT_LIMIT && v <= MAX_CONTEXT_LIMIT))

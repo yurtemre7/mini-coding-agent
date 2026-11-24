@@ -27,6 +27,10 @@ describe('IPC validation', () => {
     ['settings:update', [{ model: 3 }]],
     ['settings:update', [{ effort: 'turbo' }]],
     ['settings:update', [{ notifications: 'yes' }]],
+    ['settings:update', [{ contextLimit: 5 }]],
+    ['settings:update', [{ contextLimit: 1.5 }]],
+    ['settings:update', [{ contextLimit: 99_000_000 }]],
+    ['settings:update', [{ contextLimit: '200000' }]],
     ['prompt:answer', [1, { allow: true }]],
     ['prompt:answer', ['id', { allow: 'yes' }]],
     ['prompt:answer', ['id', { allow: true, scope: 'forever' }]],
@@ -54,6 +58,8 @@ describe('IPC validation', () => {
     expect(() => v[ch](args as unknown[])).toThrow(/Invalid request/)
   })
   it('accepts good input and strips unknown fields', () => {
+    expect(v['settings:update']([{ contextLimit: 0 }])).toEqual([{ contextLimit: 0 }])
+    expect(v['settings:update']([{ contextLimit: 100_000 }])).toEqual([{ contextLimit: 100_000 }])
     expect(v['session:send'](['hi'])).toEqual(['hi', []])
     expect(v['settings:setKey'](['openrouter', 'k'])).toEqual(['openrouter', 'k'])
     expect(v['settings:models'](['openrouter', 'x'])).toEqual(['openrouter'])
