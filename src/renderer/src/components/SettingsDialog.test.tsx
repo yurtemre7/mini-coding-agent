@@ -150,3 +150,19 @@ describe('SettingsDialog context size', () => {
     expect(screen.getByRole('combobox', { name: 'Context size' })).toHaveTextContent('Large (500k)')
   })
 })
+
+describe('SettingsDialog floating chat', () => {
+  const base = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'x', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null } } as const
+  it('is off by default and turns on with the switch', () => {
+    const onUpdate = vi.fn()
+    render(<SettingsDialog open onOpenChange={() => {}} settings={{ ...base, overlay: false }} onUpdate={onUpdate} onSaveKey={() => {}} />)
+    expect(screen.queryByRole('combobox', { name: 'Floating chat shortcut' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Floating chat' }))
+    expect(onUpdate).toHaveBeenCalledWith({ overlay: true })
+  })
+  it('when on, shows the shortcut and explains the full-screen limit in plain words', () => {
+    render(<SettingsDialog open onOpenChange={() => {}} settings={{ ...base, overlay: true, overlayShortcut: 'Alt+Shift+M' }} onUpdate={vi.fn()} onSaveKey={() => {}} />)
+    expect(screen.getByRole('combobox', { name: 'Floating chat shortcut' })).toHaveTextContent('Alt + Shift + M')
+    expect(screen.getByText(/Borderless or Windowed fullscreen/)).toBeInTheDocument()
+  })
+})

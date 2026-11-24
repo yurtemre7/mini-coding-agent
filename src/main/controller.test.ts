@@ -470,4 +470,51 @@ describe('main -> batcher -> renderer apply', () => {
     expect(await c.setSkill('ponytail', true)).toMatchObject([{ enabled: true }])
     expect((await c.commandList()).map((x) => x.name)).toContain('ponytail')
   })
+  describe('floating chat setting', () => {
+    const fakeOverlay = (ok = true) => {
+      const calls: [boolean, string][] = []
+      return { calls, apply: (on: boolean, key: string) => (ok ? (calls.push([on, key]), true) : false) }
+    }
+    it('is off by default, turns on with a shortcut, is saved, and is restored at the next start', async () => {
+      const o = fakeOverlay()
+      const { c } = await setup([[]], true, { overlay: o })
+      expect(await c.getSettings()).toMatchObject({ overlay: false, overlayShortcut: 'CommandOrControl+Shift+Space' })
+      expect(o.calls).toEqual([])
+      expect(await c.update({ overlay: true, overlayShortcut: 'Alt+Shift+M' })).toMatchObject({ overlay: true, overlayShortcut: 'Alt+Shift+M' })
+      expect(o.calls).toEqual([[true, 'Alt+Shift+M']])
+      const home = (c as any).d.home
+      const o2 = fakeOverlay()
+      const c2 = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, overlay: o2 })
+      await c2.init()
+      expect(o2.calls).toEqual([[true, 'Alt+Shift+M']])
+      expect(await c2.getSettings()).toMatchObject({ overlay: true, overlayShortcut: 'Alt+Shift+M' })
+    })
+    it('refuses a shortcut another app already uses, and an unknown one, and keeps the old setting', async () => {
+      const { c } = await setup([[]], true, { overlay: fakeOverlay(false) })
+      await expect(c.update({ overlay: true })).rejects.toThrow(/already used by another app/)
+      expect(await c.getSettings()).toMatchObject({ overlay: false })
+      await expect(c.update({ overlayShortcut: 'Ctrl+Q' })).rejects.toThrow(/offered shortcuts/)
+    })
+    it('starts off with a notice when the saved shortcut has been taken since', async () => {
+      const home = await mkdtemp(join(tmpdir(), 'mca-home-'))
+      const first = new Controller({ home, emit: () => {}, prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, overlay: fakeOverlay() })
+      await first.init()
+      await first.update({ overlay: true })
+      const events: ViewEvent[] = []
+      const c = new Controller({ home, emit: (e) => void events.push(e), prompt: () => {}, keys: { get: async () => 'k', set: async () => {} }, overlay: fakeOverlay(false) })
+      await c.init()
+      expect(await c.getSettings()).toMatchObject({ overlay: false })
+      expect(JSON.stringify(events)).toMatch(/floating chat is off/)
+    })
+    it('tells every window when a prompt is answered or dropped by Stop', async () => {
+      const done: string[] = []
+      const { c, ws, prompts, idle } = await setup([[]], true, { promptDone: (id) => void done.push(id) })
+      ;(c as any).d.makeProvider = () => new FakeProvider([write(join(ws, 'p.txt')), say])
+      c.send('go')
+      while (!prompts.length) await new Promise((r) => setTimeout(r, 5))
+      c.answer(prompts[0].id, { allow: true, scope: 'once' })
+      await idle()
+      expect(done).toEqual([prompts[0].id])
+    })
+  })
 })

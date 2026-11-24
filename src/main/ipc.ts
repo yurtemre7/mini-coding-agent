@@ -4,15 +4,20 @@ import type { IpcContract } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
 import { createNotifier } from './notify'
+import type { Overlay } from './overlay'
 import { validators } from './validate'
 
 type Handlers = { [K in keyof IpcContract['invoke']]: (...args: IpcContract['invoke'][K]['args']) => IpcContract['invoke'][K]['result'] | Promise<IpcContract['invoke'][K]['result']> }
 
 /** Registers every IpcContract channel (a missing or renamed one fails typecheck) and wires the Controller to the window. */
-export async function registerIpc(getWindow: () => BrowserWindow | undefined, getAppInfo: Handlers['app:getInfo']): Promise<{ controller: Controller; dispose(): void }> {
+export async function registerIpc(
+  getWindow: () => BrowserWindow | undefined,
+  getAppInfo: Handlers['app:getInfo'],
+  extra: { all?: () => BrowserWindow[]; overlay?: Pick<Overlay, 'apply' | 'toggle' | 'hide'>; showMain?: () => void } = {}
+): Promise<{ controller: Controller; dispose(): void }> {
+  const all = () => extra.all?.() ?? (getWindow() ? [getWindow()!] : [])
   const send = <K extends keyof IpcContract['events']>(ch: K, payload: IpcContract['events'][K]) => {
-    const w = getWindow()
-    if (w && !w.isDestroyed()) w.webContents.send(ch, payload)
+    for (const w of all()) if (!w.isDestroyed()) w.webContents.send(ch, payload) // the main window and the floating chat show the same conversation
   }
   const batcher = createBatcher((batch) => send('agent:events', batch))
   const notify = createNotifier({
@@ -28,11 +33,13 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       })
       n.show()
     },
-    focused: () => !!getWindow()?.isFocused()
+    focused: () => all().some((w) => !w.isDestroyed() && w.isFocused())
   })
   const c = new Controller({
     notify,
     terminal: (e) => send('terminal:event', e),
+    overlay: extra.overlay,
+    promptDone: (id) => send('prompt:answered', id),
     emit: (e, seq) => batcher.push(e, seq),
     prompt: (p) => {
       batcher.flush() // the prompt must not overtake the tool_start it belongs to
@@ -95,7 +102,10 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     'prompt:answer': (id, d) => c.answer(id, d),
     'commands:list': () => c.commandList(),
     'skills:list': () => c.skillList(),
-    'skills:set': (name, enabled) => c.setSkill(name, enabled)
+    'skills:set': (name, enabled) => c.setSkill(name, enabled),
+    'overlay:toggle': () => extra.overlay?.toggle(),
+    'overlay:hide': () => extra.overlay?.hide(),
+    'app:showMain': () => extra.showMain?.()
   }
   for (const ch of Object.keys(handlers) as (keyof Handlers)[]) {
     ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...validators[ch](args)))

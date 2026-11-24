@@ -91,6 +91,10 @@ export interface Prefs {
   systemReplace?: boolean
   /** Most tokens of conversation to keep before summarizing; 0 or absent = the model's own size. */
   contextLimit?: number
+  /** The floating chat: on or off, its shortcut and where the user left it. */
+  overlay?: boolean
+  overlayShortcut?: string
+  overlayBounds?: { x: number; y: number; width: number; height: number }
 }
 export const loadPrefs = async (home?: string): Promise<Prefs> => {
   const p = (await readState(home)).prefs

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Keyboard, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
-import { CONTEXT_LIMITS, EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
+import { CONTEXT_LIMITS, EFFORT_LEVELS, OVERLAY_SHORTCUTS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -16,7 +16,7 @@ import { THEME_PREFS, type ThemePref } from '@/lib/theme'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export interface SettingsActions {
-  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }): Promise<unknown> | void
+  onUpdate(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number; overlay?: boolean; overlayShortcut?: string }): Promise<unknown> | void
   onSaveKey(provider: ProviderId, key: string): Promise<unknown> | void
 }
 
@@ -48,6 +48,41 @@ function ContextSize({ settings, onUpdate }: { settings: SettingsInfo } & Pick<S
       <p className="text-xs text-muted-foreground">
         How much of the chat the model keeps in view. {max ? `This model supports up to ${tokenLabel(max)}. ` : ''}A smaller size is faster and cheaper; when it is 80 % full, older messages are summarized.
       </p>
+    </div>
+  )
+}
+
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform)
+/** 'CommandOrControl+Shift+Space' as people read it on this computer. */
+const shortcutLabel = (accel: string): string => accel.split('+').map((p) => (p === 'CommandOrControl' ? (isMac ? 'Cmd' : 'Ctrl') : p)).join(' + ')
+
+/** A small chat window that floats on top of other apps (also games in borderless full screen); a shortcut shows and hides it. */
+function FloatingChat({ settings, onUpdate }: { settings: SettingsInfo } & Pick<SettingsActions, 'onUpdate'>) {
+  const on = settings.overlay === true
+  const key = settings.overlayShortcut ?? OVERLAY_SHORTCUTS[0]
+  return (
+    <div className="space-y-3">
+      <Row title="Floating chat" description="A small chat window that stays on top of other apps, so you can ask MCA something without switching windows.">
+        <Switch aria-label="Floating chat" checked={on} onCheckedChange={(overlay) => void onUpdate({ overlay })} />
+      </Row>
+      {on && (
+        <div className="space-y-2">
+          <Label>Show or hide with</Label>
+          <Select value={key} onValueChange={(overlayShortcut) => void onUpdate({ overlayShortcut })}>
+            <SelectTrigger aria-label="Floating chat shortcut">
+              <SelectValue>{shortcutLabel(key)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {OVERLAY_SHORTCUTS.map((a) => (
+                <SelectItem key={a} value={a}>
+                  {shortcutLabel(a)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Press it again to hide the chat. It stays on top of games set to Borderless or Windowed fullscreen; it cannot show over games in exclusive fullscreen.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -192,6 +227,8 @@ function GeneralPanel({ settings, theme, focus, onUpdate }: { settings: Settings
       )}
       <Separator />
       <ContextSize settings={settings} onUpdate={onUpdate} />
+      <Separator />
+      <FloatingChat settings={settings} onUpdate={onUpdate} />
       <Separator />
       <Row title="Notifications" description="While MCA is in the background: a macOS notification when a task finishes, a permission prompt waits for you, or MCA looks stuck.">
         <Switch aria-label="Notifications" checked={settings.notifications} onCheckedChange={(notifications) => void onUpdate({ notifications })} />

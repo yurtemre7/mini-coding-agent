@@ -24,7 +24,7 @@ import { discoverSkills } from '../core/skill'
 import { disabledSkills, setSkillEnabled, forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { estimateTokens } from '../core/compact'
-import { DEFAULT_EFFORT, EFFORT_LEVELS, isContextLimit, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
+import { DEFAULT_EFFORT, EFFORT_LEVELS, isContextLimit, isOverlayShortcut, DEFAULT_OVERLAY_SHORTCUT, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
 
 const MAX_SYSTEM_PROMPT = 20_000
 export const DEFAULT_SYSTEM_PROMPT = "You are MCA, a coding agent in a desktop app. Use the available tools to inspect the project, and answer concisely."
@@ -36,6 +36,10 @@ export interface ControllerDeps {
   prompt(p: { id: string; request: PromptRequest }): void
   /** The user may be away: a prompt waits, the model looks stuck, or a turn runs long. The frontend decides how to tell them. */
   notify?(message: string): void
+  /** The floating chat: turns it on or off and moves its shortcut. Returns false, changing nothing, when the shortcut is not available. */
+  overlay?: { apply(enabled: boolean, shortcut: string): boolean }
+  /** A prompt was answered or dropped: other windows close their copy. */
+  promptDone?(id: string): void
   /** Output of the terminal panel's command. */
   terminal?(e: TerminalEvent): void
   /** Test hooks: how long a prompt waits, and how long a turn runs, before notifying. */
@@ -60,6 +64,8 @@ export class Controller {
   private systemPrompt = ''
   private systemReplace = false
   private contextLimit = 0
+  private overlay = false
+  private overlayShortcut: string = DEFAULT_OVERLAY_SHORTCUT
   private workspace: string | null = null
   private session?: AgentSession
   private perms?: Permissions
@@ -103,7 +109,7 @@ export class Controller {
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
     const contextMax = await this.modelWindow()
-    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, contextMax, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
+    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, contextMax, overlay: this.overlay, overlayShortcut: this.overlayShortcut, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -132,6 +138,14 @@ export class Controller {
     if (typeof prefs.systemPrompt === 'string') this.systemPrompt = prefs.systemPrompt
     this.systemReplace = prefs.systemReplace === true
     if (isContextLimit(prefs.contextLimit)) this.contextLimit = prefs.contextLimit
+    if (isOverlayShortcut(prefs.overlayShortcut)) this.overlayShortcut = prefs.overlayShortcut
+    if (prefs.overlay === true) {
+      this.overlay = true
+      if (this.d.overlay && !this.d.overlay.apply(true, this.overlayShortcut)) {
+        this.overlay = false // the shortcut is taken: stay off rather than show a switch that does nothing
+        this.notice('warn', 'The floating chat is off because its shortcut is used by another app. Pick a different one in Settings.')
+      }
+    }
     const s = await this.getSettings()
     const id = s.hasKey[this.provider] ? this.provider : (PROVIDER_IDS.find((p) => s.hasKey[p]) ?? this.provider)
     this.setProvider(id)
@@ -150,9 +164,17 @@ export class Controller {
     return this.getSettings()
   }
 
-  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }): Promise<SettingsInfo> {
+  async update(patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number; overlay?: boolean; overlayShortcut?: string }): Promise<SettingsInfo> {
     if (patch.provider || patch.model || patch.effort) this.assertIdle('change the model or effort') // notifications can change any time
     if (patch.notifications !== undefined) this.notifications = patch.notifications
+    if (patch.overlay !== undefined || patch.overlayShortcut !== undefined) {
+      if (patch.overlayShortcut !== undefined && !isOverlayShortcut(patch.overlayShortcut)) throw new Error('Choose one of the offered shortcuts.')
+      const on = patch.overlay ?? this.overlay
+      const key = patch.overlayShortcut ?? this.overlayShortcut
+      if (this.d.overlay && !this.d.overlay.apply(on, key)) throw new Error('That shortcut is already used by another app. Choose a different one.')
+      this.overlay = on
+      this.overlayShortcut = key
+    }
     if (patch.contextLimit !== undefined) {
       if (!isContextLimit(patch.contextLimit)) throw new Error('Choose a context size between 20k and 10M, or Automatic.')
       this.contextLimit = patch.contextLimit // read at the start of each turn; the meter follows at once
@@ -171,7 +193,7 @@ export class Controller {
       if (!EFFORT_LEVELS.includes(patch.effort)) throw new Error(`Unknown effort "${patch.effort}".`)
       this.effort = patch.effort
     }
-    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
+    await savePrefs({ provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, overlay: this.overlay, overlayShortcut: this.overlayShortcut }, this.d.home).catch((e: Error) => this.notice('warn', e.message))
     if (patch.contextLimit !== undefined || patch.model || patch.provider) void this.showContext()
     return this.getSettings()
   }
@@ -267,8 +289,10 @@ export class Controller {
   private clearPending(): void {
     this.stopTimer('prompt')
     const r = this.resolvePending
+    const dropped = this.pending?.id
     this.pending = null
     this.resolvePending = undefined
+    if (dropped) this.d.promptDone?.(dropped)
     r?.({ allow: false, feedback: 'Aborted' })
   }
 
@@ -278,6 +302,7 @@ export class Controller {
     const r = this.resolvePending
     this.pending = null
     this.resolvePending = undefined
+    this.d.promptDone?.(id)
     r?.(d)
   }
 

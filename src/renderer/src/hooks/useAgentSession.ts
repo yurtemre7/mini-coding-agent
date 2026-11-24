@@ -12,7 +12,8 @@ export function useAgentSession(api: McaApi | undefined = window.mca) {
     api.invoke('session:getState').then(setState, (e: Error) => setError(e.message))
     const offEvents = api.on('agent:events', (batch) => setState((s) => s && applyBatch(s, batch)))
     const offPrompt = api.on('prompt:request', (pending) => setState((s) => s && { ...s, pending }))
-    return () => (offEvents(), offPrompt())
+    const offDone = api.on('prompt:answered', (id) => setState((s) => (s?.pending?.id === id ? { ...s, pending: null } : s))) // answered in another window
+    return () => (offEvents(), offPrompt(), offDone())
   }, [api])
 
   // every action returns main's fresh snapshot; failures (busy, no workspace...) surface as an error banner

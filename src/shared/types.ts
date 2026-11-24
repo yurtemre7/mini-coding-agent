@@ -177,6 +177,10 @@ export interface SettingsInfo {
   contextLimit?: number
   /** the model's own context window in tokens; 0 or absent = unknown (no key yet) */
   contextMax?: number
+  /** the small floating chat that stays on top of other apps; off by default */
+  overlay?: boolean
+  /** the keyboard shortcut that shows and hides it (one of OVERLAY_SHORTCUTS) */
+  overlayShortcut?: string
   defaultSystemPrompt: string
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
@@ -255,7 +259,7 @@ export interface IpcContract {
     'terminal:kill': { args: []; result: void }
     'settings:get': { args: []; result: SettingsInfo }
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
-    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }]; result: SettingsInfo }
+    'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number; overlay?: boolean; overlayShortcut?: string }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
     'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
@@ -263,11 +267,19 @@ export interface IpcContract {
     'commands:list': { args: []; result: CommandInfo[] }
     'skills:list': { args: []; result: SkillInfo[] }
     'skills:set': { args: [name: string, enabled: boolean]; result: SkillInfo[] }
+    /** Shows the floating chat, or hides it when it is already showing (same as its shortcut). A no-op while the feature is off. */
+    'overlay:toggle': { args: []; result: void }
+    /** Hides the floating chat. */
+    'overlay:hide': { args: []; result: void }
+    /** Brings the main window to the front (from the floating chat). */
+    'app:showMain': { args: []; result: void }
   }
   events: {
     'agent:events': EventBatch
     'prompt:request': { id: string; request: PromptRequest }
     'terminal:event': TerminalEvent
+    /** A prompt was answered or dropped; every window closes its copy. */
+    'prompt:answered': string
     /** A native menu item or its shortcut was used. */
     'menu:action': MenuAction
   }
@@ -279,8 +291,8 @@ export type MenuAction = (typeof MENU_ACTIONS)[number]
 export const isMenuAction = (v: unknown): v is MenuAction => (MENU_ACTIONS as readonly unknown[]).includes(v)
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:rename': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true }
-const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true, 'menu:action': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:rename': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true, 'overlay:toggle': true, 'overlay:hide': true, 'app:showMain': true }
+const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true, 'prompt:answered': true, 'menu:action': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]
 
@@ -300,3 +312,8 @@ export const MIN_CONTEXT_LIMIT = 20_000
 export const MAX_CONTEXT_LIMIT = 10_000_000
 /** 0 (automatic) or a whole number of tokens within the accepted range. */
 export const isContextLimit = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && (v === 0 || (v >= MIN_CONTEXT_LIMIT && v <= MAX_CONTEXT_LIMIT))
+
+/** Shortcuts offered for the floating chat; a fixed list keeps the choice simple and safe. */
+export const OVERLAY_SHORTCUTS = ['CommandOrControl+Shift+Space', 'CommandOrControl+Shift+M', 'CommandOrControl+Alt+M', 'Alt+Shift+M'] as const
+export const DEFAULT_OVERLAY_SHORTCUT: string = OVERLAY_SHORTCUTS[0]
+export const isOverlayShortcut = (v: unknown): v is string => (OVERLAY_SHORTCUTS as readonly unknown[]).includes(v)

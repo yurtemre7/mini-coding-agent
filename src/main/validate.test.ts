@@ -8,7 +8,7 @@ const v = validators as Record<string, (a: unknown[]) => unknown[]>
 describe('IPC validation', () => {
   it('has a validator for every invoke channel, and the preload allowlists match the contract', () => {
     expect(Object.keys(validators).sort()).toEqual([...INVOKE_CHANNELS].sort())
-    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event', 'menu:action'])
+    expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event', 'prompt:answered', 'menu:action'])
   })
   it.each([
     ['session:send', [42]],
@@ -28,6 +28,8 @@ describe('IPC validation', () => {
     ['settings:update', [{ effort: 'turbo' }]],
     ['settings:update', [{ notifications: 'yes' }]],
     ['settings:update', [{ contextLimit: 5 }]],
+    ['settings:update', [{ overlay: 'yes' }]],
+    ['settings:update', [{ overlayShortcut: 'Ctrl+Q' }]],
     ['settings:update', [{ contextLimit: 1.5 }]],
     ['settings:update', [{ contextLimit: 99_000_000 }]],
     ['settings:update', [{ contextLimit: '200000' }]],
@@ -60,6 +62,8 @@ describe('IPC validation', () => {
   it('accepts good input and strips unknown fields', () => {
     expect(v['settings:update']([{ contextLimit: 0 }])).toEqual([{ contextLimit: 0 }])
     expect(v['settings:update']([{ contextLimit: 100_000 }])).toEqual([{ contextLimit: 100_000 }])
+    expect(v['settings:update']([{ overlay: true, overlayShortcut: 'Alt+Shift+M' }])).toEqual([{ overlay: true, overlayShortcut: 'Alt+Shift+M' }])
+    expect(v['overlay:toggle']([1])).toEqual([])
     expect(v['session:send'](['hi'])).toEqual(['hi', []])
     expect(v['settings:setKey'](['openrouter', 'k'])).toEqual(['openrouter', 'k'])
     expect(v['settings:models'](['openrouter', 'x'])).toEqual(['openrouter'])
