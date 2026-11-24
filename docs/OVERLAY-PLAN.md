@@ -32,7 +32,7 @@ Not verifiable in this container: real games, macOS Spaces, Windows DWM behaviou
 
 Each phase ends with lint, typecheck, tests and build green; every behaviour gets a test (Electron facade injected, so no real windows in tests).
 
-**Phase 0 — spike (throwaway, no tests).** Tiny always-on-top window + global shortcut. Test on Windows 10/11 (borderless game, exclusive game, video player fullscreen), macOS (native fullscreen app, a game), one Linux X11. Output: a compatibility table appended to this file and a go/no-go per platform. Decide `screen-saver` vs `pop-up-menu` level, `panel` vs normal window on macOS.
+**Phase 0 — spike (throwaway, no tests).** Tiny always-on-top window + global shortcut. Test on Windows 10/11 (borderless game, exclusive game, video player fullscreen), macOS (native fullscreen app, a game), one Linux X11. First run a free proxy test: open a YouTube video in browser Picture-in-Picture over the target game. Chrome's PiP is also an always-on-top window, so if it shows over the game, ours very likely will; if it does not, ours will not either. Also check whether Chromium's Document Picture-in-Picture API is usable in Electron 36 (untested, do not rely on it). Output: a compatibility table appended to this file and a go/no-go per platform. Decide `screen-saver` vs `pop-up-menu` level, `panel` vs normal window on macOS.
 
 **Phase 1 — multi-window plumbing.** Broadcast events to all windows; window registry in `main/index.ts`; tests that two windows receive the same batches and that a prompt answered in one clears in the other.
 
