@@ -9,7 +9,8 @@ const setup = (dispatch = vi.fn(async () => {})) => {
 
 describe('useMessageQueue', () => {
   it('holds messages while busy and sends the first one when the turn ends', async () => {
-    const { result, rerender, dispatch } = setup()
+    const dispatch = vi.fn(() => new Promise<void>(() => {})) // stays pending, like a turn that is running
+    const { result, rerender } = setup(dispatch)
     act(() => (result.current.add('one'), result.current.add('two', [{ name: 'a.txt', mime: 'text/plain', data: 'eA==' }])))
     expect(result.current.items.map((m) => m.text)).toEqual(['one', 'two'])
     expect(dispatch).not.toHaveBeenCalled()
