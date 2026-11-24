@@ -221,3 +221,11 @@ Double-click on a chat in the sidebar opens it and moves the cursor into the mes
 
 ## Message field focus highlight (adjustable)
 While the message field has the cursor, the composer border and ring use `--ring` at an adjustable strength (Settings > General > "Message field highlight", 0-100 %, default 60, localStorage `mca.focusStrength`, `lib/focusStrength.ts`). It replaces the fixed `focus-within` ring classes; drag-over still uses the primary colour.
+
+## Message queue (JURA-19)
+- While a turn runs, Enter (or the Queue button) adds the message to a renderer-side queue (`useMessageQueue`, listed above the composer by `QueuedMessages`, each removable). When `busy` turns false the first one is sent; `dispatch` awaits `session:send` and then `refresh()` so `busy` is already true before the queue looks again (no double send). The queue is dropped when the workspace changes and on Stop (Stop halts the whole plan).
+- Slash commands cannot be queued (they run locally and may need an idle session); the composer says so.
+- Known gap: the queue lives in the window, not in main, so it is lost on a renderer reload and is not shared with the CLI.
+
+## Product rule (JURA-7)
+UI and setup must stay friendly for non-technical users: plain words (no jargon such as "token", "PTY", "dispatch" in visible text), sensible defaults, every setting explained in one line, and nothing that needs the docs to be understood. New features (queue, context window, terminal) are reviewed against this.

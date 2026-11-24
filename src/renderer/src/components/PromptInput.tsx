@@ -81,7 +81,8 @@ export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disable
   const pick = (it: Item) => (it.apply(), setActive(0), area.current?.focus())
   const canSend = !!text.trim() || files.length > 0
   const submit = () => {
-    if (busy || disabled || !canSend) return
+    if (disabled || !canSend) return
+    if (busy && /^\/\S/.test(text)) return setError('Commands cannot be queued. Wait for the current task to finish.')
     onSend(text, files.length ? files : undefined)
     setText('')
     setFiles([])
@@ -177,7 +178,7 @@ export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disable
           disabled={disabled}
           aria-label="Message"
           className="max-h-48 min-h-10 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
-          placeholder={disabled ? 'Open a workspace to start' : 'Ask MCA to work on your code. Type / for commands, @ for files.'}
+          placeholder={disabled ? 'Open a workspace to start' : busy ? 'Queue a message. It is sent when the current task finishes.' : 'Ask MCA to work on your code. Type / for commands, @ for files.'}
           onChange={(e) => (setText(e.target.value), setActive(0), setDismissed(false))}
           onKeyDown={(e) => {
             if (open && !e.nativeEvent.isComposing) {
@@ -249,9 +250,16 @@ export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disable
               Rewind
             </Button>
             {busy ? (
-              <Button variant="destructive" size="icon" className="h-8 w-8 rounded-full" aria-label="Stop" title="Stop" onClick={onStop}>
-                <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
-              </Button>
+              <>
+                {canSend && (
+                  <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full" aria-label="Queue message" title="Queue (Enter): sent when the current task finishes" onClick={submit}>
+                    <ArrowUp className="h-4 w-4" aria-hidden />
+                  </Button>
+                )}
+                <Button variant="destructive" size="icon" className="h-8 w-8 rounded-full" aria-label="Stop" title="Stop" onClick={onStop}>
+                  <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
+                </Button>
+              </>
             ) : (
               <Button size="icon" className="h-8 w-8 rounded-full" aria-label="Send" title="Send (Enter)" disabled={disabled || !canSend} onClick={submit}>
                 <ArrowUp className="h-4 w-4" aria-hidden />

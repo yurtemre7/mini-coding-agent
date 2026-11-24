@@ -15,10 +15,12 @@ import { ChatsSidebar } from '@/components/ChatsSidebar'
 import { ChatTranscript } from '@/components/ChatTranscript'
 import { PromptDialog } from '@/components/PermissionDialog'
 import { PromptInput } from '@/components/PromptInput'
+import { QueuedMessages } from '@/components/QueuedMessages'
 import { ProviderForm, SettingsDialog, type SettingsActions } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAgentSession } from '@/hooks/useAgentSession'
+import { useMessageQueue } from '@/hooks/useMessageQueue'
 import { useTheme } from '@/lib/theme'
 import { useKeys } from '@/lib/keybindings'
 import { useFocusStrength } from '@/lib/focusStrength'
@@ -52,6 +54,13 @@ export default function App() {
   // saved chats and recent workspaces: refetched when the workspace changes or a turn ends (a turn saves its messages)
   const workspace = s.state?.workspace ?? null
   const busy = s.state?.busy
+  // messages typed during a turn; `refresh` makes the next `busy` visible before the queue looks again
+  const queue = useMessageQueue({ busy: !!busy, scope: workspace ?? '', dispatch: (text, files) => s.send(text, files).then(() => s.refresh()) })
+  // Stop halts the whole plan: the queued messages are dropped too
+  const stop = () => {
+    queue.clear()
+    void s.abort()
+  }
   useEffect(() => {
     if (!api || busy) return
     api.invoke('workspace:overview').then(setWorkspaces, () => {})
@@ -86,7 +95,7 @@ export default function App() {
       else if (a === 'focusPrompt') setFocusN((n) => n + 1)
       else if (a === 'openWorkspace') void s.selectWorkspace()
       else if (a === 'newChat' && workspace) void newChatIn(workspace).then(() => setFocusN((n) => n + 1))
-      else if (a === 'stop' && busy) void s.abort()
+      else if (a === 'stop' && busy) stop()
     }
   })
   useEffect(() => api?.on('menu:action', (a) => isMenuAction(a) && onMenu.current(a)), [api])
@@ -216,7 +225,8 @@ export default function App() {
         </div>
         {s.error && <p className="border-b bg-destructive/10 px-4 py-2 text-sm [overflow-wrap:anywhere] text-destructive">{s.error}</p>}
         {v.items.length === 0 ? <EmptyState workspace={v.workspace} onOpenWorkspace={s.selectWorkspace} /> : <ChatTranscript items={v.items} busy={v.busy} />}
-        <PromptInput key={v.workspace ?? ''} focusSignal={focusN} focusStrength={focusStrength.value} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (!files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={s.abort} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
+        <QueuedMessages items={queue.items} onRemove={queue.remove} />
+        <PromptInput key={v.workspace ?? ''} focusSignal={focusN} focusStrength={focusStrength.value} busy={v.busy} disabled={!v.workspace} mode={v.mode} model={v.model} models={models} onModel={(model) => actions.onUpdate({ model })} effort={settings.effort} onEffort={(effort) => actions.onUpdate({ effort })} commands={commands} listFiles={listFiles} onSend={(text, files) => (v.busy ? queue.add(text, files) : !files?.length && /^\/\S/.test(text) ? s.command(text).then(loadSettings) : s.send(text, files))} onStop={stop} onMode={(m) => s.command(`/mode ${m}`)} onRewind={() => s.command('/rewind')} />
       </section>
       {lay.layout.panel && (
         <aside aria-label="Tools" className="flex w-[26rem] max-w-[45vw] shrink-0 flex-col border-l bg-sidebar p-3 pt-12">
