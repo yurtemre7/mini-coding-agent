@@ -1,6 +1,6 @@
 import { isSessionId } from '../core/session'
 import { PROVIDER_IDS } from '../core/provider/factory'
-import { EFFORT_LEVELS, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
+import { EFFORT_LEVELS, isContextLimit, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
 
 const bad = (m: string): never => {
   throw new Error(`Invalid request: ${m}`)
@@ -8,6 +8,7 @@ const bad = (m: string): never => {
 const str = (v: unknown, name: string): string => (typeof v === 'string' ? v : bad(`${name} must be a string`))
 const provider = (v: unknown): ProviderId => (PROVIDER_IDS.includes(v as ProviderId) ? (v as ProviderId) : bad('unknown provider'))
 const bool = (v: unknown, name: string): boolean => (typeof v === 'boolean' ? v : bad(`${name} must be a boolean`))
+const contextLimit = (v: unknown): number => (isContextLimit(v) ? v : bad('contextLimit must be 0 (automatic) or between 20000 and 10000000'))
 const effort = (v: unknown): Effort => (EFFORT_LEVELS.includes(v as Effort) ? (v as Effort) : bad('unknown effort'))
 const scope = (v: unknown): 'turn' | 'all' => (v === 'turn' || v === 'all' ? v : bad('scope must be "turn" or "all"'))
 const changedPath = (v: unknown): string => {
@@ -66,7 +67,7 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'settings:setKey': ([p, k]) => [provider(p), str(k, 'key')],
   'settings:update': ([patch]) => {
     const o = obj(patch, 'patch')
-    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }), ...(o.systemPrompt !== undefined && { systemPrompt: str(o.systemPrompt, 'systemPrompt') }), ...(o.systemReplace !== undefined && { systemReplace: bool(o.systemReplace, 'systemReplace') }) }]
+    return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }), ...(o.systemPrompt !== undefined && { systemPrompt: str(o.systemPrompt, 'systemPrompt') }), ...(o.systemReplace !== undefined && { systemReplace: bool(o.systemReplace, 'systemReplace') }), ...(o.contextLimit !== undefined && { contextLimit: contextLimit(o.contextLimit) }) }]
   },
   'settings:models': ([p]) => [provider(p)],
   'prompt:answer': ([id, d]) => {

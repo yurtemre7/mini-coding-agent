@@ -229,3 +229,9 @@ While the message field has the cursor, the composer border and ring use `--ring
 
 ## Product rule (JURA-7)
 UI and setup must stay friendly for non-technical users: plain words (no jargon such as "token", "PTY", "dispatch" in visible text), sensible defaults, every setting explained in one line, and nothing that needs the docs to be understood. New features (queue, context window, terminal) are reviewed against this.
+
+## Context size (JURA-3)
+- Settings → General → "Context size": Automatic (default) or a cap (20k–10M, presets in `CONTEXT_LIMITS`). Stored as `Prefs.contextLimit` (0 = automatic).
+- Effective window = `min(cap, model window)`: the cap can lower the window, never raise it. Options above what the model supports are disabled in the UI; the controller and validator reject out-of-range values. Compaction (80%) uses the effective window.
+- The context meter now shows on workspace open, new chat, chat switch and after a setting change (`Controller.showContext()`; uses real usage when known, otherwise an estimate).
+- Gap: the CLI does not expose the cap yet.

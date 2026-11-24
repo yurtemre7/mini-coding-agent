@@ -89,6 +89,8 @@ export interface Prefs {
   /** Custom instructions for the model; added after the built-in prompt, or used instead of it when systemReplace is set. */
   systemPrompt?: string
   systemReplace?: boolean
+  /** Most tokens of conversation to keep before summarizing; 0 or absent = the model's own size. */
+  contextLimit?: number
 }
 export const loadPrefs = async (home?: string): Promise<Prefs> => {
   const p = (await readState(home)).prefs
