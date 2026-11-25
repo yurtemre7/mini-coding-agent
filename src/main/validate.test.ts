@@ -10,6 +10,24 @@ describe('IPC validation', () => {
     expect(Object.keys(validators).sort()).toEqual([...INVOKE_CHANNELS].sort())
     expect(EVENT_CHANNELS).toEqual(['agent:events', 'prompt:request', 'terminal:event', 'menu:action'])
   })
+  it('CiP bounds: numbers only, rounded, never below the minimum size', () => {
+    expect(v['window:cipBounds']([{ x: 10.4, y: -5, width: 10, height: 300.6 }])).toEqual([{ x: 10, y: -5, width: 280, height: 301 }])
+    expect(() => v['window:cipBounds']([{ x: 'a', y: 0, width: 300, height: 300 }])).toThrow(/Invalid request/)
+    expect(() => v['window:cipBounds']([{ x: 0, y: 0, width: Infinity, height: 300 }])).toThrow(/Invalid request/)
+  })
+  it('accepts only a boolean right-click context', () => {
+    expect(v['window:contextMenu']([{ selection: true, editable: false, extra: 1 }])).toEqual([{ selection: true, editable: false }])
+    expect(() => v['window:contextMenu']([{ selection: 'yes', editable: false }])).toThrow(/Invalid request/)
+    expect(() => v['window:contextMenu']([])).toThrow(/Invalid request/)
+  })
+  it('clamps the picture-in-picture opacity so the window never becomes invisible', () => {
+    expect(v['window:pip'](['phone', 0])).toEqual(['phone', 0.2])
+    expect(v['window:pip'](['off', 5])).toEqual(['off', 1])
+    expect(v['window:pip'](['normal', 0.5])).toEqual(['normal', 0.5])
+    expect(v['window:pipOpacity']([0.1])).toEqual([0.2])
+    expect(() => v['window:pip'](['tablet', 0.5])).toThrow(/Invalid request/)
+    expect(() => v['window:pip'](['phone', '0.5'])).toThrow(/Invalid request/)
+  })
   it.each([
     ['session:send', [42]],
     ['session:send', []],

@@ -35,6 +35,10 @@ interface Props {
   current?: string
   disabled: boolean
   onNewWorkspace(): void
+  /** Newest folders created next to the listed workspaces; shown while "New workspace" is hovered. */
+  newest?: string[]
+  /** Called when "New workspace" is hovered, to refresh `newest`. */
+  onNewestHover?(): void
   onReorder(order: string[]): void
   /** Opens another workspace (its newest chat continues). */
   onWorkspace(path: string): void
@@ -83,10 +87,24 @@ export function ChatsSidebar(p: Props) {
 
   return (
     <div className="space-y-2">
-      <Button variant="outline" size="sm" className="w-full" disabled={p.disabled} onClick={p.onNewWorkspace}>
-        <FolderPlus className="mr-1 h-4 w-4" />
-        New workspace
-      </Button>
+      {/* hovering "New workspace" lists the newest folders created next to the listed workspaces */}
+      <div className="group/new" onMouseEnter={p.onNewestHover}>
+        <Button variant="outline" size="sm" className="w-full" disabled={p.disabled} onClick={p.onNewWorkspace}>
+          <FolderPlus className="mr-1 h-4 w-4" />
+          New workspace
+        </Button>
+        {!!p.newest?.length && (
+          <div className="hidden space-y-0.5 pt-1 group-hover/new:block group-focus-within/new:block">
+            <p className="px-2 text-xs text-muted-foreground">Newest folders</p>
+            {p.newest.map((f) => (
+              <Button key={f} variant="ghost" size="sm" className="h-7 w-full justify-start text-xs" disabled={p.disabled} title={f} aria-label={`Open newest folder ${base(f)}`} onClick={() => p.onWorkspace(f)}>
+                <Folder className="mr-1 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate">{base(f)}</span>
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
       {p.workspaces.length === 0 && <p className="text-xs text-muted-foreground">No workspaces yet. Open a folder to start.</p>}
       <ul className="space-y-1">
         {p.workspaces.map(({ path, chats }, i) => {

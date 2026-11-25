@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from 'electron'
-import type { MenuAction } from '../shared/types'
+import type { ContextMenuContext, MenuAction } from '../shared/types'
 
 /** The native menu: standard roles plus the app's own actions with their shortcuts. Pure, so it is testable without Electron running. */
 export function menuTemplate(o: { platform: NodeJS.Platform; name: string; send(action: MenuAction): void }): MenuItemConstructorOptions[] {
@@ -24,6 +24,7 @@ export function menuTemplate(o: { platform: NodeJS.Platform; name: string; send(
       submenu: [
         act('Toggle Sidebar', 'toggleSidebar', 'CmdOrCtrl+B'),
         act('Toggle Tools Panel', 'togglePanel', 'CmdOrCtrl+J'),
+        act('CiP (Chat in Picture)', 'togglePip', 'CmdOrCtrl+Shift+P'),
         { type: 'separator' },
         act('Show Changes', 'tabChanges', 'CmdOrCtrl+1'),
         act('Show Git', 'tabGit', 'CmdOrCtrl+2'),
@@ -37,5 +38,30 @@ export function menuTemplate(o: { platform: NodeJS.Platform; name: string; send(
       ]
     },
     { role: 'windowMenu' }
+  ]
+}
+
+/** The right-click menu: edit commands that fit the spot, then quick actions and view settings. Pure, so it is testable without Electron running. */
+export function contextMenuTemplate(o: ContextMenuContext & { cip: boolean; send(action: MenuAction): void }): MenuItemConstructorOptions[] {
+  const act = (label: string, action: MenuAction, accelerator?: string): MenuItemConstructorOptions => ({ label, accelerator, click: () => o.send(action) })
+  const edit: MenuItemConstructorOptions[] = o.editable
+    ? [{ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }]
+    : o.selection
+      ? [{ role: 'copy' }]
+      : []
+  return [
+    ...(edit.length ? [...edit, { type: 'separator' } as MenuItemConstructorOptions] : []),
+    { label: 'CiP (Chat in Picture)', type: 'checkbox', checked: o.cip, accelerator: 'CmdOrCtrl+Shift+P', click: () => o.send('togglePip') },
+    act('New Chat', 'newChat', 'CmdOrCtrl+N'),
+    act('Open Workspace…', 'openWorkspace', 'CmdOrCtrl+O'),
+    act('Focus Message Field', 'focusPrompt', 'CmdOrCtrl+L'),
+    act('Stop the Agent', 'stop', 'CmdOrCtrl+.'),
+    { type: 'separator' },
+    act('Toggle Sidebar', 'toggleSidebar', 'CmdOrCtrl+B'),
+    act('Toggle Tools Panel', 'togglePanel', 'CmdOrCtrl+J'),
+    { label: 'Show', submenu: [act('Changes', 'tabChanges', 'CmdOrCtrl+1'), act('Git', 'tabGit', 'CmdOrCtrl+2'), act('Terminal', 'tabTerminal', 'CmdOrCtrl+3')] },
+    { label: 'Zoom', submenu: [{ role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }] },
+    { type: 'separator' },
+    act('Settings', 'settings', 'CmdOrCtrl+,')
   ]
 }

@@ -1,18 +1,27 @@
 import { writeFile } from 'node:fs/promises'
-import { type BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron'
-import type { IpcContract } from '../shared/types'
+import { BrowserWindow, dialog, ipcMain, Menu, Notification, type Rectangle, shell } from 'electron'
+import type { IpcContract, PipMode } from '../shared/types'
 import { createBatcher } from './batcher'
 import { Controller } from './controller'
 import { createNotifier } from './notify'
+import { contextMenuTemplate } from './menu'
+import { currentPip, setPip, setPipOpacity } from './pip'
 import { validators } from './validate'
 
 type Handlers = { [K in keyof IpcContract['invoke']]: (...args: IpcContract['invoke'][K]['args']) => IpcContract['invoke'][K]['result'] | Promise<IpcContract['invoke'][K]['result']> }
 
 /** Registers every IpcContract channel (a missing or renamed one fails typecheck) and wires the Controller to the window. */
-export async function registerIpc(getWindow: () => BrowserWindow | undefined, getAppInfo: Handlers['app:getInfo']): Promise<{ controller: Controller; dispose(): void }> {
+export async function registerIpc(
+  getWindow: () => BrowserWindow | undefined,
+  getAppInfo: Handlers['app:getInfo'],
+  getMain: () => BrowserWindow | undefined = getWindow,
+  makePip: (mode: PipMode, bounds: Rectangle) => BrowserWindow = () => {
+    throw new Error('CiP is not available.')
+  }
+): Promise<{ controller: Controller; dispose(): void }> {
+  // every window (main and CiP) renders the same session, so events go to all of them
   const send = <K extends keyof IpcContract['events']>(ch: K, payload: IpcContract['events'][K]) => {
-    const w = getWindow()
-    if (w && !w.isDestroyed()) w.webContents.send(ch, payload)
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(ch, payload)
   }
   const batcher = createBatcher((batch) => send('agent:events', batch))
   const notify = createNotifier({
@@ -28,7 +37,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       })
       n.show()
     },
-    focused: () => !!getWindow()?.isFocused()
+    focused: () => !!BrowserWindow.getFocusedWindow()
   })
   const c = new Controller({
     notify,
@@ -56,6 +65,7 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
       if (!r.canceled && r.filePaths[0]) await c.selectWorkspace(r.filePaths[0])
     },
     'workspace:recent': () => c.recent(),
+    'workspace:newest': () => c.newest(),
     'workspace:open': (p) => c.openRecent(p),
     'workspace:forget': (p) => c.forgetRecent(p),
     'workspace:reorder': (o) => c.reorderRecent(o),
@@ -92,10 +102,30 @@ export async function registerIpc(getWindow: () => BrowserWindow | undefined, ge
     'settings:setKey': (p, key) => c.setKey(p, key),
     'settings:update': (patch) => c.update(patch),
     'settings:models': (p) => c.models(p),
+    'settings:addFolderRoot': async () => {
+      const w = getWindow()
+      const opts = { title: 'Allow a folder for newest folders', properties: ['openDirectory' as const] }
+      const r = await (w ? dialog.showOpenDialog(w, opts) : dialog.showOpenDialog(opts))
+      return !r.canceled && r.filePaths[0] ? c.addFolderRoot(r.filePaths[0]) : c.getSettings()
+    },
+    'settings:removeFolderRoot': (p) => c.removeFolderRoot(p),
     'prompt:answer': (id, d) => c.answer(id, d),
     'commands:list': () => c.commandList(),
     'skills:list': () => c.skillList(),
-    'skills:set': (name, enabled) => c.setSkill(name, enabled)
+    'skills:set': (name, enabled) => c.setSkill(name, enabled),
+    'window:contextMenu': (ctx) => {
+      const w = getWindow()
+      if (!w || w.isDestroyed()) return
+      const send = (a: Parameters<Parameters<typeof contextMenuTemplate>[0]['send']>[0]) => w.webContents.send('menu:action', a)
+      Menu.buildFromTemplate(contextMenuTemplate({ ...ctx, cip: !!currentPip(), send })).popup({ window: w })
+    },
+    'window:pip': (mode, opacity) => {
+      setPipOpacity(opacity)
+      const m = getMain()
+      if (m && !m.isDestroyed()) setPip(m, mode, makePip)
+    },
+    'window:pipOpacity': (opacity) => setPipOpacity(opacity),
+    'window:cipBounds': (b) => currentPip()?.win.setBounds(b)
   }
   for (const ch of Object.keys(handlers) as (keyof Handlers)[]) {
     ipcMain.handle(ch, (_e, ...args: unknown[]) => (handlers[ch] as (...a: unknown[]) => unknown)(...validators[ch](args)))

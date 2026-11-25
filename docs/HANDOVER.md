@@ -1,10 +1,10 @@
-# MCA Implementation Handover
+﻿# MCA Implementation Handover
 
 Status as of 2026-11-21. Design reference: [`docs/PLAN.md`](PLAN.md). Contributor workflow: [`CLAUDE.md`](../CLAUDE.md).
 
 ## Summary
 
-**The first implementation is done.** Milestones 0–8 of the plan are implemented, tested and merged to `main`: provider-agnostic runtime (Anthropic, OpenRouter), file/search/Bash/Web/Task/Todo/Skill tools, permissions and workspace trust, hooks, project context, sessions, compaction, MCP (stdio), custom commands and skills, the `mca` CLI and the Electron desktop app, plus CI and a tag-triggered release workflow for an unsigned macOS app. Beyond the plan: model picker, effort setting, `.env` keys, light/dark theme, ESLint, attachments.
+**The first implementation is done.** Milestones 0â€“8 of the plan are implemented, tested and merged to `main`: provider-agnostic runtime (Anthropic, OpenRouter), file/search/Bash/Web/Task/Todo/Skill tools, permissions and workspace trust, hooks, project context, sessions, compaction, MCP (stdio), custom commands and skills, the `mca` CLI and the Electron desktop app, plus CI and a tag-triggered release workflow for an unsigned macOS app. Beyond the plan: model picker, effort setting, `.env` keys, light/dark theme, ESLint, attachments.
 
 | | |
 |---|---|
@@ -38,7 +38,7 @@ CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode
 | 5 Hooks, project context | Done | | Self-checked |
 | 6 Planning, subagents, WebFetch | Done: TodoWrite + sidebar, ExitPlanMode + plan dialog with reject feedback, Task subagents (Explore / general-purpose, nested by `parentId`), WebFetch | | Self-checked, no live API |
 | 7 Sessions, compaction, MCP | Done: sessions (`fa52cdf`, `c044b19`), compaction, MCP (stdio) | | Self-checked, no live API |
-| 8 Skills, commands, polish, packaging | Done (merged); packaged-app check from Finder still manual: `Skill` tool + skills index in the context reminder, custom commands (`$ARGUMENTS`, `$1`–`$9`), `/model` `/provider`, desktop slash autocomplete (and `/…` input routed to commands), `--help`, README | | Self-checked, no live API |
+| 8 Skills, commands, polish, packaging | Done (merged); packaged-app check from Finder still manual: `Skill` tool + skills index in the context reminder, custom commands (`$ARGUMENTS`, `$1`â€“`$9`), `/model` `/provider`, desktop slash autocomplete (and `/â€¦` input routed to commands), `--help`, README | | Self-checked, no live API |
 
 Work requested outside the plan (all after Milestone 4, checked by the controller, not by a separate reviewer):
 
@@ -75,7 +75,7 @@ Workbench P1.1/P1.2 notes: `core/checkpoints.ts` (CheckpointStore: content-addre
 
 Backlog-intake batch (JURA-2/3/10/14/15/16/17): permission prompts clip long commands and rules; `AnthropicProvider.contextWindow` prefers the models API's `max_input_tokens`; `/resume` and "workspace switch continues the newest chat"; recent-workspace removal (`workspace:forget`, list only); key help on the setup screen; `UsageMeter` (context fill + per-chat token totals, cost estimate added later, see below); `core/watchdog.ts` loop detector, `attention` event, `Controller` notify timers and `main/notify.ts` (desktop only; phone push deferred, needs a delivery channel). Not done: JURA-1 terminal (P1.6, needs a pty dependency), JURA-2 thinking-mode toggle and cost estimate, JURA-7 broader non-technical UX.
 
-Milestone 8 notes: skills live in `{~/,<project>/}{.claude,.mca}/skills/<name>/SKILL.md` (later wins); the reminder lists name + description (200 chars) and the `Skill` tool returns the body. Custom commands are `{...}/commands/<name>.md` (`$ARGUMENTS`, `$1`–`$9`); built-in names always win; a custom command becomes a normal prompt. The desktop prompt routes any `/…` text without attachments to `session:command`, and `commands:list` feeds the autocomplete.
+Milestone 8 notes: skills live in `{~/,<project>/}{.claude,.mca}/skills/<name>/SKILL.md` (later wins); the reminder lists name + description (200 chars) and the `Skill` tool returns the body. Custom commands are `{...}/commands/<name>.md` (`$ARGUMENTS`, `$1`â€“`$9`); built-in names always win; a custom command becomes a normal prompt. The desktop prompt routes any `/â€¦` text without attachments to `session:command`, and `commands:list` feeds the autocomplete.
 
 Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but the parent's rewind checkpoints and permissions; `Explore` gets only static read-only tools. `WebFetch` follows same-host redirects only (a cross-host redirect is returned to the model), caps at 5 MB / 100k chars, and summarizes with the provider's fast model (`FAST_MODEL` sentinel resolved by the desktop provider proxy). Headless `-p` in plan mode prints the plan and stops. Also added since M4: light/dark/system theme (`mca.theme`), ESLint flat config (`npm run lint`, also in CI).
 
@@ -93,7 +93,7 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 ## Decisions that differ from the plan text
 
 - Node 26.13.1 (LTS) instead of Node 22: pinned in `.nvmrc`, read by CI and release (`node-version-file`), `engines` >= 26.13.1, CLI bundle targets node26. Vitest runs with `--no-experimental-webstorage` because Node 25+ has a global `localStorage` that hides jsdom's in renderer tests.
-- **ripgrep path**: `@vscode/ripgrep` 1.18 ships the binary in a platform package, so `rg` resolves via the package's `rgPath` with `app.asar` → `app.asar.unpacked`, and `electron-builder.yml` unpacks `node_modules/@vscode/ripgrep-*/bin/**`.
+- **ripgrep path**: `@vscode/ripgrep` 1.18 ships the binary in a platform package, so `rg` resolves via the package's `rgPath` with `app.asar` â†’ `app.asar.unpacked`, and `electron-builder.yml` unpacks `node_modules/@vscode/ripgrep-*/bin/**`.
 - **`max_tokens` stop** drops every `tool_use` in that message, not only the cut one (OpenRouter emits the cut call too, so it cannot be singled out).
 - **`bypassPermissions`** does not prompt for protected paths (the Paths rule wins), but explicit and built-in `ask` rules (`.env*`, `~/.ssh`, `~/.aws`) still prompt.
 - **Untrusted workspaces** also ignore the project `defaultMode`, not only project `allow` rules.
@@ -102,7 +102,7 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 - **Read-only Bash auto-allow** is narrow: any argument with `$ ~ * ? [ {`, stray quotes or backslashes prompts, and `rg`/`grep` accept only a small option allowlist. `tree` was removed.
 - **Desktop state sync**: mutation IPC calls return nothing; every event carries a sequence number and the renderer drops events already contained in its snapshot.
 - **Renderer slash commands** are allowlisted; `/trust` from the window goes through the trust dialog, `/exit` is refused.
-- **Key lookup order**: env → Keychain → `~/.mca/credentials.json` → `.env` (last, so a cloned repo's `.env` never overrides your key).
+- **Key lookup order**: env â†’ Keychain â†’ `~/.mca/credentials.json` â†’ `.env` (last, so a cloned repo's `.env` never overrides your key).
 - **Effort** is sent on every request (default `medium`); OpenRouter maps `xhigh`/`max` to `high`; an Anthropic model that returns a 400 mentioning effort is retried once without it and remembered for the session.
 
 ## Releasing
@@ -154,7 +154,7 @@ Ordered by value. Pull from the top; each item should end as a PR.
 
 **Verify first (needs a Mac / real keys)**
 1. Push tag `v0.1.0`, watch the release workflow, install the `.dmg` per the README, and walk the packaged-app checklist: bundled `rg` runs, Bash finds `node`/`git` when launched from Finder, Keychain key is read, no Keychain prompt loop.
-2. Smoke-test with real keys: `mca -p` on both providers; desktop flow Read → Grep → Edit (approve) → Bash → Rewind; plan mode with parallel Explore subagents; a long session that compacts then `--continue`; a `.mcp.json` server.
+2. Smoke-test with real keys: `mca -p` on both providers; desktop flow Read â†’ Grep â†’ Edit (approve) â†’ Bash â†’ Rewind; plan mode with parallel Explore subagents; a long session that compacts then `--continue`; a `.mcp.json` server.
 3. Confirm model ids and which models accept `output_config.effort`.
 
 **Product**
@@ -198,7 +198,7 @@ Settings is a tabbed dialog (General: theme + notifications switch; Provider; MC
 - Multimodal today: images (png/jpeg/gif/webp) and text files via paste, drop, picker, up to 10 x 5 MB. Not done: voice dictation (Electron has no working Web Speech backend; would need a local/whisper or provider transcription API), screenshot capture, PDF attachments, dropping folders.
 
 ## Cost estimate (per chat)
-- `core/provider/pricing.ts` holds Anthropic list prices (per million tokens, checked 2026-11) and `estimateCostUsd`; the agent puts `costUsd` on each `usage` event (the provider's own figure wins, e.g. OpenRouter `usage.cost`), the reducer sums it into `usage.totalCostUsd`, and `UsageMeter` shows "Est. cost". `costPartial` (shown as "≥") means some request had no known price.
+- `core/provider/pricing.ts` holds Anthropic list prices (per million tokens, checked 2026-11) and `estimateCostUsd`; the agent puts `costUsd` on each `usage` event (the provider's own figure wins, e.g. OpenRouter `usage.cost`), the reducer sums it into `usage.totalCostUsd`, and `UsageMeter` shows "Est. cost". `costPartial` (shown as "â‰¥") means some request had no known price.
 - Known gaps: it is an estimate (no tiers such as Haiku 5.5 above 100K, no fast-mode or batch pricing); subagent requests are not counted; there is no public API for remaining credit, so none is shown. Update `PRICES` when prices change.
 
 ## Workspace tiles in the sidebar
@@ -231,7 +231,24 @@ While the message field has the cursor, the composer border and ring use `--ring
 UI and setup must stay friendly for non-technical users: plain words (no jargon such as "token", "PTY", "dispatch" in visible text), sensible defaults, every setting explained in one line, and nothing that needs the docs to be understood. New features (queue, context window, terminal) are reviewed against this.
 
 ## Context size (JURA-3)
-- Settings → General → "Context size": Automatic (default) or a cap (20k–10M, presets in `CONTEXT_LIMITS`). Stored as `Prefs.contextLimit` (0 = automatic).
+- Settings â†’ General â†’ "Context size": Automatic (default) or a cap (20kâ€“10M, presets in `CONTEXT_LIMITS`). Stored as `Prefs.contextLimit` (0 = automatic).
 - Effective window = `min(cap, model window)`: the cap can lower the window, never raise it. Options above what the model supports are disabled in the UI; the controller and validator reject out-of-range values. Compaction (80%) uses the effective window.
 - The context meter now shows on workspace open, new chat, chat switch and after a setting change (`Controller.showContext()`; uses real usage when known, otherwise an estimate).
 - Gap: the CLI does not expose the cap yet.
+
+## Picture in picture and quick folders
+
+- Named CiP (Chat in Picture) in the UI. One entry everywhere (header button, View menu, right-click menu, Cmd/Ctrl+Shift+P); the size is a Settings > General switch "CiP in normal size": off = phone (portrait, max 390 x 844), on = normal (full main-window layout with all columns; first opens at the main window's size and place, then remembers its own). Stored as `mca.cipSize`; changing it while CiP is open reopens it in the new size.
+- Each size remembers its own last position and size across launches (`<userData>/cip-bounds.json`, saved when CiP is left, switched or closed). A saved box is ignored if it no longer overlaps a display.
+- PiP is a second, frameless, always-on-top `BrowserWindow` loading the renderer with `?pip=phone|normal` (`main/pip.ts`, channels `window:pip` and `window:pipOpacity`; code still says pip). The main window is hidden while it is open and comes back when PiP is left or closed. A frameless window is needed because Windows cannot drop the title bar of an existing window.
+- Every event (`agent:events`, prompts, terminal, menu) is broadcast to all windows; both renderers show the same session from main. Dialogs and menu actions go to the focused window, else the PiP window, else the main window. Closing the main window aborts the turn and closes PiP.
+- Resize: native edges plus bottom-left and bottom-right grips (`CipResizeGrips`, channel `window:cipBounds`, only acts on the open CiP window, min 280 x 240).
+- Unfocused opacity from Settings > General (20-100 %, default 60 %, `mca.pipOpacity`); clamped to at least 0.2 in main. `setOpacity` does nothing on Linux.
+- In the PiP window the tools panel and column switcher are hidden and the sidebar is an overlay: a double-click on a non-control area opens it; a backdrop click or window blur closes it. The saved `mca.layout` is not changed.
+- "Newest folders" (hover over New workspace in the sidebar, and the CiP quick folder picker) come only from allowed folders set in Settings > General ("Newest folders from"; state.json `folderRoots`, added only through the folder picker in main). Only their direct subfolders are listed (one level, no deeper), non-hidden, not already listed, 5 newest by birthtime (`newestIn`). `workspace:open` re-checks a path against that list; the trust prompt still applies. No allowed folders = no newest folders.
+- Local Windows test run: 4 symlink tests fail with EPERM (no symlink privilege); unrelated.
+
+## Right-click quick-actions menu
+
+- A right-click anywhere whose target did not call `preventDefault` opens a native menu (`contextMenuTemplate` in `main/menu.ts`, channel `window:contextMenu`). Text fields get Cut/Copy/Paste/Select All, selected text gets Copy, then CiP (checked while open), New Chat, Open Workspace, Focus Message Field, Stop, Sidebar/Tools toggles, Show (Changes/Git/Terminal), Zoom and Settings. Items reuse `menu:action`. A component that wants its own right-click menu just calls `preventDefault`.
+- Shortcuts listed in it are display only (`accelerator`) and are the same as in the app menu.

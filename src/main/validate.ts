@@ -1,6 +1,6 @@
 import { isSessionId } from '../core/session'
 import { PROVIDER_IDS } from '../core/provider/factory'
-import { EFFORT_LEVELS, isContextLimit, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
+import { clampPipOpacity, PIP_MODES, type PipMode, EFFORT_LEVELS, isContextLimit, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, type Attachment, type Decision, type Effort, type IpcContract, type ProviderId } from '../shared/types'
 
 const bad = (m: string): never => {
   throw new Error(`Invalid request: ${m}`)
@@ -15,6 +15,7 @@ const changedPath = (v: unknown): string => {
   const p = str(v, 'path')
   return p.length > 0 && p.length <= 4096 && !p.includes('\0') ? p : bad('invalid path')
 }
+const opacity = (v: unknown): number => (typeof v === 'number' ? clampPipOpacity(v) : bad('opacity must be a number'))
 const obj = (v: unknown, name: string): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : bad(`${name} must be an object`))
 
 const attachments = (v: unknown): Attachment[] => {
@@ -42,7 +43,19 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
   'skills:set': ([n, e]) => [typeof n === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(n) ? n : bad('invalid skill name'), typeof e === 'boolean' ? e : bad('enabled must be true or false')],
   'workspace:select': () => [],
   'workspace:recent': () => [],
-  'workspace:open': ([p]) => [str(p, 'path')], // the controller only accepts paths from the recent list
+  'workspace:newest': () => [],
+  'workspace:open': ([p]) => [str(p, 'path')], // the controller only accepts paths from the recent list or its newest siblings
+  'window:contextMenu': ([c]) => {
+    const o = obj(c, 'context')
+    return [{ selection: bool(o.selection, 'selection'), editable: bool(o.editable, 'editable') }]
+  },
+  'window:pip': ([m, o]) => [m === 'off' || PIP_MODES.includes(m as PipMode) ? (m as PipMode | 'off') : bad('mode must be "phone", "normal" or "off"'), opacity(o)],
+  'window:pipOpacity': ([o]) => [opacity(o)],
+  'window:cipBounds': ([b]) => {
+    const o = obj(b, 'bounds')
+    const n = (k: string, min: number) => (typeof o[k] === 'number' && Number.isFinite(o[k]) ? Math.round(Math.min(100_000, Math.max(min, o[k] as number))) : bad(`bounds.${k} must be a number`))
+    return [{ x: n('x', -100_000), y: n('y', -100_000), width: n('width', 280), height: n('height', 240) }]
+  },
   'workspace:forget': ([p]) => [str(p, 'path')],
   'workspace:reorder': ([o]) => [Array.isArray(o) && o.length <= 100 ? o.map((p) => changedPath(p)) : bad('order must be a list of at most 100 paths')],
   'workspace:overview': () => [],
@@ -70,6 +83,8 @@ export const validators: { [K in keyof IpcContract['invoke']]: (args: unknown[])
     return [{ ...(o.provider !== undefined && { provider: provider(o.provider) }), ...(o.model !== undefined && { model: str(o.model, 'model') }), ...(o.effort !== undefined && { effort: effort(o.effort) }), ...(o.notifications !== undefined && { notifications: bool(o.notifications, 'notifications') }), ...(o.systemPrompt !== undefined && { systemPrompt: str(o.systemPrompt, 'systemPrompt') }), ...(o.systemReplace !== undefined && { systemReplace: bool(o.systemReplace, 'systemReplace') }), ...(o.contextLimit !== undefined && { contextLimit: contextLimit(o.contextLimit) }) }]
   },
   'settings:models': ([p]) => [provider(p)],
+  'settings:addFolderRoot': () => [],
+  'settings:removeFolderRoot': ([p]) => [str(p, 'path')],
   'prompt:answer': ([id, d]) => {
     const o = obj(d, 'decision')
     if (typeof o.allow !== 'boolean') bad('decision.allow must be a boolean')

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Keyboard, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
+import { Check, FolderPlus, Keyboard, X, CircleAlert, CircleCheck, ExternalLink, Info, KeyRound, Monitor, Moon, Plug, ScrollText, Sparkles, SlidersHorizontal, Sun } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS, KEY_HELP, PROVIDER_LABELS } from '@/lib/providers'
 import { CONTEXT_LIMITS, EFFORT_LEVELS, type AppInfo, type Effort, type KeySource, type ProviderId, type SettingsInfo, type SkillInfo } from '../../../shared/types'
@@ -161,7 +161,7 @@ function Row({ title, description, children }: { title: string; description: str
   )
 }
 
-function GeneralPanel({ settings, theme, focus, onUpdate }: { settings: SettingsInfo; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; focus?: FocusStrength } & Pick<SettingsActions, 'onUpdate'>) {
+function GeneralPanel({ settings, theme, focus, pipOpacity, cipSize, folders, onUpdate }: { settings: SettingsInfo; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; focus?: FocusStrength; pipOpacity?: FocusStrength; cipSize?: CipSize; folders?: FolderRoots } & Pick<SettingsActions, 'onUpdate'>) {
   return (
     <div className="space-y-5">
       {theme && (
@@ -186,6 +186,52 @@ function GeneralPanel({ settings, theme, focus, onUpdate }: { settings: Settings
             <div className="flex shrink-0 items-center gap-2">
               <input type="range" min={0} max={100} step={10} value={focus.value} aria-label="Message field highlight" className="w-32 accent-primary" onChange={(e) => focus.onChange(Number(e.target.value))} />
               <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{focus.value} %</span>
+            </div>
+          </Row>
+        </>
+      )}
+      {folders && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <Row title="Newest folders from" description="Allowed folders. Their direct subfolders (one level, no deeper) are offered as newest folders when you hover New workspace and in CiP.">
+              <Button variant="outline" size="sm" className="shrink-0" onClick={folders.onAdd}>
+                <FolderPlus className="mr-1 h-4 w-4" />
+                Add folder
+              </Button>
+            </Row>
+            {(settings.folderRoots ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">No allowed folders yet, so no newest folders are shown.</p>
+            ) : (
+              <ul className="space-y-1">
+                {(settings.folderRoots ?? []).map((f) => (
+                  <li key={f} className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
+                    <span className="min-w-0 flex-1 truncate font-mono" title={f}>{f}</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label={`Remove ${f}`} onClick={() => folders.onRemove(f)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+      {cipSize && (
+        <>
+          <Separator />
+          <Row title="CiP in normal size" description="CiP (chat in picture) is the small always-on-top chat window (Cmd/Ctrl+Shift+P). Off: small phone-shaped window. On: a window like the main one (all columns), at the size and place you last gave it.">
+            <Switch aria-label="CiP in normal size" checked={cipSize.value === 'normal'} onCheckedChange={(on) => cipSize.onChange(on ? 'normal' : 'phone')} />
+          </Row>
+        </>
+      )}
+      {pipOpacity && (
+        <>
+          <Separator />
+          <Row title="CiP opacity" description="How visible the CiP window is while you work in another app. It turns fully opaque when focused.">
+            <div className="flex shrink-0 items-center gap-2">
+              <input type="range" min={20} max={100} step={10} value={Math.round(pipOpacity.value * 100)} aria-label="CiP opacity" className="w-32 accent-primary" onChange={(e) => pipOpacity.onChange(Number(e.target.value) / 100)} />
+              <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{Math.round(pipOpacity.value * 100)} %</span>
             </div>
           </Row>
         </>
@@ -294,6 +340,16 @@ export function SkillsPanel({ skills, onToggle }: { skills: SkillInfo[]; onToggl
   )
 }
 
+export interface FolderRoots {
+  onAdd(): void
+  onRemove(path: string): void
+}
+
+export interface CipSize {
+  value: 'phone' | 'normal'
+  onChange(v: 'phone' | 'normal'): void
+}
+
 export interface FocusStrength {
   value: number
   onChange(v: number): void
@@ -365,7 +421,7 @@ export function ShortcutsPanel({ editor }: { editor: KeyEditor }) {
 
 export type SettingsTab = 'general' | 'provider' | 'instructions' | 'skills' | 'mcp' | 'shortcuts' | 'about'
 
-export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, focus, info, keyEditor, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; focus?: FocusStrength; keyEditor?: KeyEditor; tab?: SettingsTab } & SettingsActions) {
+export function SettingsDialog({ open, onOpenChange, settings, models, disabled, mcp = [], skills = [], onSkill = () => {}, theme, focus, pipOpacity, cipSize, folders, info, keyEditor, tab = 'general', ...actions }: { open: boolean; onOpenChange(open: boolean): void; settings: SettingsInfo; models?: ModelList; disabled?: boolean; mcp?: string[]; skills?: SkillInfo[]; onSkill?(name: string, enabled: boolean): void; theme?: { pref: ThemePref; onChange(p: ThemePref): void }; info?: AppInfo | null; focus?: FocusStrength; pipOpacity?: FocusStrength; cipSize?: CipSize; folders?: FolderRoots; keyEditor?: KeyEditor; tab?: SettingsTab } & SettingsActions) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(44rem,85vh)] flex-col gap-4 sm:max-w-3xl [&>*]:min-w-0">
@@ -407,7 +463,7 @@ export function SettingsDialog({ open, onOpenChange, settings, models, disabled,
             </TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="min-h-0 min-w-0 overflow-y-auto pr-1">
-            <GeneralPanel settings={settings} theme={theme} focus={focus} onUpdate={actions.onUpdate} />
+            <GeneralPanel settings={settings} theme={theme} focus={focus} pipOpacity={pipOpacity} cipSize={cipSize} folders={folders} onUpdate={actions.onUpdate} />
           </TabsContent>
           <TabsContent value="provider" className="min-h-0 min-w-0 overflow-y-auto pr-1">
             <ProviderForm settings={settings} models={models} disabled={disabled} {...actions} />

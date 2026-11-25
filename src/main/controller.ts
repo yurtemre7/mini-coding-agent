@@ -21,7 +21,7 @@ import { deleteSession, listSessions, loadSession, parseTranscript, renameSessio
 import { buildReminder } from '../core/context'
 import { describeStatus, McpManager } from '../core/mcp'
 import { discoverSkills } from '../core/skill'
-import { disabledSkills, setSkillEnabled, forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
+import { disabledSkills, setSkillEnabled, forgetWorkspace, isTrusted, lastWorkspace, loadPrefs, newestIn, folderRoots, addFolderRoot, removeFolderRoot, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, trustWorkspace } from '../core/trust'
 import { reduce, emptyView, messagesToEvents } from '../shared/reducer'
 import { estimateTokens } from '../core/compact'
 import { DEFAULT_EFFORT, EFFORT_LEVELS, isContextLimit, type Attachment, type CommandInfo, IMAGE_MIMES, type Decision, type Effort, type KeySource, type ModelInfo, type PromptRequest, type ProviderId, type SessionInfo, type SettingsInfo, type SkillInfo, type TerminalEvent, type ViewEvent, type ViewState, type WorkspaceChats } from '../shared/types'
@@ -103,7 +103,7 @@ export class Controller {
       source[id] = hasKey[id] ? ((await this.keys.source?.(id)) ?? null) : null
     }
     const contextMax = await this.modelWindow()
-    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, contextMax, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source }
+    return { provider: this.provider, model: this.model, effort: this.effort, notifications: this.notifications, systemPrompt: this.systemPrompt, systemReplace: this.systemReplace, contextLimit: this.contextLimit, contextMax, defaultSystemPrompt: DEFAULT_SYSTEM_PROMPT, hasKey, keySource: source, folderRoots: await folderRoots(this.d.home) }
   }
 
   /** Model ids for the picker, cached per provider for the session. A failure returns the defaults plus the reason; `rejected` = the key was refused. */
@@ -337,9 +337,25 @@ export class Controller {
     return recentWorkspaces(this.d.home)
   }
 
-  /** The renderer never supplies a path of its own: only one already in the recent list opens. */
+  /** Newest folders directly inside the allowed folders from Settings (not already listed), for the quick folder pickers. */
+  async newest(): Promise<string[]> {
+    return newestIn(await folderRoots(this.d.home), await this.recent())
+  }
+
+  /** Allowed folders come only from the folder picker in main; removing takes a path from the stored list. */
+  async addFolderRoot(dir: string): Promise<SettingsInfo> {
+    await addFolderRoot(dir, this.d.home)
+    return this.getSettings()
+  }
+  async removeFolderRoot(dir: string): Promise<SettingsInfo> {
+    await removeFolderRoot(dir, this.d.home)
+    return this.getSettings()
+  }
+
+  /** The renderer never supplies a path of its own: only one from the recent list or `newest()` opens (re-checked here; the trust prompt still applies). */
   async openRecent(dir: string): Promise<void> {
-    if (!(await this.recent()).includes(dir)) throw new Error('Unknown workspace. Open it with the folder picker.')
+    const recent = await this.recent()
+    if (!recent.includes(dir) && !(await this.newest()).includes(dir)) throw new Error('Unknown workspace. Open it with the folder picker.')
     await this.selectWorkspace(dir)
   }
 

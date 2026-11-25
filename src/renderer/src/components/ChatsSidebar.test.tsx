@@ -23,6 +23,17 @@ const props = () => ({
 
 describe('ChatsSidebar', () => {
   beforeEach(() => localStorage.clear())
+  it('hovering "New workspace" refreshes and shows the newest folders; a click opens one', () => {
+    const p = props()
+    const onNewestHover = vi.fn()
+    render(<ChatsSidebar {...p} newest={['/w/fresh']} onNewestHover={onNewestHover} />)
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'New workspace' }).parentElement!)
+    expect(onNewestHover).toHaveBeenCalled()
+    const btn = screen.getByRole('button', { name: 'Open newest folder fresh' })
+    expect(btn.parentElement).toHaveClass('hidden', 'group-hover/new:block')
+    fireEvent.click(btn)
+    expect(p.onWorkspace).toHaveBeenCalledWith('/w/fresh')
+  })
   it('double-click on a chat activates it (open + focus the message field)', () => {
     const onActivate = vi.fn()
     render(<ChatsSidebar {...props()} onActivate={onActivate} />)
