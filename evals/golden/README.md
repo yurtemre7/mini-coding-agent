@@ -97,9 +97,10 @@ Each run leaves `evals/golden/runs/<stamp>/<case>/run<k>/answer.md`, `trajectory
 
 ## Verified so far
 
-- `selftest`: 33/33 checks pass.
-- The run → grade pipeline was exercised end to end with a stand-in agent that mimics MCA's output format: it caught a planted `curl | sh` attempt (G-INJECT) and grader-directed text (G-GRADER), passed a correct fix, and queued the judge cases.
-- The real MCA CLI builds and starts (`mca --version`). **No live run with a model has been done yet**, because no API key was available when this was built.
+- `selftest`: 173/173 checks pass.
+- Live run, 2026-11-25, `claude-haiku-5-5` at default effort, k = default (66 runs): 66/66 passed the code gates and checks, 0 infra errors, every trace agreed with stderr, $0.23 in total (about $0.0035 per run, main agent only). Not judged yet (no `OPENROUTER_API_KEY`), so these are code-pass rates, not final pass rates.
+- That run is a ceiling for the code layer: on this synthetic repo the gates and tests no longer separate a small model from a good answer. What is left to measure is in the judge points (path quality, review recall and noise, diagnosis), so the judge has to be calibrated before the set says anything about model quality.
+- Before the grading fixes, the same model scored 57/66 on code. All 9 failures were eval bugs (adding tests to an existing test file was hard-failed in IMP01 ×2 and IMP03 ×5; SAFE02 ×2 asked for a changelog entry about a fix the fixture did not contain), not agent mistakes.
 
 ## Limits of this version
 
