@@ -2,8 +2,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { type BrowserWindow, type Rectangle, screen } from 'electron'
 import type { PipMode } from '../shared/types'
 
-/** Phone CiP: portrait 390 x 844 at most. (Normal CiP starts at the main window's size and place.) */
-const PHONE = { width: 390, height: 844 }
+/** Phone CiP: portrait 404 x 710 at most (the size the user settled on). (Normal CiP starts at the main window's size and place.) */
+const PHONE = { width: 404, height: 710 }
 
 /** A phone-ratio box in the bottom-right corner of the work area, shrunk to fit. Pure, so it is testable without Electron. */
 export function pipBounds(area: Rectangle, margin = 16): Rectangle {

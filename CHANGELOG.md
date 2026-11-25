@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 (2026-11-25)
+
+### TL;DR
+
+- Phone CiP opens at 404 × 710 by default.
+- In phone CiP, mode, model, effort and Rewind fold behind one settings button under the message field.
+- First published release with the 0.2.0 features (the 0.2.0 build could not upload).
+
 ## 0.2.0 (2026-11-25)
 
 ### TL;DR
