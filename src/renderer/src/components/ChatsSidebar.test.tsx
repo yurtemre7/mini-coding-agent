@@ -22,18 +22,27 @@ const props = () => ({
 })
 
 describe('ChatsSidebar', () => {
-  beforeEach(() => localStorage.clear())
-  it('pins a chat from any workspace to a Pinned list on top, remembers it, and unpins with one click', () => {
+  beforeEach(() => (localStorage.clear(), sessionStorage.clear()))
+  it('pins last for the session; pinning again keeps them after a restart; one click unpins', () => {
+    sessionStorage.clear()
     const p = props()
     const { unmount } = render(<ChatsSidebar {...p} />)
     expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Pin "Fix the bug"' }))
     const pinned = screen.getByRole('region', { name: 'Pinned' })
-    expect(pinned).toHaveTextContent('Fix the bug')
-    fireEvent.click(within(pinned).getByTitle('Fix the bug (app)'))
+    expect(within(pinned).getByLabelText('Session pin')).toBeInTheDocument()
+    fireEvent.click(within(pinned).getByTitle(/Fix the bug \(app\)/))
     expect(p.onChat).toHaveBeenCalledWith('/w/app', 'c1')
     unmount()
-    render(<ChatsSidebar {...p} />) // remembered
+    sessionStorage.clear() // app restart: session pins are gone
+    const r2 = render(<ChatsSidebar {...p} />)
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Pin "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep "Fix the bug" pinned' }))
+    expect(screen.getByLabelText('Saved pin')).toBeInTheDocument()
+    r2.unmount()
+    sessionStorage.clear()
+    render(<ChatsSidebar {...p} />) // saved pin survives the restart
     const again = screen.getByRole('region', { name: 'Pinned' })
     fireEvent.click(within(again).getByRole('button', { name: 'Unpin "Fix the bug"' }))
     expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()

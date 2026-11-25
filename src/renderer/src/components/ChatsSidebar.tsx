@@ -17,19 +17,23 @@ const load = (): Record<string, boolean> => {
   }
 }
 
-type PinRef = { path: string; id: string }
+/** A pin lasts for this app session; pinning it again ("Keep pinned") saves it across restarts. */
+type PinRef = { path: string; id: string; saved: boolean }
 const PIN_KEY = 'mca.pinned'
-const loadPins = (): PinRef[] => {
+const read = (store: () => Storage, saved: boolean): PinRef[] => {
   try {
-    const v = JSON.parse(localStorage.getItem(PIN_KEY) ?? '[]')
-    return Array.isArray(v) ? v.filter((r): r is PinRef => !!r && typeof r.path === 'string' && typeof r.id === 'string') : []
+    const v = JSON.parse(store().getItem(PIN_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((r) => !!r && typeof r.path === 'string' && typeof r.id === 'string').map((r) => ({ path: r.path, id: r.id, saved })) : []
   } catch {
     return []
   }
 }
+const loadPins = (): PinRef[] => [...read(() => localStorage, true), ...read(() => sessionStorage, false)]
 const savePins = (pins: PinRef[]) => {
+  const strip = (saved: boolean) => JSON.stringify(pins.filter((r) => r.saved === saved).map(({ path, id }) => ({ path, id })))
   try {
-    localStorage.setItem(PIN_KEY, JSON.stringify(pins))
+    localStorage.setItem(PIN_KEY, strip(true))
+    sessionStorage.setItem(PIN_KEY, strip(false))
   } catch {
     // not remembered
   }
@@ -78,13 +82,19 @@ export function ChatsSidebar(p: Props) {
   const [collapsed, setCollapsed] = useState(load)
   // pinned chats (any workspace) are listed on top; a pin whose chat no longer exists is simply not shown
   const [pins, setPins] = useState(loadPins)
-  const isPinned = (path: string, id: string) => pins.some((r) => r.path === path && r.id === id)
-  const togglePin = (path: string, id: string) =>
+  const pinOf = (path: string, id: string) => pins.find((r) => r.path === path && r.id === id)
+  const isPinned = (path: string, id: string) => !!pinOf(path, id)
+  const update = (f: (cur: PinRef[]) => PinRef[]) =>
     setPins((cur) => {
-      const next = cur.some((r) => r.path === path && r.id === id) ? cur.filter((r) => !(r.path === path && r.id === id)) : [...cur, { path, id }]
+      const next = f(cur)
       savePins(next)
       return next
     })
+  const same = (r: PinRef, path: string, id: string) => r.path === path && r.id === id
+  /** Not pinned: pin for this session. Pinned: unpin. */
+  const togglePin = (path: string, id: string) => update((cur) => (cur.some((r) => same(r, path, id)) ? cur.filter((r) => !same(r, path, id)) : [...cur, { path, id, saved: false }]))
+  /** Pin again: keep it after restarts. */
+  const keepPin = (path: string, id: string) => update((cur) => cur.map((r) => (same(r, path, id) ? { ...r, saved: true } : r)))
   const pinned = pins.flatMap((r) => {
     const chat = p.workspaces.find((w) => w.path === r.path)?.chats.find((c) => c.id === r.id)
     return chat ? [{ ...r, chat }] : []
@@ -139,14 +149,19 @@ export function ChatsSidebar(p: Props) {
       {pinned.length > 0 && (
         <section aria-label="Pinned" className="space-y-0.5">
           <p className="px-2 text-xs font-medium text-muted-foreground">Pinned</p>
-          {pinned.map(({ path, id, chat }) => {
+          {pinned.map(({ path, id, chat, saved }) => {
             const here = path === p.workspace && id === p.current
             return (
               <div key={`${path}:${id}`} className={`group relative flex items-center rounded-md ${here ? 'bg-accent text-accent-foreground' : ''}`}>
-                <Button variant="ghost" size="sm" className="h-7 min-w-0 flex-1 justify-start text-left hover:bg-transparent" disabled={p.disabled} title={`${chat.title} (${base(path)})`} onClick={() => p.onChat(path, id)} onDoubleClick={() => p.onActivate?.(path, id)}>
-                  <Pin className="mr-1 h-3 w-3 shrink-0" />
+                <Button variant="ghost" size="sm" className="h-7 min-w-0 flex-1 justify-start text-left hover:bg-transparent" disabled={p.disabled} title={`${chat.title} (${base(path)})${saved ? '' : ', pinned for this session'}`} onClick={() => p.onChat(path, id)} onDoubleClick={() => p.onActivate?.(path, id)}>
+                  <Pin className={`mr-1 h-3 w-3 shrink-0 ${saved ? 'fill-current' : 'opacity-60'}`} aria-label={saved ? 'Saved pin' : 'Session pin'} />
                   <span className={`min-w-0 truncate ${here ? 'font-medium' : ''}`}>{chat.title}</span>
                 </Button>
+                {!saved && (
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Keep "${chat.title}" pinned`} title="Pin again to keep it after restarts" onClick={() => keepPin(path, id)}>
+                    <Pin className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button variant="ghost" size="icon" className="mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Unpin "${chat.title}"`} title="Unpin" onClick={() => togglePin(path, id)}>
                   <PinOff className="h-3.5 w-3.5" />
                 </Button>
@@ -287,9 +302,15 @@ export function ChatsSidebar(p: Props) {
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent align="end" className="w-56 p-1">
+                              {pinOf(path, c.id)?.saved === false && (
+                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); keepPin(path, c.id) }}>
+                                  <Pin className="mr-2 h-3.5 w-3.5 fill-current" />
+                                  Keep pinned
+                                </Button>
+                              )}
                               <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); togglePin(path, c.id) }}>
                                 {isPinned(path, c.id) ? <PinOff className="mr-2 h-3.5 w-3.5" /> : <Pin className="mr-2 h-3.5 w-3.5" />}
-                                {isPinned(path, c.id) ? 'Unpin' : 'Pin'}
+                                {isPinned(path, c.id) ? 'Unpin' : 'Pin for this session'}
                               </Button>
                               {p.onRename && (
                                 <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Rename "${c.title}"`} onClick={() => { setMenu(null); setEdit({ id: c.id, value: c.title }) }}>

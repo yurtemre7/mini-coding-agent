@@ -255,4 +255,4 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 
 ## Pinned chats
 
-- Every chat row in the sidebar has a pin button on hover (also "Pin"/"Unpin" in the open workspace's chat menu). Pinned chats from any workspace are listed on top under "Pinned"; the unpin button on hover removes one with one click. Stored per user in localStorage `mca.pinned` (`{ path, id }`); a pin whose chat was deleted is not shown.
+- Every chat row in the sidebar has a pin button on hover (also in the open workspace's chat menu). A pin lasts for the app session (sessionStorage); pinning it again ("Keep pinned", the pin button in the Pinned list) saves it across restarts (localStorage `mca.pinned`, `{ path, id }`). Saved pins show a filled pin icon. One click on the unpin button removes either kind. A pin whose chat was deleted is not shown. Each window (main, CiP) has its own session pins.

@@ -4,7 +4,7 @@
 
 ### TL;DR
 
-- Pin chats from any workspace to a Pinned list at the top of the sidebar; unpin with one click.
+- Pin chats from any workspace to a Pinned list at the top of the sidebar. Pins last for the session; pin again to keep them after restarts. Unpin with one click.
 
 ## 0.2.1 (2026-11-25)
 
