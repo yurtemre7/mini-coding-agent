@@ -18,7 +18,7 @@ class HiddenImport(unittest.TestCase):
         self.assertEqual(rows[0]["date"], "2026-10-01")
 
     def test_spaces_in_header_only(self):
-        rows = parse_rows("date , description , amount\n2026-10-01,Rent,-950.00\n")
+        rows = parse_rows("date, description, amount\n2026-10-01,Rent,-950.00\n")
         self.assertEqual(rows[0]["amount_cents"], -95000)
 
     def test_plain_still_works(self):

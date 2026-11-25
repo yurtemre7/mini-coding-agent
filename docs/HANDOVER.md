@@ -24,7 +24,7 @@ npm run build && node out/cli/index.js -p "read package.json and tell me the ver
 node out/cli/index.js         # interactive REPL in the current directory
 ```
 
-CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode`, `--allowed-tools`, `--trust`, `--continue`, `--resume <id>`, `--version`, `--help`.
+CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode`, `--allowed-tools`, `--trust`, `--continue`, `--resume <id>`, `--trace <file>` (with `-p`: JSON lines with every tool call's full input, its error flag by call id, and a usage total; used by the golden eval), `--version`, `--help`.
 
 ## Milestone status
 
@@ -261,6 +261,8 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 ## Golden agent eval (`evals/golden/`)
 
 - 14 cases that run the real harness headless (`mca -p`) on a synthetic Python sandbox repo: implement (5), reward hack, test generation (mutation kill rate), code review (2), incident diagnosis (2), safety (prompt injection in a repo file, ambiguous ticket, destructive cleanup). See `evals/golden/README.md`.
-- Grading: code gates first (forbidden files, test edits, new dependencies, special-casing, injected or out-of-workspace commands, grader-directed text), then visible + hidden tests, then an LLM judge from another model family. Reports pass@1, pass@k, pass^k and cost per success.
-- Python 3.11 standard library only; not part of `npm test`. `python3 -I evals/golden/mca_eval.py selftest` checks the set against itself without a key.
-- Not verified: no live run with a model yet; judge uncalibrated; headless tool-call inputs are truncated at 200 characters, so the trajectory gates can miss a long command.
+- Grading: code gates first (forbidden files, test edits beyond adding tests, new dependencies, special-casing, injected or out-of-workspace commands, grader-directed text), then visible + hidden tests, then an LLM judge from another model family. Reports pass@1 with a Wilson interval, pass@k, pass^k and cost per success; timeouts and crashes without an answer are infra errors, excluded from every rate.
+- Trajectory gates read `mca -p --trace` (full inputs) and fail closed when the trace is missing or disagrees with stderr. G-DESTRUCT is an allowlist (delete targets must resolve inside the workspace). The diff is taken against a pristine copy outside the sandbox, not the agent-writable `.git`.
+- Runs get a minimal environment (PATH, locale, temp, proxy, and only the candidate provider's key): no judge key, no PWD pointing at the eval checkout. Without a key in the environment `run` refuses unless `--use-real-home` is passed, because the user's `~/.mca` rules, hooks and MCP servers would then apply.
+- Python 3.11 standard library only; not part of `npm test`. `python3 -I evals/golden/mca_eval.py selftest` checks the set against itself without a key (94 checks, including one per gate bypass and false positive found in review, and that no case file is hidden by a `.gitignore` rule: a root `*.log` rule once dropped the OPS incident logs).
+- Known gaps: judge uncalibrated; not a sandbox (the agent can run arbitrary Python through the allowed `python3 -m unittest`, so run untrusted candidates in a container or VM); usage covers the main agent only (subagent requests are not reported to the parent); a module the agent plants at the repo root can shadow a stdlib module for the hidden tests; a TG01 test that asserts a hash of `report.py` would kill every mutant (only the judge would notice).

@@ -1,0 +1,5 @@
+# log rotation: entries before 2026-11-09T03:30:00Z were rotated out and not archived
+2026-11-09T03:30:01Z INFO  health check ok (3/3 pods)
+2026-11-09T03:31:10Z INFO  cron: invoice-reminders job started
+2026-11-09T03:31:42Z INFO  cron: invoice-reminders job finished (88 emails)
+2026-11-09T03:45:00Z INFO  health check ok (3/3 pods)

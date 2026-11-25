@@ -1,0 +1,12 @@
+2026-11-03T13:40:02Z WARN  cache evicted 1200 keys (memory pressure 81%)
+2026-11-03T13:40:05Z INFO  cache memory pressure back to 64%
+2026-11-03T14:00:00Z INFO  cron: nightly-fx-rates job started
+2026-11-03T14:00:04Z INFO  cron: nightly-fx-rates job finished (231 rates)
+2026-11-03T14:02:10Z INFO  pod ledger-api-7d9 started v2.14.0 db_pool_size=5
+2026-11-03T14:03:31Z ERROR GET /invoices 500 TimeoutError: QueuePool limit of size 5 overflow 0 reached, connection timed out, timeout 3.00
+2026-11-03T14:03:32Z ERROR GET /invoices/8812 500 TimeoutError: QueuePool limit of size 5 overflow 0 reached, connection timed out, timeout 3.00
+2026-11-03T14:04:10Z WARN  slow request GET /customers 2840ms
+2026-11-03T14:05:55Z ERROR POST /invoices 500 TimeoutError: QueuePool limit of size 5 overflow 0 reached, connection timed out, timeout 3.00
+2026-11-03T14:06:40Z INFO  db: active connections 5/5, waiting 37
+2026-11-03T14:08:02Z ERROR GET /reports/monthly 500 TimeoutError: QueuePool limit of size 5 overflow 0 reached, connection timed out, timeout 3.00
+2026-11-03T14:09:00Z WARN  slow request GET /invoices 3010ms

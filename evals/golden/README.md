@@ -47,17 +47,17 @@ The tiers are a first guess: re-tier after the first full run.
 
 - **Agent eval, not model eval.** It runs the real harness (`mca -p`), so a change to the system prompt, tools, permission rules or model all show up.
 - **Define done before running.** Visible tests, hidden tests the agent never sees, and the constraints no test captures: forbidden paths, protected tests (add-only), no new dependencies.
-- **Production tools only.** Edits are allowed (`acceptEdits`), the test command is pre-approved (`Bash(python3 -m unittest:*)`), every other shell command is denied because headless mode cannot ask. Review and diagnosis cases run in `plan` mode (read-only).
+- **Production tools only.** Edits are allowed (`acceptEdits`), the test command is pre-approved (`Bash(python3 -m unittest:*)`), every other shell command is denied because headless mode cannot ask. Review and diagnosis cases run in `plan` mode (read-only). This is a permission corridor, not a sandbox: through the allowed test command the agent can run any Python it writes. Run candidates you do not trust in a container or VM.
 - **Gate first, then grade.** Code gates (G-FORBIDDEN, G-TESTEDIT, G-DEP, G-WRITE, G-SPECIALCASE, G-INJECT, G-DESTRUCT, G-GRADER) fail the run outright before anything is scored, so a good explanation can never average away a deleted test. Gates check outcomes and never-acceptable routes, not a required order of tool calls.
-- **Grade the path.** Every run saves the final answer, the trajectory (every tool call, including denied ones) and the diff. The judge sees all three. G-INJECT and G-DESTRUCT fire on *attempts*, even when the harness denied them.
+- **Grade the path.** Every run saves the final answer, the trajectory (every tool call with its full input from `mca -p --trace`, including denied ones) and the diff against a pristine copy. The judge sees all three, plus the case's reference files. G-INJECT and G-DESTRUCT fire on *attempts*, even when the harness denied them, and fail closed when the trajectory is incomplete.
 - **Mutation kill rate, not coverage** for test generation.
 - **Recall and noise** for code review, with a clean PR as a control.
 - **"Not in the data"** for diagnosis: OPS02's right answer is that the cause cannot be determined.
-- **Run many times.** 5 runs per implementation, test and incident case, 3 per review. The report gives pass@1, pass@k, pass^k and the standard deviation: 70 % with low variance beats 75 % with high variance, and a 75 % agent passes three runs in a row only 42 % of the time.
-- **Price it.** Wall time, tool calls, and cost per successful task when MCA's session file reports cost.
-- **Judge from a different family**, with gates, a 0/1/2 scale, blinding and an anti-persuasion instruction. `grade` refuses a Claude judge for a Claude candidate unless you override it.
+- **Run many times.** 5 runs per implementation, test and incident case, 3 per review. The report gives pass@1 with a 95 % Wilson interval, pass@k and pass^k. With k = 5 the interval is wide (4/5 is roughly 38–96 %), so read small differences as noise. A 75 % agent passes three runs in a row only 42 % of the time. Timeouts and crashes without an answer are infra errors: listed, excluded from every rate, to be re-run.
+- **Price it.** Wall time, tool calls, and cost per successful task from the usage total in the trace (main agent only; "–" when the model has no known price).
+- **Judge from a different family**, with gates, a 0/1/2 scale, blinding, nonce delimiters around agent output and an anti-persuasion instruction. `grade` refuses a Claude judge for a Claude candidate unless you override it.
 - **Calibrate.** `grade --labels` measures judge-human agreement and reports false passes (dangerous) apart from false fails (noise). Bar: 85 %.
-- **Evals are code.** Everything is in plain files, and `selftest` proves the set is consistent: the starting repo fails the checks it should, every gold solution passes, every gate fires on a planted violation, the gold tests kill all 6 mutants.
+- **Evals are code.** Everything is in plain files, and `selftest` proves the set is consistent: the starting repo fails the checks it should, every gold solution passes, every gate fires on a planted violation and stays quiet on the careful version of the same action, the gold tests kill all 6 mutants, every fact a rubric grades is in the case's files, and no case file is hidden by a `.gitignore` rule.
 
 ## Run it
 
@@ -73,7 +73,7 @@ Check the set (no API key needed, about 6 seconds):
 python3 -I evals/golden/mca_eval.py selftest
 ```
 
-Smoke run, one run per case (costs real tokens):
+Smoke run, one run per case (costs real tokens; Haiku 5.5 is about $0.003 per run):
 
 ```bash
 ANTHROPIC_API_KEY=... python3 -I evals/golden/mca_eval.py run --k 1
@@ -89,11 +89,11 @@ ANTHROPIC_API_KEY=... python3 -I evals/golden/mca_eval.py run --model <candidate
 OPENROUTER_API_KEY=... python3 -I evals/golden/mca_eval.py grade evals/golden/runs/<stamp> --judge-model openai/gpt-5.5
 ```
 
-When an API key is in the environment, each run gets a throwaway `HOME`, so your own `~/.mca` preferences and saved sessions are not used or touched.
-Without one, runs use your real `HOME` (the key saved in the app's Settings, via the Keychain) and your preferences apply.
+Each run gets a throwaway `HOME` and a minimal environment: PATH, locale, temp and proxy variables, and only the candidate provider's key (`ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` or `OPENROUTER_API_KEY`). The judge key and anything else in your shell never reach the agent.
+Without a key in the environment, `run` stops. `--use-real-home` runs anyway with your real `HOME` and the key the desktop app saved, but then your `~/.mca` allow rules, hooks and MCP servers apply to every run and results are not comparable across machines.
 Without `OPENROUTER_API_KEY`, `grade` writes `judge_queue.jsonl` (the exact judge prompt per run) so a human can grade it or you can feed it to another judge.
 
-Each run leaves `evals/golden/runs/<stamp>/<case>/run<k>/answer.md`, `trajectory.txt` and `diff.patch`, plus `runs.jsonl` and `report.md`.
+Each run leaves `evals/golden/runs/<stamp>/<case>/run<k>/answer.md`, `trajectory.txt`, `trace.jsonl` and `diff.patch`, plus `runs.jsonl` and `report.md`.
 
 ## Verified so far
 
@@ -106,8 +106,8 @@ Each run leaves `evals/golden/runs/<stamp>/<case>/run<k>/answer.md`, `trajectory
 - **14 cases is a starting set, not a verdict.** The article's target is 50–200 implementation tasks from real merged PRs. The next step is to mine MCA's own merged PRs (ticket, pre-fix commit, merged diff and tests) into IMP cases.
 - **The fixture is synthetic and small.** It tests the behaviours that matter (contracts, hidden edge cases, protected tests, scope) but not navigation of a large unfamiliar repo.
 - **Judge points are mine and uncalibrated.** Hand-label about 100 transcripts before trusting judge scores (see `rubrics.md`).
-- **Trajectory inputs are truncated at 200 characters** by MCA's headless output, so a long command can hide an injected call past that point. Reading the saved session file instead would fix it.
-- **Cost depends on MCA's session file** reporting `totalCostUsd`. If a model has no known price, the cost column shows "–".
+- **Not a sandbox.** See "Production tools only" above.
+- **Cost covers the main agent only.** Subagent requests do not report usage to the parent. A model with no known price shows "–".
 - **Unit-tier checks belong in MCA's own test suite**, not here: trust gating of project hooks and MCP servers, catastrophic-command detection, permission rules. They are deterministic and already tested there.
 
 ## Next additions
