@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### TL;DR
+
+- Pin chats from any workspace to a Pinned list at the top of the sidebar; unpin with one click.
+
 ## 0.2.1 (2026-11-25)
 
 ### TL;DR

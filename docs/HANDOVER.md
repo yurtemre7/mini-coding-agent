@@ -252,3 +252,7 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 
 - A right-click anywhere whose target did not call `preventDefault` opens a native menu (`contextMenuTemplate` in `main/menu.ts`, channel `window:contextMenu`). Text fields get Cut/Copy/Paste/Select All, selected text gets Copy, then CiP (checked while open), New Chat, Open Workspace, Focus Message Field, Stop, Sidebar/Tools toggles, Show (Changes/Git/Terminal), Zoom and Settings. Items reuse `menu:action`. A component that wants its own right-click menu just calls `preventDefault`.
 - Shortcuts listed in it are display only (`accelerator`) and are the same as in the app menu.
+
+## Pinned chats
+
+- Every chat row in the sidebar has a pin button on hover (also "Pin"/"Unpin" in the open workspace's chat menu). Pinned chats from any workspace are listed on top under "Pinned"; the unpin button on hover removes one with one click. Stored per user in localStorage `mca.pinned` (`{ path, id }`); a pin whose chat was deleted is not shown.

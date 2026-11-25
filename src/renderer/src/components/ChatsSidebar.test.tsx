@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ago } from '@/lib/ago'
 import { ChatsSidebar } from './ChatsSidebar'
@@ -23,6 +23,21 @@ const props = () => ({
 
 describe('ChatsSidebar', () => {
   beforeEach(() => localStorage.clear())
+  it('pins a chat from any workspace to a Pinned list on top, remembers it, and unpins with one click', () => {
+    const p = props()
+    const { unmount } = render(<ChatsSidebar {...p} />)
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Pin "Fix the bug"' }))
+    const pinned = screen.getByRole('region', { name: 'Pinned' })
+    expect(pinned).toHaveTextContent('Fix the bug')
+    fireEvent.click(within(pinned).getByTitle('Fix the bug (app)'))
+    expect(p.onChat).toHaveBeenCalledWith('/w/app', 'c1')
+    unmount()
+    render(<ChatsSidebar {...p} />) // remembered
+    const again = screen.getByRole('region', { name: 'Pinned' })
+    fireEvent.click(within(again).getByRole('button', { name: 'Unpin "Fix the bug"' }))
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+  })
   it('hovering "New workspace" refreshes and shows the newest folders; a click opens one', () => {
     const p = props()
     const onNewestHover = vi.fn()

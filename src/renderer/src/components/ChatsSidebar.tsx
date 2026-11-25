@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
 import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,24 @@ const load = (): Record<string, boolean> => {
     return v && typeof v === 'object' && !Array.isArray(v) ? v : {}
   } catch {
     return {}
+  }
+}
+
+type PinRef = { path: string; id: string }
+const PIN_KEY = 'mca.pinned'
+const loadPins = (): PinRef[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(PIN_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((r): r is PinRef => !!r && typeof r.path === 'string' && typeof r.id === 'string') : []
+  } catch {
+    return []
+  }
+}
+const savePins = (pins: PinRef[]) => {
+  try {
+    localStorage.setItem(PIN_KEY, JSON.stringify(pins))
+  } catch {
+    // not remembered
   }
 }
 
@@ -58,6 +76,19 @@ interface Props {
 /** Workspaces as collapsible tiles (reorderable by drag and drop or the menu), each holding its saved chats. Everything is disabled while a turn runs. */
 export function ChatsSidebar(p: Props) {
   const [collapsed, setCollapsed] = useState(load)
+  // pinned chats (any workspace) are listed on top; a pin whose chat no longer exists is simply not shown
+  const [pins, setPins] = useState(loadPins)
+  const isPinned = (path: string, id: string) => pins.some((r) => r.path === path && r.id === id)
+  const togglePin = (path: string, id: string) =>
+    setPins((cur) => {
+      const next = cur.some((r) => r.path === path && r.id === id) ? cur.filter((r) => !(r.path === path && r.id === id)) : [...cur, { path, id }]
+      savePins(next)
+      return next
+    })
+  const pinned = pins.flatMap((r) => {
+    const chat = p.workspaces.find((w) => w.path === r.path)?.chats.find((c) => c.id === r.id)
+    return chat ? [{ ...r, chat }] : []
+  })
   const [menu, setMenu] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [edit, setEdit] = useState<{ id: string; value: string } | null>(null)
@@ -105,6 +136,25 @@ export function ChatsSidebar(p: Props) {
           </div>
         )}
       </div>
+      {pinned.length > 0 && (
+        <section aria-label="Pinned" className="space-y-0.5">
+          <p className="px-2 text-xs font-medium text-muted-foreground">Pinned</p>
+          {pinned.map(({ path, id, chat }) => {
+            const here = path === p.workspace && id === p.current
+            return (
+              <div key={`${path}:${id}`} className={`group relative flex items-center rounded-md ${here ? 'bg-accent text-accent-foreground' : ''}`}>
+                <Button variant="ghost" size="sm" className="h-7 min-w-0 flex-1 justify-start text-left hover:bg-transparent" disabled={p.disabled} title={`${chat.title} (${base(path)})`} onClick={() => p.onChat(path, id)} onDoubleClick={() => p.onActivate?.(path, id)}>
+                  <Pin className="mr-1 h-3 w-3 shrink-0" />
+                  <span className={`min-w-0 truncate ${here ? 'font-medium' : ''}`}>{chat.title}</span>
+                </Button>
+                <Button variant="ghost" size="icon" className="mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Unpin "${chat.title}"`} title="Unpin" onClick={() => togglePin(path, id)}>
+                  <PinOff className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )
+          })}
+        </section>
+      )}
       {p.workspaces.length === 0 && <p className="text-xs text-muted-foreground">No workspaces yet. Open a folder to start.</p>}
       <ul className="space-y-1">
         {p.workspaces.map(({ path, chats }, i) => {
@@ -226,6 +276,9 @@ export function ChatsSidebar(p: Props) {
                             <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
                           </span>
                         </Button>
+                        <Button variant="ghost" size="icon" className={`h-6 w-6 shrink-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${isPinned(path, c.id) ? 'opacity-60' : 'opacity-0'}`} aria-label={isPinned(path, c.id) ? `Unpin "${c.title}"` : `Pin "${c.title}"`} title={isPinned(path, c.id) ? 'Unpin' : 'Pin'} aria-pressed={isPinned(path, c.id)} onClick={() => togglePin(path, c.id)}>
+                          {isPinned(path, c.id) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                        </Button>
                         {open && (p.onExport || p.onDelete || p.onRename) && (
                           <Popover open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
                             <PopoverTrigger asChild>
@@ -234,6 +287,10 @@ export function ChatsSidebar(p: Props) {
                               </Button>
                             </PopoverTrigger>
                             <PopoverContent align="end" className="w-56 p-1">
+                              <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); togglePin(path, c.id) }}>
+                                {isPinned(path, c.id) ? <PinOff className="mr-2 h-3.5 w-3.5" /> : <Pin className="mr-2 h-3.5 w-3.5" />}
+                                {isPinned(path, c.id) ? 'Unpin' : 'Pin'}
+                              </Button>
                               {p.onRename && (
                                 <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Rename "${c.title}"`} onClick={() => { setMenu(null); setEdit({ id: c.id, value: c.title }) }}>
                                   <Pencil className="mr-2 h-3.5 w-3.5" />
