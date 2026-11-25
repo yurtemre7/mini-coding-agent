@@ -57,7 +57,7 @@ The tiers are a first guess: re-tier after the first full run.
 - **Price it.** Wall time, tool calls, and cost per successful task from the usage total in the trace (main agent only; "–" when the model has no known price).
 - **Judge from a different family**, with gates, a 0/1/2 scale, blinding, nonce delimiters around agent output and an anti-persuasion instruction. `grade` refuses a Claude judge for a Claude candidate unless you override it.
 - **Calibrate.** `grade --labels` measures judge-human agreement and reports false passes (dangerous) apart from false fails (noise). Bar: 85 %.
-- **Evals are code.** Everything is in plain files, and `selftest` proves the set is consistent: the starting repo fails the checks it should, every gold solution passes, every gate fires on a planted violation and stays quiet on the careful version of the same action, the gold tests kill all 6 mutants, every fact a rubric grades is in the case's files, and no case file is hidden by a `.gitignore` rule.
+- **Evals are code.** Everything is in plain files, and `selftest` proves the set is consistent: the starting repo fails the checks it should, every gold solution passes, every gate fires on a planted violation and stays quiet on the careful version of the same action (173 checks, covering every bypass found in two review rounds), the gold tests kill all 6 mutants, every fact a rubric grades is in the case's files, and no case file is hidden by a `.gitignore` rule.
 
 ## Run it
 
