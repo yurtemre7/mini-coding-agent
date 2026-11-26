@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ChatTranscript, PREVIEW_CHARS, segments } from './ChatTranscript'
+import { tailLines } from '@/lib/tail'
 
 describe('ChatTranscript working indicator', () => {
   afterEach(() => vi.useRealTimers())
@@ -53,6 +54,31 @@ describe('ChatTranscript', () => {
     expect(screen.queryByText('cmd-a')).toBeNull() // collapsed: no subjects
     expect(screen.getByText('Read')).toBeInTheDocument()
     ;(screen.getByText('Bash ×3').closest('button') as HTMLElement).click()
-    expect(await screen.findByText('cmd-a')).toBeInTheDocument()
+    expect((await screen.findAllByText('cmd-a')).length).toBeGreaterThan(0) // subject + Bash preview
+  })
+})
+
+describe('Bash preview', () => {
+  it('tailLines keeps the last lines and counts the hidden ones', () => {
+    expect(tailLines('')).toEqual({ lines: [], hidden: 0 })
+    expect(tailLines('a\nb\n')).toEqual({ lines: ['a', 'b'], hidden: 0 })
+    expect(tailLines('1\n2\n3\n4\n5\n6\n', 4)).toEqual({ lines: ['3', '4', '5', '6'], hidden: 2 })
+  })
+  it('shows the command and output tail of a Bash call without expanding it', () => {
+    const out = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n')
+    const { rerender } = render(<ChatTranscript items={[{ kind: 'tool', id: 'b', name: 'Bash', input: { command: 'npm test' }, done: false }]} />)
+    const box = () => screen.getByTestId('bash-preview')
+    expect(box()).toHaveTextContent('$ npm test')
+    expect(box()).toHaveTextContent('running…')
+    rerender(<ChatTranscript items={[{ kind: 'tool', id: 'b', name: 'Bash', input: { command: 'npm test' }, done: true, result: out }]} />)
+    expect(box()).toHaveTextContent('… 6 more lines')
+    expect(box()).toHaveTextContent('line 10')
+    expect(box()).not.toHaveTextContent('line 6')
+    rerender(<ChatTranscript items={[{ kind: 'tool', id: 'b', name: 'Bash', input: { command: 'true' }, done: true, result: '' }]} />)
+    expect(box()).toHaveTextContent('(no output)')
+  })
+  it('is not shown for other tools', () => {
+    render(<ChatTranscript items={[{ kind: 'tool', id: 'r', name: 'Read', input: { file_path: 'a' }, done: true, result: 'x' }]} />)
+    expect(screen.queryByTestId('bash-preview')).toBeNull()
   })
 })

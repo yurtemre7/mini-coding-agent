@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+#### Added
+
+- Bash calls in the chat show a small terminal box under the row: the command and the last 4 lines of output (red when the command failed, "running…" while it runs), without expanding the card.
+
 ## 0.2.2 (2026-11-26)
 
 ### TL;DR

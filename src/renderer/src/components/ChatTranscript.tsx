@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
 import { toolSubject } from '../../../shared/guards'
+import { tailLines } from '@/lib/tail'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 export const PREVIEW_CHARS = 2000
@@ -31,6 +32,27 @@ function StatusMark({ tools }: { tools: ToolItem[] }) {
   return null
 }
 
+/** Small always-visible terminal box for a Bash call: the command and the tail of its output. */
+export function BashPreview({ tool }: { tool: ToolItem }) {
+  const raw = (tool.input as { command?: unknown } | null)?.command
+  const command = typeof raw === 'string' ? raw : ''
+  const { lines, hidden } = tailLines(tool.result ?? '')
+  return (
+    <div data-testid="bash-preview" className={`ml-5 mt-0.5 max-w-2xl overflow-hidden rounded-md border bg-muted/60 px-2 py-1 font-mono text-[11px] leading-4 ${tool.isError ? 'border-destructive/50' : ''}`}>
+      <div className="truncate" title={command}>
+        <span className="select-none text-muted-foreground">$ </span>
+        {command}
+      </div>
+      {!tool.done && <div className="text-muted-foreground">running…</div>}
+      {tool.done && hidden > 0 && <div className="text-muted-foreground">… {hidden} more line{hidden === 1 ? '' : 's'}</div>}
+      {tool.done && lines.map((l, i) => (
+        <div key={i} className={`truncate whitespace-pre ${tool.isError ? 'text-destructive' : 'text-muted-foreground'}`}>{l || '\u00a0'}</div>
+      ))}
+      {tool.done && lines.length === 0 && <div className="text-muted-foreground italic">(no output)</div>}
+    </div>
+  )
+}
+
 const triggerClass = 'group flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-muted-foreground hover:bg-muted'
 const chevron = <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
 
@@ -47,6 +69,7 @@ function ToolCard({ tool, subject = false, children }: { tool: ToolItem; subject
         {subject && <span className="min-w-0 truncate font-mono">{sub}</span>}
         <StatusMark tools={[tool]} />
       </CollapsibleTrigger>
+      {tool.name === 'Bash' && <BashPreview tool={tool} />}
       <CollapsibleContent className="ml-4 space-y-2 border-l py-1 pl-3 text-sm">
         {!subject && sub && <p className="font-mono text-xs [overflow-wrap:anywhere] text-muted-foreground">{sub}</p>}
         <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">{clip(JSON.stringify(tool.input, null, 2) ?? '')}</pre>

@@ -256,3 +256,7 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 ## Pinned chats
 
 - Every chat row in the sidebar has a pin button on hover (also in the open workspace's chat menu). A pin lasts for the app session (sessionStorage); pinning it again ("Keep pinned", the pin button in the Pinned list) saves it across restarts (localStorage `mca.pinned`, `{ path, id }`). Saved pins show a filled pin icon. One click on the unpin button removes either kind. A pin whose chat was deleted is not shown. Each window (main, CiP) has its own session pins.
+
+## Inline Bash preview
+
+`BashPreview` in `ChatTranscript.tsx` renders every Bash tool row with an always-visible small box: `$ command` plus the output tail (`tailLines` in `renderer/src/lib/tail.ts`, `BASH_PREVIEW_LINES` = 4) and a "… N more lines" note; full output stays in the expanded card. Inside a folded group (`Bash ×3`) previews appear once the group is expanded.
