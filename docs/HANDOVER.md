@@ -93,6 +93,7 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 ## Decisions that differ from the plan text
 
 - Node 26.13.1 (LTS) instead of Node 22: pinned in `.nvmrc`, read by CI and release (`node-version-file`), `engines` >= 26.13.1, CLI bundle targets node26. Vitest runs with `--no-experimental-webstorage` because Node 25+ has a global `localStorage` that hides jsdom's in renderer tests.
+- GitHub Actions are pinned to major tags: `checkout`, `setup-node`, `upload-artifact` v7 and `download-artifact` v8 (Node 24 runtime, bumped 2026-11-26). The artifact steps only run on manual dispatch or a tag, so PR CI does not exercise them.
 - **ripgrep path**: `@vscode/ripgrep` 1.18 ships the binary in a platform package, so `rg` resolves via the package's `rgPath` with `app.asar` â†’ `app.asar.unpacked`, and `electron-builder.yml` unpacks `node_modules/@vscode/ripgrep-*/bin/**`.
 - **`max_tokens` stop** drops every `tool_use` in that message, not only the cut one (OpenRouter emits the cut call too, so it cannot be singled out).
 - **`bypassPermissions`** does not prompt for protected paths (the Paths rule wins), but explicit and built-in `ask` rules (`.env*`, `~/.ssh`, `~/.aws`) still prompt.
