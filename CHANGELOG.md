@@ -1,10 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-11-26)
 
 ### TL;DR
 
 - Pin chats from any workspace to a Pinned list at the top of the sidebar. Pins last for the session; pin again to keep them after restarts. Unpin with one click.
+- Newest folders skip folders whose names start with `_`.
+- Dependency security updates (`npm audit fix`), including Electron 45.
+
+### Changelog
+
+#### Changed
+
+- Newest folders now skip names starting with `_` (such as archives), like hidden `.` folders. Settings says so.
+- Updated Electron 36 → 45, electron-builder to 26.18 and Vitest 3 → 5 with `npm audit fix`.
+
+#### Fixed
+
+- The Bash timeout test no longer flakes on Windows CI (test only).
 
 ## 0.2.1 (2026-11-25)
 
