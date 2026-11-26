@@ -194,7 +194,7 @@ function GeneralPanel({ settings, theme, focus, pipOpacity, cipSize, folders, on
         <>
           <Separator />
           <div className="space-y-2">
-            <Row title="Newest folders from" description="Allowed folders. Their direct subfolders (one level, no deeper) are offered as newest folders when you hover New workspace and in CiP.">
+            <Row title="Newest folders from" description="Allowed folders. Their direct subfolders (one level, no deeper; names starting with . or _ are skipped) are offered as newest folders when you hover New workspace and in CiP.">
               <Button variant="outline" size="sm" className="shrink-0" onClick={folders.onAdd}>
                 <FolderPlus className="mr-1 h-4 w-4" />
                 Add folder

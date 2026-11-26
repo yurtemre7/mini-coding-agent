@@ -68,7 +68,8 @@ describe('Bash', () => {
     expect(out).toContain('before')
     expect(out).toContain('timed out')
     const pid = Number((await run(ctx, 'cat pid')).trim())
-    await new Promise((r) => setTimeout(r, 300))
+    // the kill is asynchronous; slow runners (Windows CI) need more than a fixed short wait
+    for (let i = 0; i < 30 && alive(pid); i++) await new Promise((r) => setTimeout(r, 100))
     expect(alive(pid)).toBe(false)
   })
   it('a backgrounded child holding the pipe does not hang the tool', async () => {

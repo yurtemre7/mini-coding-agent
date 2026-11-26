@@ -55,7 +55,7 @@ describe('state.json', () => {
   })
   it('lists only direct subfolders of the allowed folders, without excluded, hidden or nested ones', () => {
     const root = tmp()
-    for (const n of ['a', 'b', '.hidden', join('a', 'deep')]) mkdirSync(join(root, n))
+    for (const n of ['a', 'b', '.hidden', '_archive', join('a', 'deep')]) mkdirSync(join(root, n))
     writeFileSync(join(root, 'file.txt'), 'x')
     const got = newestIn([root, join(root, 'missing')])
     expect([...got].sort()).toEqual([join(root, 'a'), join(root, 'b')]) // no a/deep, no hidden, no file

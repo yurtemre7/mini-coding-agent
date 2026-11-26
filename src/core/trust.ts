@@ -78,14 +78,14 @@ export const reorderWorkspaces = (order: string[], home?: string) =>
     s.recent = [...first, ...cur.filter((p) => !first.includes(p))]
   }, home)
 
-/** The newest folders directly inside the allowed `roots` (one level, no deeper), newest first, excluding `exclude` and hidden folders. Unreadable roots are skipped. */
+/** The newest folders directly inside the allowed `roots` (one level, no deeper), newest first, excluding `exclude` and folders starting with . or _ (hidden, archives). Unreadable roots are skipped. */
 export function newestIn(roots: string[], exclude: string[] = [], limit = 5): string[] {
   const known = new Set(exclude)
   const found = new Map<string, number>()
   for (const root of new Set(roots)) {
     let names: string[]
     try {
-      names = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => d.name)
+      names = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory() && !/^[._]/.test(d.name)).map((d) => d.name)
     } catch {
       continue
     }
