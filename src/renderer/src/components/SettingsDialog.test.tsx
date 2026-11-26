@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SettingsDialog } from './SettingsDialog'
+import type { SettingsInfo } from '../../../shared/types'
 
 describe('SettingsDialog', () => {
   it('never renders a stored key: the input is empty and only says "Key saved"', () => {
@@ -148,5 +149,19 @@ describe('SettingsDialog context size', () => {
   it('shows the chosen cap', () => {
     render(<SettingsDialog open onOpenChange={() => {}} settings={{ ...base, contextLimit: 500_000, contextMax: 1_000_000 }} onUpdate={vi.fn()} onSaveKey={() => {}} />)
     expect(screen.getByRole('combobox', { name: 'Context size' })).toHaveTextContent('Large (500k)')
+  })
+})
+
+describe('Settings: allowed folders', () => {
+  it('lists allowed folders, adds through the picker and removes one', () => {
+    const onAdd = vi.fn()
+    const onRemove = vi.fn()
+    const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'B', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'env', openrouter: null }, folderRoots: ['/p/Projects'] } as SettingsInfo
+    render(<SettingsDialog open onOpenChange={vi.fn()} settings={settings} onUpdate={vi.fn()} onSaveKey={vi.fn()} folders={{ onAdd, onRemove }} />)
+    expect(screen.getByText('/p/Projects')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add folder' }))
+    expect(onAdd).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove /p/Projects' }))
+    expect(onRemove).toHaveBeenCalledWith('/p/Projects')
   })
 })

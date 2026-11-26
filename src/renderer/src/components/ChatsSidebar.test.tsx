@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ago } from '@/lib/ago'
 import { ChatsSidebar } from './ChatsSidebar'
@@ -22,7 +22,42 @@ const props = () => ({
 })
 
 describe('ChatsSidebar', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => (localStorage.clear(), sessionStorage.clear()))
+  it('pins last for the session; pinning again keeps them after a restart; one click unpins', () => {
+    sessionStorage.clear()
+    const p = props()
+    const { unmount } = render(<ChatsSidebar {...p} />)
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Pin "Fix the bug"' }))
+    const pinned = screen.getByRole('region', { name: 'Pinned' })
+    expect(within(pinned).getByLabelText('Session pin')).toBeInTheDocument()
+    fireEvent.click(within(pinned).getByTitle(/Fix the bug \(app\)/))
+    expect(p.onChat).toHaveBeenCalledWith('/w/app', 'c1')
+    unmount()
+    sessionStorage.clear() // app restart: session pins are gone
+    const r2 = render(<ChatsSidebar {...p} />)
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Pin "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep "Fix the bug" pinned' }))
+    expect(screen.getByLabelText('Saved pin')).toBeInTheDocument()
+    r2.unmount()
+    sessionStorage.clear()
+    render(<ChatsSidebar {...p} />) // saved pin survives the restart
+    const again = screen.getByRole('region', { name: 'Pinned' })
+    fireEvent.click(within(again).getByRole('button', { name: 'Unpin "Fix the bug"' }))
+    expect(screen.queryByRole('region', { name: 'Pinned' })).toBeNull()
+  })
+  it('hovering "New workspace" refreshes and shows the newest folders; a click opens one', () => {
+    const p = props()
+    const onNewestHover = vi.fn()
+    render(<ChatsSidebar {...p} newest={['/w/fresh']} onNewestHover={onNewestHover} />)
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'New workspace' }).parentElement!)
+    expect(onNewestHover).toHaveBeenCalled()
+    const btn = screen.getByRole('button', { name: 'Open newest folder fresh' })
+    expect(btn.parentElement).toHaveClass('hidden', 'group-hover/new:block')
+    fireEvent.click(btn)
+    expect(p.onWorkspace).toHaveBeenCalledWith('/w/fresh')
+  })
   it('double-click on a chat activates it (open + focus the message field)', () => {
     const onActivate = vi.fn()
     render(<ChatsSidebar {...props()} onActivate={onActivate} />)

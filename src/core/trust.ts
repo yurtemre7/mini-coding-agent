@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs'
+import { readdirSync, statSync } from 'node:fs'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -77,6 +77,38 @@ export const reorderWorkspaces = (order: string[], home?: string) =>
     const first = [...new Set(order)].filter((p) => cur.includes(p))
     s.recent = [...first, ...cur.filter((p) => !first.includes(p))]
   }, home)
+
+/** The newest folders directly inside the allowed `roots` (one level, no deeper), newest first, excluding `exclude` and hidden folders. Unreadable roots are skipped. */
+export function newestIn(roots: string[], exclude: string[] = [], limit = 5): string[] {
+  const known = new Set(exclude)
+  const found = new Map<string, number>()
+  for (const root of new Set(roots)) {
+    let names: string[]
+    try {
+      names = readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => d.name)
+    } catch {
+      continue
+    }
+    for (const n of names) {
+      const p = join(root, n)
+      const st = known.has(p) ? undefined : statSync(p, { throwIfNoEntry: false })
+      if (st) found.set(p, st.birthtimeMs || st.ctimeMs) // birthtime is 0 on filesystems that do not record it
+    }
+  }
+  return [...found].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([p]) => p)
+}
+
+/** Folders whose direct subfolders are offered as "newest folders" (set in Settings). Folders that no longer exist are dropped. */
+export async function folderRoots(home?: string): Promise<string[]> {
+  const v = (await readState(home)).folderRoots
+  return (Array.isArray(v) ? v : []).filter((p): p is string => typeof p === 'string').filter(isDir)
+}
+export const addFolderRoot = (dir: string, home?: string) =>
+  updateState((s) => {
+    const cur = (Array.isArray(s.folderRoots) ? s.folderRoots : []).filter((p): p is string => typeof p === 'string')
+    s.folderRoots = cur.includes(dir) ? cur : [...cur, dir]
+  }, home)
+export const removeFolderRoot = (dir: string, home?: string) => updateState((s) => void (s.folderRoots = (Array.isArray(s.folderRoots) ? s.folderRoots : []).filter((p) => p !== dir)), home)
 
 /** Removes a workspace from the recent list only; its files, saved chats and trust decision are left alone. */
 export const forgetWorkspace = (dir: string, home?: string) => updateState((s) => void (s.recent = (Array.isArray(s.recent) ? s.recent : []).filter((p) => p !== dir)), home)

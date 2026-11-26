@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
-import { ArrowUp, AtSign, FileText, ImagePlus, Paperclip, X, ClipboardList, FilePen, Gauge, Shield, ShieldOff, Square, Undo2, type LucideIcon } from 'lucide-react'
+import { ArrowUp, AtSign, FileText, ImagePlus, Paperclip, X, ClipboardList, FilePen, Gauge, Shield, ShieldOff, SlidersHorizontal, Square, Undo2, type LucideIcon } from 'lucide-react'
 import { ModelCombobox, type ModelList } from '@/components/ModelCombobox'
 import { EFFORT_LABELS } from '@/lib/providers'
 import { rankFiles } from '@/lib/rankFiles'
@@ -31,6 +31,8 @@ export interface PromptInputProps {
   commands?: CommandInfo[]
   /** Workspace files for `@` mentions; called the first time `@` is typed. */
   listFiles?: () => Promise<string[]>
+  /** Small window (phone CiP): mode, model, effort and Rewind fold behind one button. */
+  compact?: boolean
 }
 
 const toBase64 = (f: File) =>
@@ -41,7 +43,9 @@ const toBase64 = (f: File) =>
     r.readAsDataURL(f)
   })
 
-export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles }: PromptInputProps) {
+export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disabled, mode, model, models, onModel, effort, onEffort, onSend, onStop, onMode, onRewind, commands = [], listFiles, compact = false }: PromptInputProps) {
+  const [showOptions, setShowOptions] = useState(false)
+  const options = !compact || showOptions
   const [text, setText] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -212,6 +216,13 @@ export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disable
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" aria-label="Mention a file" title="Mention a workspace file" disabled={disabled} onClick={() => (setText((t) => (/(^|\s)$/.test(t) ? `${t}@` : `${t} @`)), setActive(0), setDismissed(false), area.current?.focus())}>
             <AtSign className="h-4 w-4" aria-hidden />
           </Button>
+          {compact && (
+            <Button variant={showOptions ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8 rounded-full" aria-label={showOptions ? 'Hide input settings' : 'Show input settings'} aria-expanded={showOptions} title="Mode, model, effort and Rewind" onClick={() => setShowOptions((v) => !v)}>
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
+            </Button>
+          )}
+          {options && (
+          <>
           <Select value={mode} disabled={disabled} onValueChange={(m) => onMode(m as PermissionMode)}>
             <SelectTrigger aria-label="Permission mode" className="h-8 w-auto gap-1.5 border-0 bg-transparent px-2 text-xs shadow-none hover:bg-accent dark:bg-transparent">
               <SelectValue />
@@ -244,11 +255,15 @@ export function PromptInput({ focusSignal = 0, focusStrength = 60, busy, disable
               ))}
             </SelectContent>
           </Select>
+          </>
+          )}
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" disabled={busy || disabled} onClick={onRewind} title="Undo the last turn: restore its files and drop it from the conversation">
-              <Undo2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              Rewind
-            </Button>
+            {options && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" disabled={busy || disabled} onClick={onRewind} title="Undo the last turn: restore its files and drop it from the conversation">
+                <Undo2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                Rewind
+              </Button>
+            )}
             {busy ? (
               <>
                 {canSend && (

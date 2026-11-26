@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ChatTranscript, PREVIEW_CHARS } from './ChatTranscript'
+import { ChatTranscript, PREVIEW_CHARS, segments } from './ChatTranscript'
 
 describe('ChatTranscript working indicator', () => {
   afterEach(() => vi.useRealTimers())
@@ -42,5 +42,17 @@ describe('ChatTranscript', () => {
     expect(await screen.findByText(/from subagent/)).toBeInTheDocument()
     expect(container.textContent).toContain('500 more characters')
     expect(container.textContent).not.toContain(big)
+  })
+  it('folds consecutive tool calls into one row that shows only the names until expanded', async () => {
+    const tool = (id: string, name: string, done = true) => ({ kind: 'tool' as const, id, name, input: { command: `cmd-${id}` }, done, result: '' })
+    const items = [tool('a', 'Bash'), tool('b', 'Bash'), tool('c', 'Bash', false), { kind: 'text' as const, text: 'between' }, tool('d', 'Read')]
+    render(<ChatTranscript items={items} />)
+    expect(segments(items)).toHaveLength(3)
+    expect(screen.getByText('Bash ×3')).toBeInTheDocument()
+    expect(screen.getByLabelText('running')).toBeInTheDocument()
+    expect(screen.queryByText('cmd-a')).toBeNull() // collapsed: no subjects
+    expect(screen.getByText('Read')).toBeInTheDocument()
+    ;(screen.getByText('Bash ×3').closest('button') as HTMLElement).click()
+    expect(await screen.findByText('cmd-a')).toBeInTheDocument()
   })
 })

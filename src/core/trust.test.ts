@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { disabledSkills, lastWorkspace, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, setSkillEnabled, trustWorkspace } from './trust'
+import { disabledSkills, lastWorkspace, newestIn, folderRoots, addFolderRoot, removeFolderRoot, loadPrefs, recentWorkspaces, rememberWorkspace, reorderWorkspaces, savePrefs, setSkillEnabled, trustWorkspace } from './trust'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'mca-state-'))
 
@@ -52,6 +52,26 @@ describe('state.json', () => {
     writeFileSync(join(home, '.mca', 'state.json'), '{oops')
     await expect(rememberWorkspace(home, home)).rejects.toThrow(/corrupt/)
     expect(await recentWorkspaces(home)).toEqual([])
+  })
+  it('lists only direct subfolders of the allowed folders, without excluded, hidden or nested ones', () => {
+    const root = tmp()
+    for (const n of ['a', 'b', '.hidden', join('a', 'deep')]) mkdirSync(join(root, n))
+    writeFileSync(join(root, 'file.txt'), 'x')
+    const got = newestIn([root, join(root, 'missing')])
+    expect([...got].sort()).toEqual([join(root, 'a'), join(root, 'b')]) // no a/deep, no hidden, no file
+    expect(newestIn([root], [join(root, 'a')])).toEqual([join(root, 'b')])
+    expect(newestIn([root], [], 1)).toHaveLength(1)
+    expect(newestIn([])).toEqual([])
+  })
+  it('remembers allowed folders without duplicates and drops vanished ones', async () => {
+    const home = tmp()
+    const dir = tmp()
+    await addFolderRoot(dir, home)
+    await addFolderRoot(dir, home)
+    await addFolderRoot(join(home, 'gone'), home)
+    expect(await folderRoots(home)).toEqual([dir])
+    await removeFolderRoot(dir, home)
+    expect(await folderRoots(home)).toEqual([])
   })
   it('remembers switched-off skills without duplicates and keeps the other keys', async () => {
     const home = tmp()

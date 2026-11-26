@@ -132,6 +132,21 @@ describe('Controller', { timeout: 20_000 }, () => {
     await c.openRecent(ws)
     expect(c.getState().items).toEqual([{ kind: 'user', text: 'second' }, { kind: 'text', text: 'done' }]) // a workspace switch continues the newest saved chat
   })
+  it('offers and opens only direct subfolders of the allowed folders', async () => {
+    const { c } = await setup([[]])
+    const parent = await mkdtemp(join(tmpdir(), 'mca-parent-'))
+    const b = join(parent, 'b')
+    await mkdir(join(b, 'inner'), { recursive: true })
+    expect(await c.newest()).toEqual([]) // nothing allowed yet
+    await expect(c.openRecent(b)).rejects.toThrow(/Unknown workspace/)
+    expect((await c.addFolderRoot(parent)).folderRoots).toEqual([parent])
+    expect(await c.newest()).toEqual([b])
+    await expect(c.openRecent(join(b, 'inner'))).rejects.toThrow(/Unknown workspace/)
+    await c.openRecent(b)
+    expect(c.getState().workspace).toBe(b)
+    expect(await c.newest()).toEqual([]) // now listed, so no longer "new"
+    expect((await c.removeFolderRoot(parent)).folderRoots).toEqual([])
+  })
   it('forgetting a recent workspace removes only the list entry; the open one and unknown paths are refused', async () => {
     const { c, ws } = await setup([[]])
     const other = await mkdtemp(join(tmpdir(), 'mca-ws2-'))

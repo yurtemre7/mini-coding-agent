@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bot, ChevronRight, CircleCheck, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Paperclip, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
+import { Bot, ChevronRight, CircleX, FilePen, FilePlus, FileText, FolderSearch, Loader2, Paperclip, Search, SquareTerminal, User, Wrench, type LucideIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
 import { toolSubject } from '../../../shared/guards'
-import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 export const PREVIEW_CHARS = 2000
@@ -25,22 +24,31 @@ export function Markdown({ children }: { children: string }) {
   )
 }
 
-function ToolCard({ tool, children }: { tool: ToolItem; children: React.ReactNode }) {
+/** Small status mark: a spinner while running, a red cross on error, nothing when it went fine. */
+function StatusMark({ tools }: { tools: ToolItem[] }) {
+  if (tools.some((t) => !t.done)) return <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-label="running" />
+  if (tools.some((t) => t.isError)) return <CircleX className="h-3 w-3 shrink-0 text-destructive" aria-label="error" />
+  return null
+}
+
+const triggerClass = 'group flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-muted-foreground hover:bg-muted'
+const chevron = <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+
+/** One tool call as a one-line row; collapsed it shows only the tool name (plus the subject inside a group). */
+function ToolCard({ tool, subject = false, children }: { tool: ToolItem; subject?: boolean; children?: React.ReactNode }) {
   const Icon = TOOL_ICONS[tool.name] ?? Wrench
-  const Status = !tool.done ? Loader2 : tool.isError ? CircleX : CircleCheck
+  const sub = toolSubject(tool.input)
   return (
-    <Collapsible className="min-w-0 rounded-md border bg-card text-sm">
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left">
-        <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
-        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+    <Collapsible className="min-w-0">
+      <CollapsibleTrigger className={triggerClass} title={sub}>
+        {chevron}
+        <Icon className="h-3 w-3 shrink-0" aria-hidden />
         <span className="font-medium">{tool.name}</span>
-        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={toolSubject(tool.input)}>{toolSubject(tool.input)}</span>
-        <Badge variant={tool.isError ? 'destructive' : 'secondary'} className="ml-auto shrink-0">
-          <Status className={`mr-1 h-4 w-4 ${tool.done ? '' : 'animate-spin'}`} aria-hidden />
-          {!tool.done ? 'running' : tool.isError ? 'error' : 'done'}
-        </Badge>
+        {subject && <span className="min-w-0 truncate font-mono">{sub}</span>}
+        <StatusMark tools={[tool]} />
       </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 border-t px-3 py-2">
+      <CollapsibleContent className="ml-4 space-y-2 border-l py-1 pl-3 text-sm">
+        {!subject && sub && <p className="font-mono text-xs [overflow-wrap:anywhere] text-muted-foreground">{sub}</p>}
         <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">{clip(JSON.stringify(tool.input, null, 2) ?? '')}</pre>
         {tool.done && <pre className="overflow-x-auto border-t pt-2 font-mono text-xs whitespace-pre-wrap break-all">{clip(tool.result ?? '')}</pre>}
         {children}
@@ -77,9 +85,13 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
       </div>
     )
   if (item.kind === 'notice') return <p className={`text-xs [overflow-wrap:anywhere] ${item.level === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{item.message}</p>
-  // subagent activity (parentId = the Task tool-use id) is nested under its parent card
+  return <ToolRow tool={item} items={items} />
+}
+
+/** subagent activity (parentId = the Task tool-use id) is nested under its parent card */
+function ToolRow({ tool: item, items, subject }: { tool: ToolItem; items: Item[]; subject?: boolean }) {
   return (
-    <ToolCard tool={item}>
+    <ToolCard tool={item} subject={subject}>
       {items.filter((c) => 'parentId' in c && c.parentId === item.id).map((c, i) => (
         <div key={keyOf(c, i)} className="ml-3 border-l pl-3">
           <Row item={c} items={items} />
@@ -87,6 +99,39 @@ function Row({ item, items }: { item: Item; items: Item[] }) {
       ))}
     </ToolCard>
   )
+}
+
+/** Consecutive tool calls folded into one row: "Bash ×3" or "Read, Bash"; expanding lists each call. */
+function ToolGroup({ tools, items }: { tools: ToolItem[]; items: Item[] }) {
+  const names = [...new Set(tools.map((t) => t.name))]
+  const label = names.length === 1 ? `${names[0]} ×${tools.length}` : names.join(', ')
+  return (
+    <Collapsible className="min-w-0">
+      <CollapsibleTrigger className={triggerClass}>
+        {chevron}
+        <Wrench className="h-3 w-3 shrink-0" aria-hidden />
+        <span className="min-w-0 truncate font-medium">{label}</span>
+        <StatusMark tools={tools} />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-4 border-l pl-2">
+        {tools.map((t) => (
+          <ToolRow key={t.id} tool={t} items={items} subject />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+/** Top-level items with runs of consecutive tool calls gathered into one entry. */
+export function segments(items: Item[]): (Item | ToolItem[])[] {
+  const out: (Item | ToolItem[])[] = []
+  for (const i of items) {
+    if ('parentId' in i && i.parentId) continue
+    const last = out.at(-1)
+    if (i.kind === 'tool' && Array.isArray(last)) last.push(i)
+    else out.push(i.kind === 'tool' ? [i] : i)
+  }
+  return out
 }
 
 /** What the agent is doing right now, from the newest running tool or the last item. */
@@ -131,7 +176,9 @@ export function ChatTranscript({ items, busy = false }: { items: Item[]; busy?: 
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
       }}
     >
-      {items.map((item, i) => (!('parentId' in item) || !item.parentId ? <Row key={keyOf(item, i)} item={item} items={items} /> : null))}
+      {segments(items).map((seg, i) =>
+        !Array.isArray(seg) ? <Row key={keyOf(seg, i)} item={seg} items={items} /> : seg.length === 1 ? <ToolRow key={`tool-${seg[0].id}`} tool={seg[0]} items={items} /> : <ToolGroup key={`group-${seg[0].id}`} tools={seg} items={items} />
+      )}
       {busy && <WorkingIndicator items={items} />}
       <div ref={end} />
     </div>

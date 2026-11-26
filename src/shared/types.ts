@@ -178,6 +178,8 @@ export interface SettingsInfo {
   /** the model's own context window in tokens; 0 or absent = unknown (no key yet) */
   contextMax?: number
   defaultSystemPrompt: string
+  /** Allowed folders: their direct subfolders are offered as "newest folders". */
+  folderRoots?: string[]
   hasKey: Record<ProviderId, boolean>
   keySource: Record<ProviderId, KeySource | null>
 }
@@ -218,7 +220,9 @@ export interface IpcContract {
     'workspace:select': { args: []; result: void }
     /** Recently opened workspaces, newest first (folders that vanished are dropped). */
     'workspace:recent': { args: []; result: string[] }
-    /** Only a path from the recent list is opened; anything else is refused. */
+    /** Newest folders directly inside the allowed folders from Settings (one level), newest first. */
+    'workspace:newest': { args: []; result: string[] }
+    /** Only a path from the recent list or 'workspace:newest' is opened; anything else is refused. */
     'workspace:open': { args: [path: string]; result: void }
     'workspace:forget': { args: [path: string]; result: void }
     /** Saves the order of the workspace list (drag and drop, move up/down). */
@@ -257,12 +261,22 @@ export interface IpcContract {
     'settings:setKey': { args: [provider: ProviderId, key: string]; result: SettingsInfo }
     'settings:update': { args: [patch: { provider?: ProviderId; model?: string; effort?: Effort; notifications?: boolean; systemPrompt?: string; systemReplace?: boolean; contextLimit?: number }]; result: SettingsInfo }
     /** The provider's model ids (the key stays in main). On failure `models` is the defaults and `error` says why; a 401/403 error means the key was rejected. */
+    /** Asks for a folder with the picker and adds it to the allowed folders. */
+    'settings:addFolderRoot': { args: []; result: SettingsInfo }
+    'settings:removeFolderRoot': { args: [path: string]; result: SettingsInfo }
     'settings:models': { args: [provider: ProviderId]; result: { models: ModelInfo[]; error?: string; rejected?: boolean } }
     'prompt:answer': { args: [id: string, decision: Decision]; result: void }
     /** Slash commands of the current workspace (built-in and custom) for autocomplete. */
     'commands:list': { args: []; result: CommandInfo[] }
     'skills:list': { args: []; result: SkillInfo[] }
     'skills:set': { args: [name: string, enabled: boolean]; result: SkillInfo[] }
+    /** Opens the CiP (chat in picture) window (phone: portrait, normal: landscape; frameless, always on top) or closes it ('off'). `opacity` applies while it is not focused. */
+    'window:pip': { args: [mode: PipMode | 'off', opacity: number]; result: void }
+    'window:pipOpacity': { args: [opacity: number]; result: void }
+    /** Moves/resizes the open CiP window (its resize grips); ignored when CiP is not open. */
+    'window:cipBounds': { args: [bounds: { x: number; y: number; width: number; height: number }]; result: void }
+    /** Right-click where the page has no menu of its own: main shows the quick-actions menu. */
+    'window:contextMenu': { args: [ctx: ContextMenuContext]; result: void }
   }
   events: {
     'agent:events': EventBatch
@@ -273,13 +287,19 @@ export interface IpcContract {
   }
 }
 
+/** Where the right-click happened: text is selected, and/or the target is an editable field. */
+export interface ContextMenuContext {
+  selection: boolean
+  editable: boolean
+}
+
 /** What the native menu (and its accelerators) can ask the window to do. */
-export const MENU_ACTIONS = ['settings', 'newChat', 'openWorkspace', 'toggleSidebar', 'togglePanel', 'tabChanges', 'tabGit', 'tabTerminal', 'focusPrompt', 'stop'] as const
+export const MENU_ACTIONS = ['settings', 'newChat', 'openWorkspace', 'toggleSidebar', 'togglePanel', 'tabChanges', 'tabGit', 'tabTerminal', 'focusPrompt', 'stop', 'togglePip'] as const
 export type MenuAction = (typeof MENU_ACTIONS)[number]
 export const isMenuAction = (v: unknown): v is MenuAction => (MENU_ACTIONS as readonly unknown[]).includes(v)
 
 // Record types make a missing or renamed channel a compile error; the preload uses these as runtime allowlists.
-const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:rename': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true }
+const INVOKE: Record<keyof IpcContract['invoke'], true> = { 'app:getInfo': true, 'session:send': true, 'session:abort': true, 'session:getState': true, 'session:command': true, 'changes:diff': true, 'changes:revert': true, 'workspace:select': true, 'workspace:recent': true, 'workspace:newest': true, 'workspace:open': true, 'workspace:forget': true, 'workspace:reorder': true, 'workspace:overview': true, 'session:list': true, 'session:open': true, 'session:new': true, 'session:delete': true, 'session:rename': true, 'session:export': true, 'workspace:reveal': true, 'workspace:files': true, 'git:status': true, 'git:diff': true, 'git:stage': true, 'git:commit': true, 'git:push': true, 'git:branches': true, 'git:switch': true, 'terminal:run': true, 'terminal:kill': true, 'settings:get': true, 'settings:setKey': true, 'settings:update': true, 'settings:models': true, 'settings:addFolderRoot': true, 'settings:removeFolderRoot': true, 'prompt:answer': true, 'commands:list': true, 'skills:list': true, 'skills:set': true, 'window:pip': true, 'window:pipOpacity': true, 'window:cipBounds': true, 'window:contextMenu': true }
 const EVENTS: Record<keyof IpcContract['events'], true> = { 'agent:events': true, 'prompt:request': true, 'terminal:event': true, 'menu:action': true }
 export const INVOKE_CHANNELS = Object.keys(INVOKE) as (keyof IpcContract['invoke'])[]
 export const EVENT_CHANNELS = Object.keys(EVENTS) as (keyof IpcContract['events'])[]
@@ -292,6 +312,17 @@ export type McaApi = {
 
 /** Context the agent injects into a user message (date, git, instruction files, hook output). Never shown as something the user typed. */
 export const isReminder = (text: string): boolean => text.startsWith('<system-reminder>')
+
+export const PIP_MODES = ['phone', 'normal'] as const
+export type PipMode = (typeof PIP_MODES)[number]
+
+/** Opacity of the picture-in-picture window while it is not focused; never fully invisible. */
+export const MIN_PIP_OPACITY = 0.2
+export const DEFAULT_PIP_OPACITY = 0.6
+export const clampPipOpacity = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? Math.min(1, Math.max(MIN_PIP_OPACITY, n)) : DEFAULT_PIP_OPACITY
+}
 
 /** Context sizes offered in Settings (tokens); 0 means automatic. */
 export const CONTEXT_LIMITS = [0, 100_000, 200_000, 500_000, 1_000_000] as const
