@@ -39,7 +39,7 @@ describe('SettingsDialog', () => {
   })
   describe('tabs', () => {
     const settings = { provider: 'anthropic', model: 'm', effort: 'medium', notifications: true, systemPrompt: '', systemReplace: false, defaultSystemPrompt: 'Base prompt.', hasKey: { anthropic: true, openrouter: false }, keySource: { anthropic: 'keychain', openrouter: null } } as const
-    const info = { name: 'mini-coding-agent', shortName: 'MCA', version: '0.1.0', platform: 'darwin', electronVersion: '40.0.0', license: 'MIT', repoUrl: 'https://github.com/yurtemre7/mini-coding-agent' } as const
+    const info = { name: 'mid-coding-agent', shortName: 'MCA', version: '0.1.0', platform: 'darwin', electronVersion: '40.0.0', license: 'MIT', repoUrl: 'https://github.com/yurtemre7/mini-coding-agent' } as const
     it('General: theme buttons and the notifications switch report changes', () => {
       const onChange = vi.fn()
       const onUpdate = vi.fn()

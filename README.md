@@ -1,4 +1,4 @@
-# mini-coding-agent (MCA)
+# mid-coding-agent (MCA)
 
 Desktop coding agent built with [Electron](https://www.electronjs.org/), React, TypeScript, Tailwind CSS, and [shadcn/ui](https://ui.shadcn.com/).
 
@@ -53,11 +53,11 @@ Project files win over `~/` ones; a built-in command name always wins over a fil
 
 Download the build for your Mac from the [Releases page](https://github.com/yurtemre7/mini-coding-agent/releases): `arm64` for Apple Silicon (M1 and later), `x64` for Intel (check  > About This Mac).
 
-1. Open `mini-coding-agent-<version>-<arch>.dmg` and drag **mini-coding-agent** into **Applications**.
+1. Open `mid-coding-agent-<version>-<arch>.dmg` and drag **mid-coding-agent** into **Applications**.
 2. The app is **not signed or notarized**, so Gatekeeper blocks it ("is damaged" or "cannot be opened"). Remove the quarantine flag once in Terminal:
 
    ```bash
-   xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"
+   xattr -dr com.apple.quarantine "/Applications/mid-coding-agent.app"
    ```
 
    Add `sudo` in front if you get "Operation not permitted" (for example when the app was copied by another user or sits in a protected folder).
@@ -73,7 +73,7 @@ Download the `.exe` installer from the Releases page and run it. It is unsigned:
 
 ## Releasing (unsigned macOS app)
 
-Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tags`. The release workflow builds arm64 and x64 `.dmg`/`.zip` and publishes a GitHub release with checksums. The app is **not signed or notarized**: on first launch right-click the app and choose Open (or run `xattr -dr com.apple.quarantine /Applications/mini-coding-agent.app`).
+Bump `version` in `package.json`, commit, then `git tag vX.Y.Z && git push --tags`. The release workflow builds arm64 and x64 `.dmg`/`.zip` and publishes a GitHub release with checksums. The app is **not signed or notarized**: on first launch right-click the app and choose Open (or run `xattr -dr com.apple.quarantine /Applications/mid-coding-agent.app`).
 
 ## Known limits
 

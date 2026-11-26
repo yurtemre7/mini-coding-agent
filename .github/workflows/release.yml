@@ -72,7 +72,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 1
-          name: mini-coding-agent-macos
+          name: mid-coding-agent-macos
           path: |
             dist/*.dmg
             dist/*.zip
@@ -111,7 +111,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           retention-days: 1
-          name: mini-coding-agent-windows
+          name: mid-coding-agent-windows
           path: |
             dist/*.exe
             dist/SHA256SUMS-windows.txt
@@ -125,12 +125,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: mini-coding-agent-macos
+          name: mid-coding-agent-macos
           path: release
 
       - uses: actions/download-artifact@v4
         with:
-          name: mini-coding-agent-windows
+          name: mid-coding-agent-windows
           path: release
 
       - name: Create the release with the GitHub CLI
@@ -146,7 +146,7 @@ jobs:
           This build is **not signed or notarized**, so macOS blocks it on first launch.
 
           1. Open the `.dmg` matching your Mac (`arm64` = Apple Silicon, `x64` = Intel) and drag the app to Applications.
-          2. Remove the quarantine flag once: `xattr -dr com.apple.quarantine "/Applications/mini-coding-agent.app"`
+          2. Remove the quarantine flag once: `xattr -dr com.apple.quarantine "/Applications/mid-coding-agent.app"`
              (or right-click the app, choose Open, then Open again; on macOS 15 use System Settings > Privacy & Security > Open Anyway).
           3. Verify the download against `SHA256SUMS.txt` if you like: `shasum -a 256 -c SHA256SUMS.txt`.
 

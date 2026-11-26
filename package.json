@@ -1,8 +1,8 @@
 {
-  "name": "mini-coding-agent",
-  "productName": "mini-coding-agent",
+  "name": "mid-coding-agent",
+  "productName": "mid-coding-agent",
   "version": "0.2.2",
-  "description": "mini-coding-agent (MCA) - Desktop coding agent built with Electron, React, TypeScript, and shadcn/ui",
+  "description": "mid-coding-agent (MCA) - Desktop coding agent built with Electron, React, TypeScript, and shadcn/ui",
   "main": "./out/main/index.js",
   "bin": {
     "mca": "./out/cli/index.js"

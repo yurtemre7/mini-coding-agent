@@ -1,4 +1,4 @@
-# mini-coding-agent (MCA)
+# mid-coding-agent (MCA)
 
 Electron + React + TypeScript desktop app and `mca` CLI sharing one agent runtime. Read `docs/HANDOVER.md` first (status, architecture, decisions, backlog); `docs/PLAN.md` is the design reference.
 

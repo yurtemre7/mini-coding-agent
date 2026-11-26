@@ -1,8 +1,8 @@
-# Implementation Plan: mini-coding-agent (MCA)
+# Implementation Plan: mid-coding-agent (MCA)
 
 > **Status (2026-11-21): the first implementation (Milestones 0–8) is complete and on `main`; `v0.1.0` is ready to tag.** This file is now the design reference. Open items from it (packaged-app and live-API verification, the Verification Plan's manual smoke tests) and all new work are tracked in [`HANDOVER.md`](HANDOVER.md) under *Backlog*. Boxes ticked below mean "implemented and covered by automated tests"; the two unticked ones need a Mac.
 
-This plan adapts the **Build Claude Code from scratch** architecture (`mini-claude`, Stages 1–14) into **mini-coding-agent (MCA)**: a macOS-first **Electron + React + TypeScript + shadcn/ui** desktop app **and** an interactive **`mca` CLI** (like `claude` / `agy`), sharing one provider-agnostic TypeScript agent runtime.
+This plan adapts the **Build Claude Code from scratch** architecture (`mini-claude`, Stages 1–14) into **mid-coding-agent (MCA)**: a macOS-first **Electron + React + TypeScript + shadcn/ui** desktop app **and** an interactive **`mca` CLI** (like `claude` / `agy`), sharing one provider-agnostic TypeScript agent runtime.
 
 **How to read this plan**: *Key Decisions* says what we build and why. *Core Contracts* are the four interfaces everything hangs off. *Edge-Case Rules* are binding requirements, grouped by module, and each one should become a test. *Milestones* are ordered so every milestone ends in something you can run.
 

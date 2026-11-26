@@ -10,7 +10,7 @@ import type { Controller } from './controller'
 
 export function getAppInfo(): AppInfo {
   return {
-    name: 'mini-coding-agent',
+    name: 'mid-coding-agent',
     shortName: 'MCA',
     version: app.getVersion(),
     platform: process.platform,
@@ -32,7 +32,7 @@ function createWindow(pip?: { mode: PipMode; bounds: Rectangle }): BrowserWindow
     ...(pip ? { ...pip.bounds, minWidth: 280, minHeight: 240, frame: false, resizable: true, thickFrame: true, maximizable: false, fullscreenable: false, skipTaskbar: false } : { width: 1120, height: 760, minWidth: 800, minHeight: 560 }),
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff', // matches --background, so the window never flashes the wrong theme while loading
-    title: 'mini-coding-agent (MCA)',
+    title: 'mid-coding-agent (MCA)',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,
     webPreferences: {
@@ -72,7 +72,7 @@ function createWindow(pip?: { mode: PipMode; bounds: Rectangle }): BrowserWindow
 }
 
 app.whenReady().then(async () => {
-  app.setName('mini-coding-agent')
+  app.setName('mid-coding-agent')
 
   initPipBounds(join(app.getPath('userData'), 'cip-bounds.json'))
   ipc = await registerIpc(target, getAppInfo, () => main, (mode, bounds) => createWindow({ mode, bounds }))

@@ -103,6 +103,7 @@ Milestone 6 notes: subagents run at depth 1 with their own read bookkeeping but 
 - **Desktop state sync**: mutation IPC calls return nothing; every event carries a sequence number and the renderer drops events already contained in its snapshot.
 - **Renderer slash commands** are allowlisted; `/trust` from the window goes through the trust dialog, `/exit` is refused.
 - **Key lookup order**: env â†’ Keychain â†’ `~/.mca/credentials.json` â†’ `.env` (last, so a cloned repo's `.env` never overrides your key).
+- **Name**: the project is now **mid-coding-agent** (still MCA, CLI still `mca`, data still in `~/.mca`). The GitHub repo URL (`yurtemre7/mini-coding-agent`) and the `appId` (`com.mca.minicodingagent`) are unchanged so links and existing installs keep working. The window-position file under Electron `userData` moves with the app name, so CIP bounds reset once.
 - **Effort** is sent on every request (default `medium`); OpenRouter maps `xhigh`/`max` to `high`; an Anthropic model that returns a 400 mentioning effort is retried once without it and remembered for the session.
 
 ## Releasing

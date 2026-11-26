@@ -1,5 +1,5 @@
 appId: com.mca.minicodingagent
-productName: mini-coding-agent
+productName: mid-coding-agent
 directories:
   buildResources: build
   output: dist
