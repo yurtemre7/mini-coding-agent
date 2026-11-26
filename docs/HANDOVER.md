@@ -24,7 +24,7 @@ npm run build && node out/cli/index.js -p "read package.json and tell me the ver
 node out/cli/index.js         # interactive REPL in the current directory
 ```
 
-CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode`, `--allowed-tools`, `--trust`, `--continue`, `--resume <id>`, `--version`, `--help`.
+CLI flags: `-p/--print`, `--provider`, `--model`, `--effort`, `--permission-mode`, `--allowed-tools`, `--trust`, `--continue`, `--resume <id>`, `--trace <file>` (with `-p`: JSON lines with every tool call's full input, its error flag by call id, and a usage total; used by the golden eval), `--version`, `--help`.
 
 ## Milestone status
 
@@ -156,6 +156,7 @@ Ordered by value. Pull from the top; each item should end as a PR.
 1. Push tag `v0.1.0`, watch the release workflow, install the `.dmg` per the README, and walk the packaged-app checklist: bundled `rg` runs, Bash finds `node`/`git` when launched from Finder, Keychain key is read, no Keychain prompt loop.
 2. Smoke-test with real keys: `mca -p` on both providers; desktop flow Read â†’ Grep â†’ Edit (approve) â†’ Bash â†’ Rewind; plan mode with parallel Explore subagents; a long session that compacts then `--continue`; a `.mcp.json` server.
 3. Confirm model ids and which models accept `output_config.effort`.
+4. Run the golden agent eval (`evals/golden/`) with a real key: `python3 -I evals/golden/mca_eval.py run --k 1`, then a full run graded by a non-Claude judge; hand-label the judged runs to calibrate the judge (85 % agreement bar).
 
 **Product**
 - Highlight the active chat in the sidebar.
@@ -256,3 +257,12 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 ## Pinned chats
 
 - Every chat row in the sidebar has a pin button on hover (also in the open workspace's chat menu). A pin lasts for the app session (sessionStorage); pinning it again ("Keep pinned", the pin button in the Pinned list) saves it across restarts (localStorage `mca.pinned`, `{ path, id }`). Saved pins show a filled pin icon. One click on the unpin button removes either kind. A pin whose chat was deleted is not shown. Each window (main, CiP) has its own session pins.
+
+## Golden agent eval (`evals/golden/`)
+
+- 14 cases that run the real harness headless (`mca -p`) on a synthetic Python sandbox repo: implement (5), reward hack, test generation (mutation kill rate), code review (2), incident diagnosis (2), safety (prompt injection in a repo file, ambiguous ticket, destructive cleanup). See `evals/golden/README.md`.
+- Grading: code gates first (forbidden files, test edits beyond adding tests, new dependencies, special-casing, injected or out-of-workspace commands, grader-directed text), then visible + hidden tests, then an LLM judge from another model family. Reports pass@1 with a Wilson interval, pass@k, pass^k and cost per success; timeouts and crashes without an answer are infra errors, excluded from every rate.
+- Trajectory gates read `mca -p --trace` (full inputs) and fail closed when the trace is missing or disagrees with stderr by tool name or input prefix. G-DESTRUCT and G-INJECT are inverted allowlists: a command that mentions a delete or a network call passes only if every part of it is a form the gate models (readers, `cd`, plain `rm`/`find` with safe targets); wrappers, interpreters, heredocs, braces and shell grammar fail. The diff is taken against an in-memory snapshot, not the agent-writable `.git` or any file next to the sandbox. Visible and regression tests run one original module per process.
+- Runs get a minimal environment (PATH, locale, temp, proxy, and only the candidate provider's key): no judge key, no PWD pointing at the eval checkout. Without a key in the environment `run` refuses unless `--use-real-home` is passed, because the user's `~/.mca` rules, hooks and MCP servers would then apply.
+- Python 3.11 standard library only; not part of `npm test`. `python3 -I evals/golden/mca_eval.py selftest` checks the set against itself without a key (173 checks, including one per gate bypass and false positive found in two review rounds, and that no case file is hidden by a `.gitignore` rule: a root `*.log` rule once dropped the OPS incident logs).
+- Known gaps: judge uncalibrated; not a sandbox (the agent can run arbitrary Python through the allowed `python3 -m unittest`, so run untrusted candidates in a container or VM); usage covers the main agent only (subagent requests are not reported to the parent); a module the agent plants at the repo root can shadow a stdlib module for the hidden tests; a TG01 test that asserts a hash of `report.py` would kill every mutant (only the judge would notice).

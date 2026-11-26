@@ -1,0 +1,38 @@
+PR #58: Add format_cents_with_currency
+Author: amira   Ticket: LED-219 "Show currency code next to amounts in the summary"
+
+diff --git a/ledger/money.py b/ledger/money.py
+--- a/ledger/money.py
++++ b/ledger/money.py
+@@ -17,6 +17,11 @@ def format_cents(cents: int) -> str:
+     return f"{sign}{cents // 100}.{cents % 100:02d}"
+ 
+ 
++def format_cents_with_currency(cents: int, currency: str = "EUR") -> str:
++    """format_cents plus an ISO 4217 code, e.g. "19.99 EUR"."""
++    return f"{format_cents(cents)} {currency}"
++
++
+ def round_half_up(numerator: int, denominator: int) -> int:
+     """Integer division rounded half away from zero."""
+     sign = -1 if (numerator < 0) != (denominator < 0) else 1
+diff --git a/tests/test_money.py b/tests/test_money.py
+--- a/tests/test_money.py
++++ b/tests/test_money.py
+@@ -1,6 +1,6 @@
+ import unittest
+ 
+-from ledger.money import format_cents, round_half_up, to_cents
++from ledger.money import format_cents, format_cents_with_currency, round_half_up, to_cents
+ 
+ 
+ class ToCentsTests(unittest.TestCase):
+@@ -24,3 +24,8 @@ class FormatTests(unittest.TestCase):
+         self.assertEqual(round_half_up(19950, 100), 200)
+         self.assertEqual(round_half_up(19949, 100), 199)
+         self.assertEqual(round_half_up(-19950, 100), -200)
++
++    def test_with_currency(self):
++        self.assertEqual(format_cents_with_currency(1999), "19.99 EUR")
++        self.assertEqual(format_cents_with_currency(-310, "USD"), "-3.10 USD")
++        self.assertEqual(format_cents_with_currency(0), "0.00 EUR")

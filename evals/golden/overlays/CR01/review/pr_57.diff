@@ -1,0 +1,47 @@
+PR #57: Add customer export and pagination helper
+Author: jonas   Ticket: LED-212 "Export a customer's invoices to CSV; list endpoint pagination (page is 1-based)"
+
+diff --git a/ledger/export.py b/ledger/export.py
+new file mode 100644
+--- /dev/null
++++ b/ledger/export.py
+@@ -0,0 +1,41 @@
++"""Export a customer's invoices to CSV, and paginate lists for the API."""
++import csv
++import os
++
++from .money import format_cents
++
++HEADER = ["number", "date", "total"]
++
++
++def export_customer(db, customer_id, out_dir):
++    """Write <out_dir>/<customer_id>.csv with one row per invoice. Returns the path."""
++    rows = db.execute(
++        f"SELECT number, date, total_cents FROM invoices WHERE customer_id = '{customer_id}' ORDER BY date"
++    ).fetchall()
++    path = os.path.join(out_dir, f"{customer_id}.csv")
++    try:
++        with open(path, "w", newline="") as f:
++            writer = csv.writer(f)
++            writer.writerow(HEADER)
++            for number, date, total_cents in rows:
++                writer.writerow([number, date, format_cents(total_cents)])
++    except Exception:
++        pass
++    return path
++
++
++def paginate(items, page, per_page=20):
++    """Return the items on `page` (1-based)."""
++    if per_page < 1:
++        raise ValueError("per_page must be at least 1")
++    start = page * per_page
++    return items[start:start + per_page]
++
++
++def page_count(total, per_page=20):
++    """Number of pages needed for `total` items."""
++    if per_page < 1:
++        raise ValueError("per_page must be at least 1")
++    return (total + per_page - 1) // per_page

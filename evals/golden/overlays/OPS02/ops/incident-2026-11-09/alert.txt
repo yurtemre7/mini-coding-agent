@@ -1,0 +1,2 @@
+[PagerDuty] SEV2 ledger-api: 5xx rate > 5% for 5 min
+Triggered 2026-11-09 03:12 UTC, auto-resolved 03:27 UTC. Service: ledger-api (3 pods).

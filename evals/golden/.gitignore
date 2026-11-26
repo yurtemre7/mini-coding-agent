@@ -1,0 +1,5 @@
+runs/
+/__pycache__/
+
+# Incident logs are case data; the repo root ignores *.log
+!*.log
