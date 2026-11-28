@@ -8,7 +8,8 @@ import { buildReminder, discoverInstructions, expandImports, MAX_FILE_CHARS } fr
 const dir = () => mkdtempSync(join(tmpdir(), 'mca-ctx-'))
 const write = (p: string, s: string) => (mkdirSync(join(p, '..'), { recursive: true }), writeFileSync(p, s))
 
-describe('discoverInstructions', () => {
+// symlinks and temp folders are slow on Windows runners
+describe('discoverInstructions', { timeout: 20_000 }, () => {
   it('orders user files, then root down to cwd, and de-duplicates symlinks and identical copies', async () => {
     const home = dir()
     const root = dir()
