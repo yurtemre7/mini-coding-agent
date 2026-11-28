@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ago } from '@/lib/ago'
 import { ChatsSidebar } from './ChatsSidebar'
@@ -216,6 +216,21 @@ describe('ChatsSidebar', () => {
     expect(screen.getByRole('button', { name: 'Collapse app' })).toBeDisabled()
     openMenu(screen.getByRole('button', { name: 'Actions for app' }))
     expect(screen.getByRole('menuitem', { name: 'Move down' })).toHaveAttribute('aria-disabled', 'true')
+  })
+  it('keeps the search field after Escape while it has focus (few chats)', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, title: `Chat ${i}`, updated: Date.now(), messageCount: 1 }))
+    const { rerender } = render(<ChatsSidebar {...props()} workspaces={[{ path: '/w/app', chats: many }]} />)
+    const box = screen.getByRole('searchbox', { name: 'Search chats' })
+    act(() => box.focus())
+    fireEvent.change(box, { target: { value: 'x' } })
+    rerender(<ChatsSidebar {...props()} workspaces={[{ path: '/w/app', chats: [chat] }]} />)
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.getByRole('searchbox', { name: 'Search chats' })).toBe(document.activeElement)
+  })
+  it('names the file manager for this system', () => {
+    render(<ChatsSidebar {...props()} onReveal={vi.fn()} />)
+    openMenu(screen.getByRole('button', { name: 'Actions for app' }))
+    expect(screen.getByRole('menuitem', { name: /^Show in (Finder|Explorer|file manager)$/ })).toBeTruthy()
   })
   it('formats relative time', () => expect([ago(0, 30_000), ago(0, 5 * 60_000), ago(0, 2 * 86_400_000)]).toEqual(['just now', '5m ago', '2d ago']))
 })

@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ago } from '@/lib/ago'
 
+/** The file manager's name on this system. */
+const revealLabel = /Mac/i.test(globalThis.navigator?.platform ?? '') ? 'Show in Finder' : /Win/i.test(globalThis.navigator?.platform ?? '') ? 'Show in Explorer' : 'Show in file manager'
 const base = (p: string) => p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
 const KEY = 'mca.collapsed'
 const load = (): Record<string, boolean> => {
@@ -105,6 +107,7 @@ export function ChatsSidebar(p: Props) {
   // set when a menu item swaps the row for an input or a confirmation: focus must not return to the (gone) menu button
   const skipRefocus = useRef(false)
   const [query, setQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false) // keeps the field mounted so Esc does not drop focus to the page
   const q = query.trim().toLowerCase()
   const chatCount = p.workspaces.reduce((n, w) => n + w.chats.length, 0)
   // a workspace whose name matches shows all its chats; otherwise only the chats whose title matches
@@ -159,12 +162,12 @@ export function ChatsSidebar(p: Props) {
           </div>
         )}
       </div>
-      {(chatCount >= 6 || q) && (
+      {(chatCount >= 6 || q || searchFocused) && (
         <div className="relative">
           <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input type="search" aria-label="Search chats" placeholder="Search chats" className="h-8 pr-7 pl-7 text-xs" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} />
+          <Input type="search" aria-label="Search chats" placeholder="Search chats" className="h-8 pr-7 pl-7 text-xs" value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} />
           {query && (
-            <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 h-6 w-6 -translate-y-1/2" aria-label="Clear search" onClick={() => setQuery('')}>
+            <Button variant="ghost" size="icon-xs" className="absolute top-1/2 right-0.5 -translate-y-1/2" aria-label="Clear search" onClick={() => setQuery('')}>
               <X className="h-3.5 w-3.5" />
             </Button>
           )}
@@ -182,11 +185,11 @@ export function ChatsSidebar(p: Props) {
                   <span className={`min-w-0 truncate ${here ? 'font-medium' : ''}`}>{chat.title}</span>
                 </Button>
                 {!saved && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Keep "${chat.title}" pinned`} title="Pin again to keep it after restarts" onClick={() => keepPin(path, id)}>
+                  <Button variant="ghost" size="icon-xs" className="shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Keep "${chat.title}" pinned`} title="Pin again to keep it after restarts" onClick={() => keepPin(path, id)}>
                     <Pin className="h-3.5 w-3.5" />
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" className="mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Unpin "${chat.title}"`} title="Unpin" onClick={() => togglePin(path, id)}>
+                <Button variant="ghost" size="icon-xs" className="mr-1 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" aria-label={`Unpin "${chat.title}"`} title="Unpin" onClick={() => togglePin(path, id)}>
                   <PinOff className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -233,7 +236,7 @@ export function ChatsSidebar(p: Props) {
                 {chats.length > 0 && <span className="shrink-0 pr-1 text-xs text-muted-foreground tabular-nums" title={`${chats.length} saved ${chats.length === 1 ? 'chat' : 'chats'}`}>{chats.length}</span>}
                 <DropdownMenu open={menu === path} onOpenChange={(o) => setMenu(o ? path : null)}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`} title="Actions">
+                    <Button variant="ghost" size="icon-xs" className={`mr-1 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`} title="Actions">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -249,7 +252,7 @@ export function ChatsSidebar(p: Props) {
                     {open && p.onReveal && (
                       <DropdownMenuItem onSelect={() => p.onReveal?.()}>
                         <ExternalLink />
-                        Show in Finder
+                        {revealLabel}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
@@ -319,13 +322,13 @@ export function ChatsSidebar(p: Props) {
                             <span className="block text-xs font-normal text-muted-foreground">{ago(c.updated)}</span>
                           </span>
                         </Button>
-                        <Button variant="ghost" size="icon" className={`h-6 w-6 shrink-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${isPinned(path, c.id) ? 'opacity-60' : 'opacity-0'}`} aria-label={isPinned(path, c.id) ? `Unpin "${c.title}"` : `Pin "${c.title}"`} title={isPinned(path, c.id) ? 'Unpin' : 'Pin'} aria-pressed={isPinned(path, c.id)} onClick={() => togglePin(path, c.id)}>
+                        <Button variant="ghost" size="icon-xs" className={`shrink-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${isPinned(path, c.id) ? 'opacity-60' : 'opacity-0'}`} aria-label={isPinned(path, c.id) ? `Unpin "${c.title}"` : `Pin "${c.title}"`} title={isPinned(path, c.id) ? 'Unpin' : 'Pin'} aria-pressed={isPinned(path, c.id)} onClick={() => togglePin(path, c.id)}>
                           {isPinned(path, c.id) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                         </Button>
                         {open && (p.onExport || p.onDelete || p.onRename) && (
                           <DropdownMenu open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`} title="Actions">
+                              <Button variant="ghost" size="icon-xs" className={`mr-1 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`} title="Actions">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
