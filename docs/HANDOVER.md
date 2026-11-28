@@ -256,3 +256,10 @@ UI and setup must stay friendly for non-technical users: plain words (no jargon 
 ## Pinned chats
 
 - Every chat row in the sidebar has a pin button on hover (also in the open workspace's chat menu). A pin lasts for the app session (sessionStorage); pinning it again ("Keep pinned", the pin button in the Pinned list) saves it across restarts (localStorage `mca.pinned`, `{ path, id }`). Saved pins show a filled pin icon. One click on the unpin button removes either kind. A pin whose chat was deleted is not shown. Each window (main, CiP) has its own session pins.
+
+## Sidebar rework (chats list)
+- Workspace and chat action menus use the shadcn `DropdownMenu` (`ui/dropdown-menu.tsx`): keyboard navigation, `menuitem` roles, destructive style for delete. Tests open them with `keyDown Enter` (jsdom has no PointerEvent).
+- Search field ("Search chats") appears from 6 saved chats; it matches chat titles or workspace names and expands matching workspaces. Pinned list hides while searching.
+- Open workspace shows an open-folder icon; each workspace shows its chat count.
+- `ui/select.tsx` now positions below the trigger (`popper`) with the float shadow, instead of covering the trigger.
+- Known: `vitest.config.ts` typecheck error (`execArgv`) comes from main, not from this work.
