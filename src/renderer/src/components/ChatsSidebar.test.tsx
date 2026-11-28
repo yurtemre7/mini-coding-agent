@@ -217,7 +217,6 @@ describe('ChatsSidebar', () => {
     openMenu(screen.getByRole('button', { name: 'Actions for app' }))
     expect(screen.getByRole('menuitem', { name: 'Move down' })).toHaveAttribute('aria-disabled', 'true')
   })
-<<<<<<< HEAD
   it('keeps the search field after Escape while it has focus (few chats)', () => {
     const many = Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, title: `Chat ${i}`, updated: Date.now(), messageCount: 1 }))
     const { rerender } = render(<ChatsSidebar {...props()} workspaces={[{ path: '/w/app', chats: many }]} />)
@@ -233,7 +232,5 @@ describe('ChatsSidebar', () => {
     openMenu(screen.getByRole('button', { name: 'Actions for app' }))
     expect(screen.getByRole('menuitem', { name: /^Show in (Finder|Explorer|file manager)$/ })).toBeTruthy()
   })
-=======
->>>>>>> origin/main
   it('formats relative time', () => expect([ago(0, 30_000), ago(0, 5 * 60_000), ago(0, 2 * 86_400_000)]).toEqual(['just now', '5m ago', '2d ago']))
 })
