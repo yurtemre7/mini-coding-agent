@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resized } from './CipResizeGrips'
+import { resized } from '@/lib/resized'
 
 describe('CiP resize grips', () => {
   const start = { x: 1000, y: 200, width: 400, height: 600 }

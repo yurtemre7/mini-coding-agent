@@ -1,6 +1,7 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ChatTranscript, PREVIEW_CHARS, segments } from './ChatTranscript'
+import { segments } from '@/lib/segments'
+import { ChatTranscript, PREVIEW_CHARS } from './ChatTranscript'
 
 describe('ChatTranscript working indicator', () => {
   afterEach(() => vi.useRealTimers())
