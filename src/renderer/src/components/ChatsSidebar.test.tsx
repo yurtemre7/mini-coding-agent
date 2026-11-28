@@ -5,6 +5,7 @@ import { ChatsSidebar } from './ChatsSidebar'
 
 const chat = { id: 'c1', title: 'Fix the bug', updated: Date.now() - 3 * 3_600_000, messageCount: 4 }
 const other = { id: 'c2', title: 'Other chat', updated: Date.now() - 86_400_000, messageCount: 2 }
+const openMenu = (el: HTMLElement) => fireEvent.keyDown(el, { key: 'Enter' }) // Radix opens on pointerdown or keys; jsdom has no PointerEvent
 const props = () => ({
   workspaces: [
     { path: '/w/app', chats: [chat] },
@@ -69,8 +70,8 @@ describe('ChatsSidebar', () => {
     const onRename = vi.fn()
     render(<ChatsSidebar {...props()} onRename={onRename} />)
     const edit = () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Rename "Fix the bug"' }))
+      openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Rename "Fix the bug"' }))
       return screen.getByLabelText('Rename "Fix the bug"') as HTMLInputElement
     }
     const input = edit()
@@ -134,37 +135,37 @@ describe('ChatsSidebar', () => {
     fireEvent.dragStart(row('third'), { dataTransfer })
     fireEvent.drop(screen.getByTestId('workspace-app'), { dataTransfer })
     expect(p.onReorder).toHaveBeenLastCalledWith(['/w/third', '/w/app', '/w/other'])
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for other' }))
-    expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Move up' }))
+    openMenu(screen.getByRole('button', { name: 'Actions for other' }))
+    expect(screen.getByRole('menuitem', { name: 'Move down' })).not.toHaveAttribute('aria-disabled')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move up' }))
     expect(p.onReorder).toHaveBeenLastCalledWith(['/w/other', '/w/app', '/w/third'])
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for app' }))
-    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled() // already first
+    openMenu(screen.getByRole('button', { name: 'Actions for app' }))
+    expect(screen.getByRole('menuitem', { name: 'Move up' })).toHaveAttribute('aria-disabled', 'true') // already first
   })
   it('removes another workspace from the list; the open one explains why it cannot go', () => {
     const p = props()
     render(<ChatsSidebar {...p} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for other' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove other from the list' }))
+    openMenu(screen.getByRole('button', { name: 'Actions for other' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove other from the list' }))
     expect(p.onForget).toHaveBeenCalledWith('/w/other')
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for app' }))
-    expect(screen.getByRole('button', { name: 'Remove app from the list' })).toBeDisabled()
+    openMenu(screen.getByRole('button', { name: 'Actions for app' }))
+    expect(screen.getByRole('menuitem', { name: 'Remove app from the list' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(/open workspace cannot be removed/)).toBeTruthy()
   })
   it('exports a chat and deletes it only after a confirmation', () => {
     const onDelete = vi.fn()
     const onExport = vi.fn()
     render(<ChatsSidebar {...props()} onDelete={onDelete} onExport={onExport} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Export "Fix the bug" as Markdown' }))
+    openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Export "Fix the bug" as Markdown' }))
     expect(onExport).toHaveBeenCalledWith('c1')
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Delete "Fix the bug"' }))
+    openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete "Fix the bug"' }))
     expect(onDelete).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText(/cannot be undone/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Delete "Fix the bug"' }))
+    openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete "Fix the bug"' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete chat' }))
     expect(onDelete).toHaveBeenCalledWith('c1')
   })
@@ -178,6 +179,43 @@ describe('ChatsSidebar', () => {
     expect(screen.getByRole('button', { name: 'New workspace' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'New chat in app' })).toBeDisabled()
     expect(screen.getByText('other').closest('button')).toBeDisabled()
+  })
+  it('offers a search only once there are many chats, and filters by chat title or workspace name', () => {
+    const { rerender } = render(<ChatsSidebar {...props()} />)
+    expect(screen.queryByRole('searchbox', { name: 'Search chats' })).toBeNull() // two chats: not worth a field
+    const many = Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, title: i === 4 ? 'Deploy pipeline' : `Chat ${i}`, updated: Date.now(), messageCount: 1 }))
+    rerender(<ChatsSidebar {...props()} workspaces={[{ path: '/w/app', chats: many }, { path: '/w/other', chats: [other] }]} />)
+    const box = screen.getByRole('searchbox', { name: 'Search chats' })
+    fireEvent.change(box, { target: { value: 'deploy' } })
+    expect(screen.getByText('Deploy pipeline')).toBeTruthy()
+    expect(screen.queryByText('Chat 0')).toBeNull()
+    expect(screen.queryByText('other')).toBeNull() // no match there
+    fireEvent.change(box, { target: { value: 'OTHER' } }) // workspace name matches: all its chats show, even though it was collapsed
+    expect(screen.getByText('Other chat')).toBeTruthy()
+    fireEvent.change(box, { target: { value: 'zzz' } })
+    expect(screen.getByRole('status').textContent).toMatch(/Nothing matches "zzz"/)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(screen.getByText('Chat 0')).toBeTruthy()
+  })
+  it('keeps focus on the rename field and cancels the delete confirmation with Escape', () => {
+    render(<ChatsSidebar {...props()} onDelete={vi.fn()} onRename={vi.fn()} onExport={vi.fn()} />)
+    openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename "Fix the bug"' }))
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Rename "Fix the bug"' }))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    openMenu(screen.getByRole('button', { name: 'Actions for "Fix the bug"' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete "Fix the bug"' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Cancel' }), { key: 'Escape' })
+    expect(screen.queryByText(/cannot be undone/)).toBeNull()
+  })
+  it('turns collapsing and reordering off while a search is active', () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, title: `Chat ${i}`, updated: Date.now(), messageCount: 1 }))
+    render(<ChatsSidebar {...props()} workspaces={[{ path: '/w/app', chats: many }, { path: '/w/other', chats: [other] }]} />)
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search chats' }), { target: { value: 'chat' } })
+    expect(screen.getByRole('button', { name: 'Collapse app' })).toBeDisabled()
+    openMenu(screen.getByRole('button', { name: 'Actions for app' }))
+    expect(screen.getByRole('menuitem', { name: 'Move down' })).toHaveAttribute('aria-disabled', 'true')
   })
   it('formats relative time', () => expect([ago(0, 30_000), ago(0, 5 * 60_000), ago(0, 2 * 86_400_000)]).toEqual(['just now', '5m ago', '2d ago']))
 })

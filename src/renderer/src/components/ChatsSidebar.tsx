@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Pin, PinOff, Plus, Trash2, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderOpen, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2, X } from 'lucide-react'
 import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ago } from '@/lib/ago'
 
 const base = (p: string) => p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
@@ -102,6 +102,19 @@ export function ChatsSidebar(p: Props) {
   const [menu, setMenu] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [edit, setEdit] = useState<{ id: string; value: string } | null>(null)
+  // set when a menu item swaps the row for an input or a confirmation: focus must not return to the (gone) menu button
+  const skipRefocus = useRef(false)
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+  const chatCount = p.workspaces.reduce((n, w) => n + w.chats.length, 0)
+  // a workspace whose name matches shows all its chats; otherwise only the chats whose title matches
+  const shown = q
+    ? p.workspaces.flatMap((w) => {
+        if (base(w.path).toLowerCase().includes(q)) return [w]
+        const chats = w.chats.filter((c) => c.title.toLowerCase().includes(q))
+        return chats.length ? [{ ...w, chats }] : []
+      })
+    : p.workspaces
   const [drag, setDrag] = useState<string | null>(null)
   const [over, setOver] = useState<string | null>(null)
   const order = p.workspaces.map((w) => w.path)
@@ -146,7 +159,18 @@ export function ChatsSidebar(p: Props) {
           </div>
         )}
       </div>
-      {pinned.length > 0 && (
+      {(chatCount >= 6 || q) && (
+        <div className="relative">
+          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input type="search" aria-label="Search chats" placeholder="Search chats" className="h-8 pr-7 pl-7 text-xs" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setQuery('')} />
+          {query && (
+            <Button variant="ghost" size="icon" className="absolute top-1/2 right-0.5 h-6 w-6 -translate-y-1/2" aria-label="Clear search" onClick={() => setQuery('')}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
+      {pinned.length > 0 && !q && (
         <section aria-label="Pinned" className="space-y-0.5">
           <p className="px-2 text-xs font-medium text-muted-foreground">Pinned</p>
           {pinned.map(({ path, id, chat, saved }) => {
@@ -171,10 +195,12 @@ export function ChatsSidebar(p: Props) {
         </section>
       )}
       {p.workspaces.length === 0 && <p className="text-xs text-muted-foreground">No workspaces yet. Open a folder to start.</p>}
+      {q && shown.length === 0 && <p role="status" className="px-2 text-xs text-muted-foreground">Nothing matches &quot;{query.trim()}&quot;.</p>}
       <ul className="space-y-1">
-        {p.workspaces.map(({ path, chats }, i) => {
+        {shown.map(({ path, chats }) => {
+          const i = order.indexOf(path)
           const open = path === p.workspace
-          const shut = isCollapsed(path)
+          const shut = q ? false : isCollapsed(path)
           return (
             <li
               key={path}
@@ -193,45 +219,47 @@ export function ChatsSidebar(p: Props) {
                 setOver(null)
               }}
             >
-              <div className="group flex items-center" draggable={!p.disabled} onDragStart={(e) => {
+              <div className="group flex items-center" draggable={!p.disabled && !q} onDragStart={(e) => {
                 setDrag(path)
                 e.dataTransfer?.setData('text/plain', path)
               }} onDragEnd={() => { setDrag(null); setOver(null) }}>
-                <Button variant="ghost" size="icon" className="h-7 w-6 shrink-0" aria-expanded={!shut} aria-label={`${shut ? 'Expand' : 'Collapse'} ${base(path)}`} onClick={() => toggle(path)}>
+                <Button variant="ghost" size="icon" className="h-7 w-6 shrink-0" disabled={!!q} aria-expanded={!shut} aria-label={`${shut ? 'Expand' : 'Collapse'} ${base(path)}`} onClick={() => toggle(path)}>
                   {shut ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
                 <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start px-1" disabled={p.disabled} title={path} onClick={() => (open ? toggle(path) : (shut && toggle(path), p.onWorkspace(path)))}>
-                  <Folder className="mr-1 h-4 w-4 shrink-0" />
+                  {open ? <FolderOpen className="mr-1 h-4 w-4 shrink-0 text-primary" /> : <Folder className="mr-1 h-4 w-4 shrink-0" />}
                   <span className={`min-w-0 truncate ${open ? 'font-medium' : ''}`}>{base(path)}</span>
                 </Button>
-                <Popover open={menu === path} onOpenChange={(o) => setMenu(o ? path : null)}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`}>
+                {chats.length > 0 && <span className="shrink-0 pr-1 text-xs text-muted-foreground tabular-nums" title={`${chats.length} saved ${chats.length === 1 ? 'chat' : 'chats'}`}>{chats.length}</span>}
+                <DropdownMenu open={menu === path} onOpenChange={(o) => setMenu(o ? path : null)}>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`} title="Actions">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-60 p-1">
-                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" disabled={p.disabled || i === 0} onClick={() => { setMenu(null); move(path, -1) }}>
-                      <ArrowUp className="mr-2 h-3.5 w-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-60">
+                    <DropdownMenuItem disabled={p.disabled || !!q || i === 0} onSelect={() => move(path, -1)}>
+                      <ArrowUp />
                       Move up
-                    </Button>
-                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" disabled={p.disabled || i === p.workspaces.length - 1} onClick={() => { setMenu(null); move(path, 1) }}>
-                      <ArrowDown className="mr-2 h-3.5 w-3.5" />
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={p.disabled || !!q || i === p.workspaces.length - 1} onSelect={() => move(path, 1)}>
+                      <ArrowDown />
                       Move down
-                    </Button>
+                    </DropdownMenuItem>
                     {open && p.onReveal && (
-                      <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); p.onReveal?.() }}>
-                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                      <DropdownMenuItem onSelect={() => p.onReveal?.()}>
+                        <ExternalLink />
                         Show in Finder
-                      </Button>
+                      </DropdownMenuItem>
                     )}
-                    <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Remove ${base(path)} from the list`} title="Removes it from this list only; the folder and its chats are kept" disabled={p.disabled || open} onClick={() => { setMenu(null); p.onForget(path) }}>
-                      <X className="mr-2 h-3.5 w-3.5" />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem aria-label={`Remove ${base(path)} from the list`} title="Removes it from this list only; the folder and its chats are kept" disabled={p.disabled || open} onSelect={() => p.onForget(path)}>
+                      <X />
                       Remove from the list
-                    </Button>
-                    {open && <p className="px-2 pb-1 text-xs text-muted-foreground">The open workspace cannot be removed. Open another one first.</p>}
-                  </PopoverContent>
-                </Popover>
+                    </DropdownMenuItem>
+                    {open && <DropdownMenuLabel className="[overflow-wrap:anywhere]">The open workspace cannot be removed. Open another one first.</DropdownMenuLabel>}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               {!shut && (
                 <div className="space-y-1 px-1 pb-1">
@@ -244,13 +272,13 @@ export function ChatsSidebar(p: Props) {
                     const here = open && c.id === p.current
                     if (open && confirm === c.id)
                       return (
-                        <div key={c.id} className="space-y-1 rounded-md border p-2 text-xs">
+                        <div key={c.id} role="alertdialog" aria-label={`Delete "${c.title}"`} className="space-y-1 rounded-md border p-2 text-xs" onKeyDown={(e) => e.key === 'Escape' && setConfirm(null)}>
                           <p className="[overflow-wrap:anywhere]">Delete &quot;{c.title}&quot;? This cannot be undone.</p>
                           <div className="flex gap-1">
-                            <Button size="sm" variant="destructive" className="h-7" onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
+                            <Button size="sm" variant="destructive" className="h-7" disabled={p.disabled} onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
                               Delete chat
                             </Button>
-                            <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
+                            <Button autoFocus size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
                               Cancel
                             </Button>
                           </div>
@@ -295,43 +323,46 @@ export function ChatsSidebar(p: Props) {
                           {isPinned(path, c.id) ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                         </Button>
                         {open && (p.onExport || p.onDelete || p.onRename) && (
-                          <Popover open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
-                            <PopoverTrigger asChild>
-                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`}>
+                          <DropdownMenu open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`} title="Actions">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-56 p-1">
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56" onCloseAutoFocus={(e) => skipRefocus.current && (skipRefocus.current = false, e.preventDefault())}>
                               {pinOf(path, c.id)?.saved === false && (
-                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); keepPin(path, c.id) }}>
-                                  <Pin className="mr-2 h-3.5 w-3.5 fill-current" />
+                                <DropdownMenuItem onSelect={() => keepPin(path, c.id)}>
+                                  <Pin className="fill-current" />
                                   Keep pinned
-                                </Button>
+                                </DropdownMenuItem>
                               )}
-                              <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" onClick={() => { setMenu(null); togglePin(path, c.id) }}>
-                                {isPinned(path, c.id) ? <PinOff className="mr-2 h-3.5 w-3.5" /> : <Pin className="mr-2 h-3.5 w-3.5" />}
+                              <DropdownMenuItem onSelect={() => togglePin(path, c.id)}>
+                                {isPinned(path, c.id) ? <PinOff /> : <Pin />}
                                 {isPinned(path, c.id) ? 'Unpin' : 'Pin for this session'}
-                              </Button>
+                              </DropdownMenuItem>
                               {p.onRename && (
-                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Rename "${c.title}"`} onClick={() => { setMenu(null); setEdit({ id: c.id, value: c.title }) }}>
-                                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                                <DropdownMenuItem aria-label={`Rename "${c.title}"`} onSelect={() => { skipRefocus.current = true; setEdit({ id: c.id, value: c.title }) }}>
+                                  <Pencil />
                                   Rename
-                                </Button>
+                                </DropdownMenuItem>
                               )}
                               {p.onExport && (
-                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap" aria-label={`Export "${c.title}" as Markdown`} onClick={() => { setMenu(null); p.onExport?.(c.id) }}>
-                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                <DropdownMenuItem aria-label={`Export "${c.title}" as Markdown`} onSelect={() => p.onExport?.(c.id)}>
+                                  <Download />
                                   Export as Markdown
-                                </Button>
+                                </DropdownMenuItem>
                               )}
                               {p.onDelete && (
-                                <Button variant="ghost" size="sm" className="w-full justify-start whitespace-nowrap text-destructive hover:text-destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onClick={() => { setMenu(null); setConfirm(c.id) }}>
-                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                  Delete chat…
-                                </Button>
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem variant="destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onSelect={() => { skipRefocus.current = true; setConfirm(c.id) }}>
+                                    <Trash2 />
+                                    Delete chat…
+                                  </DropdownMenuItem>
+                                </>
                               )}
-                            </PopoverContent>
-                          </Popover>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
                     )
