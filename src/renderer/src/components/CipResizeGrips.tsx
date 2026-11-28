@@ -1,13 +1,5 @@
 import type { McaApi } from '../../../shared/types'
-
-type Corner = 'left' | 'right'
-
-/** New window box while dragging a bottom corner by (dx, dy) from `start`. Pure, so it is testable. */
-export function resized(start: { x: number; y: number; width: number; height: number }, corner: Corner, dx: number, dy: number) {
-  const width = Math.max(280, start.width + (corner === 'right' ? dx : -dx))
-  const height = Math.max(240, start.height + dy)
-  return { x: corner === 'right' ? start.x : start.x + start.width - width, y: start.y, width, height }
-}
+import { resized, type Corner } from '@/lib/resized'
 
 /** Bottom-left and bottom-right grips that resize the frameless CiP window (its thin native edges are hard to hit). */
 export function CipResizeGrips({ api }: { api: McaApi }) {

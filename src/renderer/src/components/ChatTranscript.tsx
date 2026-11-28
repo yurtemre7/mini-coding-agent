@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Item } from '../../../shared/types'
 import { toolSubject } from '../../../shared/guards'
+import { segments } from '@/lib/segments'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 export const PREVIEW_CHARS = 2000
@@ -120,18 +121,6 @@ function ToolGroup({ tools, items }: { tools: ToolItem[]; items: Item[] }) {
       </CollapsibleContent>
     </Collapsible>
   )
-}
-
-/** Top-level items with runs of consecutive tool calls gathered into one entry. */
-export function segments(items: Item[]): (Item | ToolItem[])[] {
-  const out: (Item | ToolItem[])[] = []
-  for (const i of items) {
-    if ('parentId' in i && i.parentId) continue
-    const last = out.at(-1)
-    if (i.kind === 'tool' && Array.isArray(last)) last.push(i)
-    else out.push(i.kind === 'tool' ? [i] : i)
-  }
-  return out
 }
 
 /** What the agent is doing right now, from the newest running tool or the last item. */
