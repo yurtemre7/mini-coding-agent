@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Download, ExternalLink, Folder, FolderOpen, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Pin, PinOff, Plus, Search, Trash2, X } from 'lucide-react'
 import type { WorkspaceChats } from '../../../shared/types'
 import { Button } from '@/components/ui/button'
@@ -102,6 +102,8 @@ export function ChatsSidebar(p: Props) {
   const [menu, setMenu] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<string | null>(null)
   const [edit, setEdit] = useState<{ id: string; value: string } | null>(null)
+  // set when a menu item swaps the row for an input or a confirmation: focus must not return to the (gone) menu button
+  const skipRefocus = useRef(false)
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
   const chatCount = p.workspaces.reduce((n, w) => n + w.chats.length, 0)
@@ -217,30 +219,30 @@ export function ChatsSidebar(p: Props) {
                 setOver(null)
               }}
             >
-              <div className="group flex items-center" draggable={!p.disabled} onDragStart={(e) => {
+              <div className="group flex items-center" draggable={!p.disabled && !q} onDragStart={(e) => {
                 setDrag(path)
                 e.dataTransfer?.setData('text/plain', path)
               }} onDragEnd={() => { setDrag(null); setOver(null) }}>
-                <Button variant="ghost" size="icon" className="h-7 w-6 shrink-0" aria-expanded={!shut} aria-label={`${shut ? 'Expand' : 'Collapse'} ${base(path)}`} onClick={() => toggle(path)}>
+                <Button variant="ghost" size="icon" className="h-7 w-6 shrink-0" disabled={!!q} aria-expanded={!shut} aria-label={`${shut ? 'Expand' : 'Collapse'} ${base(path)}`} onClick={() => toggle(path)}>
                   {shut ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
                 <Button variant="ghost" size="sm" className="min-w-0 flex-1 justify-start px-1" disabled={p.disabled} title={path} onClick={() => (open ? toggle(path) : (shut && toggle(path), p.onWorkspace(path)))}>
                   {open ? <FolderOpen className="mr-1 h-4 w-4 shrink-0 text-primary" /> : <Folder className="mr-1 h-4 w-4 shrink-0" />}
                   <span className={`min-w-0 truncate ${open ? 'font-medium' : ''}`}>{base(path)}</span>
                 </Button>
-                {chats.length > 0 && <span aria-hidden className="shrink-0 pr-1 text-xs text-muted-foreground tabular-nums">{chats.length}</span>}
+                {chats.length > 0 && <span className="shrink-0 pr-1 text-xs text-muted-foreground tabular-nums" title={`${chats.length} saved ${chats.length === 1 ? 'chat' : 'chats'}`}>{chats.length}</span>}
                 <DropdownMenu open={menu === path} onOpenChange={(o) => setMenu(o ? path : null)}>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`}>
+                    <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === path ? 'opacity-100' : ''}`} aria-label={`Actions for ${base(path)}`} title="Actions">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-60">
-                    <DropdownMenuItem disabled={p.disabled || i === 0} onSelect={() => move(path, -1)}>
+                    <DropdownMenuItem disabled={p.disabled || !!q || i === 0} onSelect={() => move(path, -1)}>
                       <ArrowUp />
                       Move up
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled={p.disabled || i === p.workspaces.length - 1} onSelect={() => move(path, 1)}>
+                    <DropdownMenuItem disabled={p.disabled || !!q || i === p.workspaces.length - 1} onSelect={() => move(path, 1)}>
                       <ArrowDown />
                       Move down
                     </DropdownMenuItem>
@@ -270,13 +272,13 @@ export function ChatsSidebar(p: Props) {
                     const here = open && c.id === p.current
                     if (open && confirm === c.id)
                       return (
-                        <div key={c.id} className="space-y-1 rounded-md border p-2 text-xs">
+                        <div key={c.id} role="alertdialog" aria-label={`Delete "${c.title}"`} className="space-y-1 rounded-md border p-2 text-xs" onKeyDown={(e) => e.key === 'Escape' && setConfirm(null)}>
                           <p className="[overflow-wrap:anywhere]">Delete &quot;{c.title}&quot;? This cannot be undone.</p>
                           <div className="flex gap-1">
-                            <Button size="sm" variant="destructive" className="h-7" onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
+                            <Button size="sm" variant="destructive" className="h-7" disabled={p.disabled} onClick={() => { setConfirm(null); p.onDelete?.(c.id) }}>
                               Delete chat
                             </Button>
-                            <Button size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
+                            <Button autoFocus size="sm" variant="outline" className="h-7" onClick={() => setConfirm(null)}>
                               Cancel
                             </Button>
                           </div>
@@ -323,11 +325,11 @@ export function ChatsSidebar(p: Props) {
                         {open && (p.onExport || p.onDelete || p.onRename) && (
                           <DropdownMenu open={menu === c.id} onOpenChange={(o) => setMenu(o ? c.id : null)}>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`}>
+                              <Button variant="ghost" size="icon" className={`mr-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${menu === c.id ? 'opacity-100' : ''}`} aria-label={`Actions for "${c.title}"`} title="Actions">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuContent align="end" className="w-56" onCloseAutoFocus={(e) => skipRefocus.current && (skipRefocus.current = false, e.preventDefault())}>
                               {pinOf(path, c.id)?.saved === false && (
                                 <DropdownMenuItem onSelect={() => keepPin(path, c.id)}>
                                   <Pin className="fill-current" />
@@ -339,7 +341,7 @@ export function ChatsSidebar(p: Props) {
                                 {isPinned(path, c.id) ? 'Unpin' : 'Pin for this session'}
                               </DropdownMenuItem>
                               {p.onRename && (
-                                <DropdownMenuItem aria-label={`Rename "${c.title}"`} onSelect={() => setEdit({ id: c.id, value: c.title })}>
+                                <DropdownMenuItem aria-label={`Rename "${c.title}"`} onSelect={() => { skipRefocus.current = true; setEdit({ id: c.id, value: c.title }) }}>
                                   <Pencil />
                                   Rename
                                 </DropdownMenuItem>
@@ -353,7 +355,7 @@ export function ChatsSidebar(p: Props) {
                               {p.onDelete && (
                                 <>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem variant="destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onSelect={() => setConfirm(c.id)}>
+                                  <DropdownMenuItem variant="destructive" aria-label={`Delete "${c.title}"`} disabled={p.disabled} onSelect={() => { skipRefocus.current = true; setConfirm(c.id) }}>
                                     <Trash2 />
                                     Delete chat…
                                   </DropdownMenuItem>
